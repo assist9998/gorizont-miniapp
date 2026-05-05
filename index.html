@@ -111,16 +111,18 @@ document.getElementById("dateDisplay").textContent=`${days[now.getDay()]}, ${now
 let children = [];
 
 function loadChildren(){
-  // Telegram передаёт startapp параметр через tgWebAppStartParam
+  // Telegram передаёт данные через initDataUnsafe.start_param
   const params = new URLSearchParams(window.location.search);
   
-  // Пробуем все возможные параметры
-  const dataParam = params.get("data") || 
-                    params.get("tgWebAppStartParam") ||
-                    (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) ||
+  // Официальный способ: tg.initDataUnsafe.start_param
+  // Также пробуем ?startapp= и ?data= как fallback
+  const dataParam = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) ||
+                    params.get("startapp") ||
+                    params.get("data") ||
                     null;
 
   console.log("URL params:", window.location.search);
+  console.log("start_param:", tg && tg.initDataUnsafe ? tg.initDataUnsafe.start_param : "no tg");
   console.log("dataParam:", dataParam ? dataParam.substring(0,50)+"..." : "null");
 
   if(dataParam){
