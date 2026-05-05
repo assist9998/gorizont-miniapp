@@ -111,21 +111,34 @@ document.getElementById("dateDisplay").textContent=`${days[now.getDay()]}, ${now
 let children = [];
 
 function loadChildren(){
+  // Telegram передаёт startapp параметр через tgWebAppStartParam
   const params = new URLSearchParams(window.location.search);
-  const dataParam = params.get("data");
+  
+  // Пробуем все возможные параметры
+  const dataParam = params.get("data") || 
+                    params.get("tgWebAppStartParam") ||
+                    (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) ||
+                    null;
+
+  console.log("URL params:", window.location.search);
+  console.log("dataParam:", dataParam ? dataParam.substring(0,50)+"..." : "null");
+
   if(dataParam){
     try{
       const decoded = atob(dataParam);
-      children = JSON.parse(decoded);
-      children = children.filter(c => c.status !== "Выбыл");
-      console.log("Loaded from URL:", children.length, "children");
+      const parsed = JSON.parse(decoded);
+      if(Array.isArray(parsed) && parsed.length > 0){
+        children = parsed.filter(c => c.status !== "Выбыл");
+        console.log("Loaded from URL:", children.length, "children");
+        initApp();
+        return;
+      }
     }catch(e){
       console.error("Failed to parse data:", e);
-      loadTestData();
     }
-  } else {
-    loadTestData();
   }
+  console.log("Using test data");
+  loadTestData();
   initApp();
 }
 
