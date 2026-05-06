@@ -107,45 +107,22 @@ const days=["вс","пн","вт","ср","чт","пт","сб"];
 const months=["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
 document.getElementById("dateDisplay").textContent=`${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]}`;
 
-// Google Sheets config
-const SHEET_ID = "1oodBgYHFyFi4JbwOM7GZ189gINUYuq32iNialN4usVg";
-const API_KEY = "AIzaSyDkdAXnLe_PRKEer6gcRz_8TULSuQjYpqY";
+// API config — Railway URL
+const API_URL = "https://consent-could-gents.ngrok-free.dev";
 
 let children = [];
 
 async function loadChildren(){
   try {
-    const url = "https://sheets.googleapis.com/v4/spreadsheets/" + SHEET_ID + "/values/Children!A:P?key=" + API_KEY;
-    const resp = await fetch(url);
+    const resp = await fetch(API_URL + "/children");
     if(!resp.ok) throw new Error("HTTP " + resp.status);
     const data = await resp.json();
-    const rows = data.values || [];
-    if(rows.length < 2){
-      document.getElementById("childrenList").innerHTML = '<div class="empty">Нет данных в таблице</div>';
-      return;
-    }
-    children = rows.slice(1).map((r,i) => ({
-      id: r[0] || String(i+2),
-      name: r[1] || "",
-      dob: r[2] || "",
-      city: r[3] || "",
-      dept: r[4] || "",
-      group: r[5] || "",
-      type: r[6] || "",
-      until: r[7] || "",
-      parent: r[8] || "",
-      telegram_id: r[9] || "",
-      allergy: r[10] || "Нет",
-      date_start: r[11] || "",
-      cost: r[12] || "",
-      payment_date: r[13] || "",
-      payment_status: r[14] || "",
-      status: r[15] || "Активный",
-    })).filter(c => c.name && c.status !== "Выбыл");
-    console.log("Loaded from Sheets:", children.length, "children");
+    if(!data.ok) throw new Error(data.error);
+    children = data.children.filter(c => c.status !== "Выбыл");
+    console.log("Loaded from API:", children.length, "children");
     initApp();
   } catch(e) {
-    console.error("Sheets error:", e);
+    console.error("API error:", e);
     document.getElementById("childrenList").innerHTML = '<div class="empty">⚠️ Не удалось загрузить данные.<br>Проверьте подключение.</div>';
   }
 }
@@ -261,7 +238,7 @@ function openModal(id){
 
 function closeModal(e){if(e.target===document.getElementById("modalOverlay"))document.getElementById("modalOverlay").classList.remove("show");}
 
-function saveAttendance(){
+async function saveAttendance(){
   const filtered=getFiltered();
   const unmarked=filtered.filter(c=>attendance[c.id]===null);
   if(unmarked.length>0){showToast("⚠️ Не отмечено: "+unmarked.length,true);return;}
@@ -280,14 +257,22 @@ function saveAttendance(){
     time:timeStr
   }));
 
-  // Send to bot via Telegram WebApp
-  if(tg && tg.sendData){
-    tg.sendData(JSON.stringify({attendance:records}));
-    showToast("💾 Отправлено!");
-  } else {
-    // Fallback for testing in browser
-    showToast("💾 Журнал готов (тест)");
-    console.log("Attendance data:", records);
+  // Save via API
+  try {
+    const resp = await fetch(API_URL + "/attendance", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({attendance: records})
+    });
+    const result = await resp.json();
+    if(result.ok){
+      showToast("💾 Журнал сохранён!");
+    } else {
+      showToast("❌ Ошибка: " + result.error, true);
+    }
+  } catch(e) {
+    showToast("❌ Ошибка сети", true);
+    console.error(e);
   }
 }
 
