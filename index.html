@@ -594,6 +594,25 @@ function showToast(msg, warn=false) {
   setTimeout(() => t.classList.remove("show"), 2500);
 }
 
+let staffInfo = null;
+
+async function initStaff(){
+  try {
+    const tgId = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : "";
+    if(!tgId) return;
+    const resp = await fetch(API_URL + "/staff?tg_id=" + tgId, {
+      headers: {"ngrok-skip-browser-warning": "true"}
+    });
+    const data = await resp.json();
+    if(data.ok) {
+      staffInfo = data.staff;
+      console.log("Staff:", staffInfo);
+    }
+  } catch(e) {
+    console.error("Staff error:", e);
+  }
+}
+
 initStaff().then(() => loadChildren());
 </script>
 </body>
