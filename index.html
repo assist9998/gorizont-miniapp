@@ -288,7 +288,13 @@ function renderHome() {
       switcherHtml = '<div style="display:flex;gap:8px;margin-bottom:14px">';
       cities.forEach(city => {
         const active = city === homeCity;
-        switcherHtml += '<button onclick="setHomeCity('' + city + '')" style="padding:6px 16px;border-radius:20px;border:1.5px solid ' + (active ? 'var(--accent)' : 'var(--border)') + ';background:' + (active ? 'var(--accent)' : 'transparent') + ';color:' + (active ? '#fff' : 'var(--text2)') + ';font-family:inherit;font-size:13px;font-weight:' + (active ? '600' : '400') + ';cursor:pointer">' + city + '</button>';
+        switcherHtml += "<button onclick=\"setHomeCity('" + city + "')\""
+          + " style=\"padding:6px 16px;border-radius:20px;border:1.5px solid "
+          + (active ? "var(--accent)" : "var(--border)")
+          + ";background:" + (active ? "var(--accent)" : "transparent")
+          + ";color:" + (active ? "#fff" : "var(--text2)")
+          + ";font-family:inherit;font-size:13px;font-weight:" + (active ? "600" : "400")
+          + ";cursor:pointer\">" + city + "</button>";
       });
       switcherHtml += '</div>';
     }
