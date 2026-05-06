@@ -496,51 +496,55 @@ function renderModal(c, history) {
   const prevName = months[now2.getMonth() === 0 ? 11 : now2.getMonth()-1];
   const h = mn === "current" ? history.current : history.prev;
 
+  // Variant V — compact chips style
+  const todayLabel = state === true ? "Пришёл" : state === false ? "Отсутствует" : "—";
+
   document.getElementById("modalContent").innerHTML =
-    '<div style="padding:0 0 10px">' +
-      '<div style="font-size:13px;color:var(--text2)">' + age + " · " + c.group + " · " + c.type + " до " + c.until + '</div>' +
-    '</div>' +
-    '<div style="border-top:1px solid var(--border);padding:10px 0">' +
-      '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Родитель</div>' +
-      '<div style="font-size:14px;font-weight:500;margin-bottom:3px">' + (parts[0]||"—").trim() + '</div>' +
-      '<div style="font-size:12px;color:var(--text2)">' + (parts[1]||"").trim() + " " + (parts[2]||"").trim() + '</div>' +
-    '</div>' +
-    (hasAllergy ?
-      '<div style="border-top:1px solid var(--border);padding:10px 0">' +
-        '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Особенности здоровья</div>' +
-        '<span class="allergy-chip">' + c.allergy + '</span>' +
-      '</div>' : "") +
-    '<div style="border-top:1px solid var(--border);padding:10px 0;display:flex;justify-content:space-between;align-items:center">' +
-      '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Оплата</div>' +
-      '<span style="font-size:13px;font-weight:500">' + (c.payment_status||"—") + '</span>' +
-    '</div>' +
-    '<div style="border-top:1px solid var(--border);padding:10px 0;display:flex;justify-content:space-between;align-items:center">' +
-      '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Сегодня</div>' +
-      '<span style="font-size:13px;font-weight:600;color:' + stateColor + '">' + stateText + '</span>' +
-    '</div>' +
-    '<div style="border-top:1px solid var(--border);padding-top:10px">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
-        '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Посещаемость</div>' +
+    // Subtitle
+    '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + age + " · " + c.group + " · " + c.type + " до " + c.until + '</div>' +
+    // Stats bar with month switcher
+    '<div style="background:var(--surface2);border-radius:12px;padding:12px;margin-bottom:14px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
         '<div style="display:flex;gap:5px">' +
           '<button onclick="switchHist(&quot;current&quot;)" style="padding:2px 9px;border-radius:8px;border:1px solid var(--border);background:' + (mn==="current"?"var(--accent)":"transparent") + ';color:' + (mn==="current"?"#fff":"var(--text2)") + ';font-family:inherit;font-size:11px;cursor:pointer">' + curName + '</button>' +
           '<button onclick="switchHist(&quot;prev&quot;)" style="padding:2px 9px;border-radius:8px;border:1px solid var(--border);background:' + (mn==="prev"?"var(--accent)":"transparent") + ';color:' + (mn==="prev"?"#fff":"var(--text2)") + ';font-family:inherit;font-size:11px;cursor:pointer">' + prevName + '</button>' +
         '</div>' +
+        '<span style="font-size:11px;color:var(--text2)">сегодня: <span style="font-weight:600;color:' + stateColor + '">' + todayLabel + '</span></span>' +
       '</div>' +
       '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">' +
-        '<div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center">' +
-          '<div style="font-size:20px;font-weight:700;color:var(--accent2)">' + h.present + '</div>' +
-          '<div style="font-size:11px;color:var(--text2);margin-top:2px">Присут.</div>' +
+        '<div style="text-align:center">' +
+          '<div style="font-size:22px;font-weight:700;color:var(--accent2)">' + h.present + '</div>' +
+          '<div style="font-size:11px;color:var(--text2)">присутствовал</div>' +
         '</div>' +
-        '<div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center">' +
-          '<div style="font-size:20px;font-weight:700;color:var(--danger)">' + h.absent + '</div>' +
-          '<div style="font-size:11px;color:var(--text2);margin-top:2px">Отсут.</div>' +
+        '<div style="text-align:center">' +
+          '<div style="font-size:22px;font-weight:700;color:var(--danger)">' + h.absent + '</div>' +
+          '<div style="font-size:11px;color:var(--text2)">отсутствовал</div>' +
         '</div>' +
-        '<div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center">' +
-          '<div style="font-size:20px;font-weight:700;color:var(--accent)">' + h.total + '</div>' +
-          '<div style="font-size:11px;color:var(--text2);margin-top:2px">Всего</div>' +
+        '<div style="text-align:center">' +
+          '<div style="font-size:22px;font-weight:700;color:var(--accent)">' + h.total + '</div>' +
+          '<div style="font-size:11px;color:var(--text2)">всего дней</div>' +
         '</div>' +
       '</div>' +
-    '</div>';
+    '</div>' +
+    // Rows
+    '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
+      '<span style="color:var(--text2)">Родитель</span>' +
+      '<span style="font-weight:500">' + (parts[0]||"—").trim() + '</span>' +
+    '</div>' +
+    '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
+      '<span style="color:var(--text2)">Телефон</span>' +
+      '<span style="font-weight:500">' + (parts[1]||"—").trim() + '</span>' +
+    '</div>' +
+    '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
+      '<span style="color:var(--text2)">Telegram</span>' +
+      '<span style="font-weight:500;color:var(--accent)">' + (parts[2]||"—").trim() + '</span>' +
+    '</div>' +
+    (hasAllergy ?
+      '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;align-items:center;font-size:13px">' +
+        '<span style="color:var(--text2)">Особенности</span>' +
+        '<span class="allergy-chip">' + c.allergy + '</span>' +
+      '</div>' : "") +
+    '<div style="height:6px"></div>';
 }
 
 function switchHist(month) {
