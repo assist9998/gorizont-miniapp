@@ -107,46 +107,47 @@ const days=["вс","пн","вт","ср","чт","пт","сб"];
 const months=["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
 document.getElementById("dateDisplay").textContent=`${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]}`;
 
-// Load children from URL param (passed by bot) or use test data
+// Google Sheets config
+const SHEET_ID = "1oodBgYHFyFi4JbwOM7GZ189gINUYuq32iNialN4usVg";
+const API_KEY = "AIzaSyDkdAXnLe_PRKEer6gcRz_8TULSuQjYpqY";
+
 let children = [];
 
-function loadChildren(){
-  // Telegram передаёт данные через initDataUnsafe.start_param
-  const params = new URLSearchParams(window.location.search);
-  
-  // Официальный способ: tg.initDataUnsafe.start_param
-  // Также пробуем ?startapp= и ?data= как fallback
-  const dataParam = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) ||
-                    params.get("startapp") ||
-                    params.get("data") ||
-                    null;
-
-  console.log("URL params:", window.location.search);
-  console.log("start_param:", tg && tg.initDataUnsafe ? tg.initDataUnsafe.start_param : "no tg");
-  console.log("dataParam:", dataParam ? dataParam.substring(0,50)+"..." : "null");
-
-  if(dataParam){
-    try{
-      const decoded = atob(dataParam);
-      const parsed = JSON.parse(decoded);
-      if(Array.isArray(parsed) && parsed.length > 0){
-        children = parsed.filter(c => c.status !== "Выбыл");
-        console.log("Loaded from URL:", children.length, "children");
-        initApp();
-        return;
-      }
-    }catch(e){
-      console.error("Failed to parse data:", e);
+async function loadChildren(){
+  try {
+    const url = "https://sheets.googleapis.com/v4/spreadsheets/" + SHEET_ID + "/values/Children!A:P?key=" + API_KEY;
+    const resp = await fetch(url);
+    if(!resp.ok) throw new Error("HTTP " + resp.status);
+    const data = await resp.json();
+    const rows = data.values || [];
+    if(rows.length < 2){
+      document.getElementById("childrenList").innerHTML = '<div class="empty">Нет данных в таблице</div>';
+      return;
     }
+    children = rows.slice(1).map((r,i) => ({
+      id: r[0] || String(i+2),
+      name: r[1] || "",
+      dob: r[2] || "",
+      city: r[3] || "",
+      dept: r[4] || "",
+      group: r[5] || "",
+      type: r[6] || "",
+      until: r[7] || "",
+      parent: r[8] || "",
+      telegram_id: r[9] || "",
+      allergy: r[10] || "Нет",
+      date_start: r[11] || "",
+      cost: r[12] || "",
+      payment_date: r[13] || "",
+      payment_status: r[14] || "",
+      status: r[15] || "Активный",
+    })).filter(c => c.name && c.status !== "Выбыл");
+    console.log("Loaded from Sheets:", children.length, "children");
+    initApp();
+  } catch(e) {
+    console.error("Sheets error:", e);
+    document.getElementById("childrenList").innerHTML = '<div class="empty">⚠️ Не удалось загрузить данные.<br>Проверьте подключение.</div>';
   }
-  console.log("Using test data");
-  loadTestData();
-  initApp();
-}
-
-function loadTestData(){
-  // Нет данных — показываем пустой экран с сообщением
-  children = [];
 }
 
 const attendance = {};
