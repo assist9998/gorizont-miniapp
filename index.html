@@ -228,6 +228,12 @@ async function loadChildren() {
     if(!data.ok) throw new Error(data.error);
     children = data.children.filter(c => c.status !== "Выбыл" && c.name);
     children.forEach(c => { if(attendance[c.id] === undefined) attendance[c.id] = null; });
+
+    // Если admin — показываем только его город
+    if(staffInfo && staffInfo.role === "admin" && staffInfo.city) {
+      children = children.filter(c => c.city === staffInfo.city);
+    }
+
     const cities = [...new Set(children.map(c => c.city))];
     activeCity = cities[0] || "";
     activeChildCity = cities[0] || "";
@@ -451,27 +457,97 @@ function calcAge(dob) {
 }
 
 // ── MODAL ─────────────────────────────────────────────────────────
-function openModal(id) {
+async function openModal(id) {
   const c = children.find(x => x.id == id);
   if(!c) return;
+  window._currentChildForHistory = c;
+  window._historyData = null;
+  window._historyMonth = "current";
+
+  document.getElementById("modalName").textContent = c.name;
+  document.getElementById("modalContent").innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем...</div>';
+  document.getElementById("modalOverlay").classList.add("show");
+
+  let history = {current:{present:0,absent:0,total:0}, prev:{present:0,absent:0,total:0}};
+  try {
+    const resp = await fetch(API_URL + "/history?name=" + encodeURIComponent(c.name) + "&city=" + encodeURIComponent(c.city), {
+      headers: {"ngrok-skip-browser-warning": "true"}
+    });
+    const data = await resp.json();
+    if(data.ok) history = data.history;
+  } catch(e) { console.error("History:", e); }
+
+  window._historyData = history;
+  renderModal(c, history);
+}
+
+function renderModal(c, history) {
   const parts = (c.parent || "").split("|");
   const hasAllergy = c.allergy && c.allergy !== "Нет";
   const age = c.dob ? calcAge(c.dob) : "—";
-  const stateText = attendance[id] === true ? "Пришёл" : attendance[id] === false ? "Отсутствует" : "Не отмечен";
+  const state = attendance[c.id];
+  const stateText = state === true ? "Пришёл" : state === false ? "Отсутствует" : "Не отмечен";
+  const stateColor = state === true ? "var(--accent2)" : state === false ? "var(--danger)" : "var(--text2)";
+  const mn = window._historyMonth || "current";
 
-  document.getElementById("modalName").textContent = c.name;
-  document.getElementById("modalContent").innerHTML = `
-    <div class="modal-row"><span class="modal-label">Возраст</span><span class="modal-value">${age}</span></div>
-    <div class="modal-row"><span class="modal-label">Группа</span><span class="modal-value">${c.group}</span></div>
-    <div class="modal-row"><span class="modal-label">Тип</span><span class="modal-value">${c.type} · до ${c.until}</span></div>
-    <div class="modal-row"><span class="modal-label">Родитель</span><span class="modal-value">${parts[0]?.trim()||"—"}</span></div>
-    <div class="modal-row"><span class="modal-label">Телефон</span><span class="modal-value">${parts[1]?.trim()||"—"}</span></div>
-    <div class="modal-row"><span class="modal-label">Telegram</span><span class="modal-value">${parts[2]?.trim()||"—"}</span></div>
-    <div class="modal-row"><span class="modal-label">Аллергии</span><span class="modal-value">${hasAllergy ? '<span class="allergy-chip">' + c.allergy + '</span>' : "Нет"}</span></div>
-    <div class="modal-row"><span class="modal-label">Оплата</span><span class="modal-value">${c.payment_status||"—"}</span></div>
-    <div class="modal-row"><span class="modal-label">Сегодня</span><span class="modal-value">${stateText}</span></div>
-  `;
-  document.getElementById("modalOverlay").classList.add("show");
+  const months = ["январь","февраль","март","апрель","май","июнь","июл","август","сентябрь","октябрь","ноябрь","декабрь"];
+  const now2 = new Date();
+  const curName = months[now2.getMonth()];
+  const prevName = months[now2.getMonth() === 0 ? 11 : now2.getMonth()-1];
+  const h = mn === "current" ? history.current : history.prev;
+
+  document.getElementById("modalContent").innerHTML =
+    '<div style="padding:0 0 10px">' +
+      '<div style="font-size:13px;color:var(--text2)">' + age + " · " + c.group + " · " + c.type + " до " + c.until + '</div>' +
+    '</div>' +
+    '<div style="border-top:1px solid var(--border);padding:10px 0">' +
+      '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Родитель</div>' +
+      '<div style="font-size:14px;font-weight:500;margin-bottom:3px">' + (parts[0]||"—").trim() + '</div>' +
+      '<div style="font-size:12px;color:var(--text2)">' + (parts[1]||"").trim() + " " + (parts[2]||"").trim() + '</div>' +
+    '</div>' +
+    (hasAllergy ?
+      '<div style="border-top:1px solid var(--border);padding:10px 0">' +
+        '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Особенности здоровья</div>' +
+        '<span class="allergy-chip">' + c.allergy + '</span>' +
+      '</div>' : "") +
+    '<div style="border-top:1px solid var(--border);padding:10px 0;display:flex;justify-content:space-between;align-items:center">' +
+      '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Оплата</div>' +
+      '<span style="font-size:13px;font-weight:500">' + (c.payment_status||"—") + '</span>' +
+    '</div>' +
+    '<div style="border-top:1px solid var(--border);padding:10px 0;display:flex;justify-content:space-between;align-items:center">' +
+      '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Сегодня</div>' +
+      '<span style="font-size:13px;font-weight:600;color:' + stateColor + '">' + stateText + '</span>' +
+    '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:10px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+        '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Посещаемость</div>' +
+        '<div style="display:flex;gap:5px">' +
+          '<button onclick="switchHist('current')" style="padding:2px 9px;border-radius:8px;border:1px solid var(--border);background:' + (mn==="current"?"var(--accent)":"transparent") + ';color:' + (mn==="current"?"#fff":"var(--text2)") + ';font-family:inherit;font-size:11px;cursor:pointer">' + curName + '</button>' +
+          '<button onclick="switchHist('prev')" style="padding:2px 9px;border-radius:8px;border:1px solid var(--border);background:' + (mn==="prev"?"var(--accent)":"transparent") + ';color:' + (mn==="prev"?"#fff":"var(--text2)") + ';font-family:inherit;font-size:11px;cursor:pointer">' + prevName + '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">' +
+        '<div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center">' +
+          '<div style="font-size:20px;font-weight:700;color:var(--accent2)">' + h.present + '</div>' +
+          '<div style="font-size:11px;color:var(--text2);margin-top:2px">Присут.</div>' +
+        '</div>' +
+        '<div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center">' +
+          '<div style="font-size:20px;font-weight:700;color:var(--danger)">' + h.absent + '</div>' +
+          '<div style="font-size:11px;color:var(--text2);margin-top:2px">Отсут.</div>' +
+        '</div>' +
+        '<div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center">' +
+          '<div style="font-size:20px;font-weight:700;color:var(--accent)">' + h.total + '</div>' +
+          '<div style="font-size:11px;color:var(--text2);margin-top:2px">Всего</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+function switchHist(month) {
+  window._historyMonth = month;
+  if(window._currentChildForHistory && window._historyData) {
+    renderModal(window._currentChildForHistory, window._historyData);
+  }
 }
 
 function closeModal(e) {
@@ -518,7 +594,7 @@ function showToast(msg, warn=false) {
   setTimeout(() => t.classList.remove("show"), 2500);
 }
 
-loadChildren();
+initStaff().then(() => loadChildren());
 </script>
 </body>
 </html>
