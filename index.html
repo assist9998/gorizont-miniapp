@@ -122,6 +122,7 @@
 
 <!-- SCREEN: HOME -->
 <div class="screen active" id="screen-home">
+  <div id="homeSwitcher"></div>
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-num green" id="h-present">0</div><div class="stat-label">Пришли</div></div>
     <div class="stat-card"><div class="stat-num red" id="h-absent">0</div><div class="stat-label">Отсутствуют</div></div>
@@ -250,36 +251,76 @@ async function loadChildren() {
 }
 
 // ── HOME ──────────────────────────────────────────────────────────
+let homeCity = ""; // для директора/девелопера — выбранный город на главной
+
 function renderHome() {
-  const total = children.length;
-  const present = Object.values(attendance).filter(v => v === true).length;
-  const absent = Object.values(attendance).filter(v => v === false).length;
-  const unmarked = Object.values(attendance).filter(v => v === null).length;
+  const isDirector = !staffInfo || staffInfo.role === "director" || staffInfo.role === "developer";
+
+  // Для admin — всегда его город
+  // Для director/developer — homeCity или первый доступный
+  let filterCity = "";
+  if(!isDirector && staffInfo && staffInfo.city) {
+    filterCity = staffInfo.city;
+    homeCity = staffInfo.city;
+  } else {
+    const cities = [...new Set(children.map(c => c.city))];
+    if(!homeCity && cities.length) homeCity = cities[0];
+    filterCity = homeCity;
+  }
+
+  const filtered = filterCity ? children.filter(c => c.city === filterCity) : children;
+
+  const total = filtered.length;
+  const present = filtered.filter(c => attendance[c.id] === true).length;
+  const absent = filtered.filter(c => attendance[c.id] === false).length;
+  const unmarked = filtered.filter(c => attendance[c.id] === null).length;
+
   document.getElementById("h-present").textContent = present;
   document.getElementById("h-absent").textContent = absent;
   document.getElementById("h-unmarked").textContent = unmarked;
   document.getElementById("h-total").textContent = total;
 
+  // City switcher for director/developer
+  let switcherHtml = "";
+  if(isDirector) {
+    const cities = [...new Set(children.map(c => c.city))];
+    if(cities.length > 1) {
+      switcherHtml = '<div style="display:flex;gap:8px;margin-bottom:14px">';
+      cities.forEach(city => {
+        const active = city === homeCity;
+        switcherHtml += '<button onclick="setHomeCity('' + city + '')" style="padding:6px 16px;border-radius:20px;border:1.5px solid ' + (active ? 'var(--accent)' : 'var(--border)') + ';background:' + (active ? 'var(--accent)' : 'transparent') + ';color:' + (active ? '#fff' : 'var(--text2)') + ';font-family:inherit;font-size:13px;font-weight:' + (active ? '600' : '400') + ';cursor:pointer">' + city + '</button>';
+      });
+      switcherHtml += '</div>';
+    }
+  }
+
   const groups = {};
-  children.forEach(c => {
+  filtered.forEach(c => {
     if(!groups[c.group]) groups[c.group] = {present:0,total:0};
     groups[c.group].total++;
     if(attendance[c.id] === true) groups[c.group].present++;
   });
 
-  let html = "";
+  let barsHtml = "";
   for(const [name, g] of Object.entries(groups)) {
     const pct = g.total > 0 ? Math.round(g.present / g.total * 100) : 0;
     const warn = pct < 50 ? "warn" : "";
-    html += `<div class="group-bar">
-      <div class="group-bar-header">
-        <div class="group-bar-name">${name}</div>
-        <div class="group-bar-count">${g.present} / ${g.total}</div>
-      </div>
-      <div class="progress"><div class="progress-fill ${warn}" style="width:${pct}%"></div></div>
-    </div>`;
+    barsHtml += '<div class="group-bar">' +
+      '<div class="group-bar-header">' +
+        '<div class="group-bar-name">' + name + '</div>' +
+        '<div class="group-bar-count">' + g.present + ' / ' + g.total + '</div>' +
+      '</div>' +
+      '<div class="progress"><div class="progress-fill ' + warn + '" style="width:' + pct + '%"></div></div>' +
+    '</div>';
   }
-  document.getElementById("groupBars").innerHTML = html || '<div class="empty">Загружаем...</div>';
+
+  document.getElementById("homeSwitcher").innerHTML = switcherHtml;
+  document.getElementById("groupBars").innerHTML = barsHtml || '<div class="empty">Нет данных</div>';
+}
+
+function setHomeCity(city) {
+  homeCity = city;
+  renderHome();
 }
 
 // ── ATTENDANCE ────────────────────────────────────────────────────
