@@ -183,7 +183,81 @@
 
 <!-- SCREEN: ADD/EDIT CHILD -->
 <div class="screen" id="screen-form">
-  <div id="formContent"></div>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <button onclick="goTo('children')" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
+    <div style="font-size:16px;font-weight:600" id="formTitle">Новый ребёнок</div>
+  </div>
+  <div id="formTabs" style="display:flex;gap:8px;margin-bottom:14px">
+    <button id="tabNew" onclick="switchFormTab('new')" class="filter-btn active">Новый</button>
+    <button id="tabTrial" onclick="switchFormTab('trial')" class="filter-btn">Из пробного</button>
+  </div>
+  <div id="trialSelector" style="display:none;margin-bottom:14px">
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Выберите из последних пробных:</div>
+    <div id="trialList"></div>
+  </div>
+  <div id="formFields">
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Имя ребёнка *</div>
+      <input id="f_name" type="text" placeholder="Иван Иванов" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Дата рождения</div>
+      <input id="f_dob" type="text" placeholder="01.01.2020" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Город *</div>
+        <select id="f_city" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+          <option value="Дананг">Дананг</option>
+          <option value="Нячанг">Нячанг</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Направление *</div>
+        <select id="f_dept" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+          <option value="Детский сад">Детский сад</option>
+          <option value="Школа">Школа</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Группа/Класс *</div>
+      <input id="f_group" type="text" placeholder="Младшая / 1 класс" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тип *</div>
+        <select id="f_type" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+          <option value="Полный">Полный</option>
+          <option value="Короткий">Короткий</option>
+          <option value="Посуточно">Посуточно</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">До какого времени</div>
+        <input id="f_until" type="text" placeholder="17:00" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Родитель</div>
+      <input id="f_parent" type="text" placeholder="Имя родителя" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Телефон</div>
+        <input id="f_phone" type="text" placeholder="+7 999..." style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Telegram</div>
+        <input id="f_telegram" type="text" placeholder="@username" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+      </div>
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Особенности здоровья</div>
+      <input id="f_allergy" type="text" placeholder="Аллергии, непереносимости..." style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
+    <button onclick="submitForm()" class="btn-primary" style="width:100%;margin-bottom:80px" id="formSubmitBtn">Добавить ребёнка</button>
+  </div>
   <div style="height:80px"></div>
 </div>
 
