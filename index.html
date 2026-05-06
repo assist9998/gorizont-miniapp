@@ -110,6 +110,23 @@
   .loading{text-align:center;padding:50px 20px;color:var(--text2)}
   .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
   @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* FORM */
+  .form-section{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:14px;margin-bottom:12px}
+  .form-section-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+  .form-field{margin-bottom:12px}
+  .form-label{font-size:12px;color:var(--text2);margin-bottom:5px}
+  .form-input{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:14px;outline:none}
+  .form-input:focus{border-color:var(--accent)}
+  .form-select{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:14px;outline:none;appearance:none}
+  .tab-bar{display:flex;gap:6px;margin-bottom:14px}
+  .tab-btn{flex:1;padding:8px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer;transition:all .2s;text-align:center}
+  .tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .trial-card{background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);padding:12px;margin-bottom:8px;cursor:pointer;transition:border-color .2s}
+  .trial-card:active,.trial-card.selected{border-color:var(--accent);background:rgba(79,142,247,.08)}
+  .trial-name{font-size:14px;font-weight:600;margin-bottom:3px}
+  .trial-meta{font-size:12px;color:var(--text2)}
+  .back-btn{display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text2);font-family:inherit;font-size:14px;cursor:pointer;padding:0;margin-bottom:14px}
 </style>
 </head>
 <body>
@@ -151,7 +168,10 @@
 
 <!-- SCREEN: CHILDREN -->
 <div class="screen" id="screen-children">
-  <div class="city-filter" id="cityFilter"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div class="city-filter" id="cityFilter" style="margin-bottom:0;flex:1"></div>
+    <button onclick="openAddChild()" style="flex-shrink:0;margin-left:8px;padding:6px 14px;border-radius:20px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">+ Добавить</button>
+  </div>
   <div id="childList"></div>
 </div>
 
@@ -159,6 +179,12 @@
 <div class="bottom-action" id="attActions" style="display:none">
   <button class="btn-secondary" onclick="markAllPresent()">Все пришли</button>
   <button class="btn-primary" onclick="saveAttendance()">Сохранить журнал</button>
+</div>
+
+<!-- SCREEN: ADD/EDIT CHILD -->
+<div class="screen" id="screen-form">
+  <div id="formContent"></div>
+  <div style="height:80px"></div>
 </div>
 
 <!-- NAV -->
@@ -216,6 +242,10 @@ function goTo(screen) {
   if(screen === "home") renderHome();
   if(screen === "attendance") renderAttFilters();
   if(screen === "children") renderChildList();
+  if(screen === "form") {
+    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById("nav-children")?.classList.add("active");
+  }
 }
 
 // ── Load data ─────────────────────────────────────────────────────
@@ -481,6 +511,7 @@ function renderChildList() {
         <div class="child-detail-name">${child.name}</div>
         <div class="child-detail-meta">${child.group}${age ? " · " + age : ""} · ${child.type}</div>
       </div>
+      <button onclick="event.stopPropagation();openEditForm('${child.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>
       <span class="child-arrow">›</span>
     </div>`;
   });
@@ -661,6 +692,135 @@ async function initStaff(){
     }
   } catch(e) {
     console.error("Staff error:", e);
+  }
+}
+
+// ── FORM ─────────────────────────────────────────────────────────
+let formMode = "add";
+let editChildId = null;
+
+function openAddForm() {
+  formMode = "add"; editChildId = null;
+  document.getElementById("formTitle").textContent = "Новый ребёнок";
+  document.getElementById("formTabs").style.display = "flex";
+  document.getElementById("formSubmitBtn").textContent = "Добавить ребёнка";
+  clearForm();
+  switchFormTab("new");
+  if(staffInfo && staffInfo.city) document.getElementById("f_city").value = staffInfo.city;
+  goTo("form");
+}
+
+function openEditForm(id) {
+  const c = children.find(x => x.id == id);
+  if(!c) return;
+  formMode = "edit"; editChildId = id;
+  document.getElementById("formTitle").textContent = "Редактировать";
+  document.getElementById("formTabs").style.display = "none";
+  document.getElementById("trialSelector").style.display = "none";
+  document.getElementById("formSubmitBtn").textContent = "Сохранить изменения";
+  document.getElementById("f_name").value = c.name || "";
+  document.getElementById("f_dob").value = c.dob || "";
+  document.getElementById("f_city").value = c.city || "Дананг";
+  document.getElementById("f_dept").value = c.dept || "Детский сад";
+  document.getElementById("f_group").value = c.group || "";
+  document.getElementById("f_type").value = c.type || "Полный";
+  document.getElementById("f_until").value = c.until || "";
+  const parts = (c.parent || "").split("|");
+  document.getElementById("f_parent").value = (parts[0]||"").trim();
+  document.getElementById("f_phone").value = (parts[1]||"").trim();
+  document.getElementById("f_telegram").value = (parts[2]||"").trim();
+  document.getElementById("f_allergy").value = (c.allergy && c.allergy !== "Нет") ? c.allergy : "";
+  goTo("form");
+}
+
+function clearForm() {
+  ["f_name","f_dob","f_group","f_until","f_parent","f_phone","f_telegram","f_allergy"].forEach(id => {
+    document.getElementById(id).value = "";
+  });
+}
+
+function switchFormTab(tab) {
+  document.getElementById("tabNew").className = "filter-btn" + (tab === "new" ? " active" : "");
+  document.getElementById("tabTrial").className = "filter-btn" + (tab === "trial" ? " active" : "");
+  document.getElementById("trialSelector").style.display = tab === "trial" ? "block" : "none";
+  if(tab === "trial") loadTrials();
+}
+
+async function loadTrials() {
+  const city = staffInfo && staffInfo.city ? staffInfo.city : "";
+  try {
+    const resp = await fetch(API_URL + "/trials?city=" + encodeURIComponent(city), {
+      headers: {"ngrok-skip-browser-warning": "true"}
+    });
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.error);
+    const list = document.getElementById("trialList");
+    if(!data.trials.length) {
+      list.innerHTML = "<div style='color:var(--text2);font-size:13px;padding:10px 0'>Нет подтверждённых пробных</div>";
+      return;
+    }
+    window._trialData = data.trials;
+    list.innerHTML = data.trials.map((t,i) =>
+      "<div onclick='fillFromTrial(" + i + ")' style='background:var(--surface2);border-radius:10px;padding:10px 14px;margin-bottom:8px;cursor:pointer;border:1.5px solid var(--border)'>" +
+        "<div style='font-size:14px;font-weight:500'>" + (t.child_name||"—") + "</div>" +
+        "<div style='font-size:12px;color:var(--text2);margin-top:2px'>" + (t.city||"") + " · " + (t.dept||"") + " · " + (t.date||"") + "</div>" +
+      "</div>"
+    ).join("");
+  } catch(e) { console.error("Trials:", e); }
+}
+
+function fillFromTrial(idx) {
+  const t = window._trialData[idx];
+  if(!t) return;
+  document.getElementById("f_name").value = t.child_name || "";
+  document.getElementById("f_city").value = t.city || "Дананг";
+  document.getElementById("f_dept").value = t.dept || "Детский сад";
+  document.getElementById("f_parent").value = t.parent || "";
+  document.getElementById("f_phone").value = t.phone || "";
+  document.getElementById("f_telegram").value = t.telegram || "";
+  document.getElementById("f_allergy").value = t.allergy || "";
+  switchFormTab("new");
+  showToast("Данные заполнены");
+}
+
+async function submitForm() {
+  const name = document.getElementById("f_name").value.trim();
+  const group = document.getElementById("f_group").value.trim();
+  if(!name) { showToast("Введите имя ребёнка", true); return; }
+  if(!group) { showToast("Введите группу", true); return; }
+
+  const payload = {
+    name, group,
+    dob: document.getElementById("f_dob").value.trim(),
+    city: document.getElementById("f_city").value,
+    dept: document.getElementById("f_dept").value,
+    type: document.getElementById("f_type").value,
+    until: document.getElementById("f_until").value.trim(),
+    parent: document.getElementById("f_parent").value.trim(),
+    phone: document.getElementById("f_phone").value.trim(),
+    telegram: document.getElementById("f_telegram").value.trim(),
+    allergy: document.getElementById("f_allergy").value.trim() || "Нет",
+    status: "Активный",
+  };
+
+  try {
+    const url = formMode === "add" ? API_URL + "/children" : API_URL + "/children/" + editChildId;
+    const method = formMode === "add" ? "POST" : "PUT";
+    const resp = await fetch(url, {
+      method,
+      headers: {"Content-Type": "application/json", "ngrok-skip-browser-warning": "true"},
+      body: JSON.stringify(payload)
+    });
+    const result = await resp.json();
+    if(result.ok) {
+      showToast(formMode === "add" ? "Ребёнок добавлен!" : "Данные сохранены!");
+      await loadChildren();
+      goTo("children");
+    } else {
+      showToast("Ошибка: " + result.error, true);
+    }
+  } catch(e) {
+    showToast("Ошибка сети", true);
   }
 }
 
