@@ -117,7 +117,7 @@
 
 <!-- HEADER -->
 <div class="header">
-  <div class="header-title">🎓 Горизонт</div>
+  <div class="header-title">Горизонт — учёт</div>
   <div class="date-badge" id="dateDisplay"></div>
 </div>
 
@@ -157,20 +157,20 @@
 
 <!-- BOTTOM ACTION BAR (attendance only) -->
 <div class="bottom-action" id="attActions" style="display:none">
-  <button class="btn-secondary" onclick="markAllPresent()">✅ Все пришли</button>
+  <button class="btn-secondary" onclick="markAllPresent()">Все пришли</button>
   <button class="btn-primary" onclick="saveAttendance()">Сохранить журнал</button>
 </div>
 
 <!-- NAV -->
 <nav class="nav">
   <button class="nav-btn active" id="nav-home" onclick="goTo('home')">
-    <span class="nav-icon">🏠</span><span>Главная</span>
+    <span class="nav-icon">Главная</span><span>Главная</span>
   </button>
   <button class="nav-btn" id="nav-attendance" onclick="goTo('attendance')">
-    <span class="nav-icon">✅</span><span>Явка</span>
+    <span class="nav-icon">Явка</span><span>Явка</span>
   </button>
   <button class="nav-btn" id="nav-children" onclick="goTo('children')">
-    <span class="nav-icon">👶</span><span>Дети</span>
+    <span class="nav-icon">Дети</span><span>Дети</span>
   </button>
 </nav>
 
@@ -237,7 +237,7 @@ async function loadChildren() {
     renderChildList();
   } catch(e) {
     console.error("API error:", e);
-    document.getElementById("attList").innerHTML = '<div class="empty">⚠️ Не удалось загрузить данные</div>';
+    document.getElementById("attList").innerHTML = '<div class="empty">Не удалось загрузить данные</div>';
   }
 }
 
@@ -285,7 +285,7 @@ function renderAttFilters() {
   cities.forEach(city => {
     const btn = document.createElement("button");
     btn.className = "filter-btn" + (city === activeCity ? " active" : "");
-    btn.textContent = (city === "Дананг" ? "🌊 " : "🌴 ") + city;
+    btn.textContent = (city === "Дананг" ? "" : "") + city;
     btn.onclick = () => {
       activeCity = city;
       const d = [...new Set(children.filter(c => c.city === city).map(c => c.dept))];
@@ -303,7 +303,7 @@ function renderAttFilters() {
   depts.forEach(dept => {
     const btn = document.createElement("button");
     btn.className = "filter-btn" + (dept === activeDept ? " active" : "");
-    btn.textContent = dept === "Детский сад" ? "🎨 Сад" : "📚 Школа";
+    btn.textContent = dept === "Детский сад" ? "Сад" : "Школа";
     btn.onclick = () => { activeDept = dept; activeGroup = "Все группы"; renderAttFilters(); };
     bar.appendChild(btn);
   });
@@ -376,8 +376,8 @@ function renderAttList() {
           </div>
         </div>
         <div class="toggle3">
-          <button class="t3-btn ${yesCls}" onclick="setAtt(event,'${child.id}',true)" title="Пришёл">✓</button>
-          <button class="t3-btn ${noCls}" onclick="setAtt(event,'${child.id}',false)" title="Отсутствует">✗</button>
+          <button class="t3-btn ${yesCls}" onclick="setAtt(event,'${child.id}',true)" title="Пришёл">Да</button>
+          <button class="t3-btn ${noCls}" onclick="setAtt(event,'${child.id}',false)" title="Отсутствует">Нет</button>
         </div>
       </div>`;
     });
@@ -399,7 +399,7 @@ function markAllPresent() {
   getFiltered().forEach(c => attendance[c.id] = true);
   renderAttList();
   renderHome();
-  showToast("✅ Все отмечены");
+  showToast("Все отмечены");
 }
 
 // ── CHILDREN LIST ─────────────────────────────────────────────────
@@ -410,7 +410,7 @@ function renderChildList() {
   cities.forEach(city => {
     const btn = document.createElement("button");
     btn.className = "filter-btn" + (city === activeChildCity ? " active" : "");
-    btn.textContent = (city === "Дананг" ? "🌊 " : "🌴 ") + city;
+    btn.textContent = (city === "Дананг" ? "" : "") + city;
     btn.onclick = () => { activeChildCity = city; renderChildList(); };
     cf.appendChild(btn);
   });
@@ -455,7 +455,7 @@ function openModal(id) {
   const parts = (c.parent || "").split("|");
   const hasAllergy = c.allergy && c.allergy !== "Нет";
   const age = c.dob ? calcAge(c.dob) : "—";
-  const stateText = attendance[id] === true ? "✅ Пришёл" : attendance[id] === false ? "❌ Отсутствует" : "⚪ Не отмечен";
+  const stateText = attendance[id] === true ? "Пришёл" : attendance[id] === false ? "Отсутствует" : "Не отмечен";
 
   document.getElementById("modalName").textContent = c.name;
   document.getElementById("modalContent").innerHTML = `
@@ -465,7 +465,7 @@ function openModal(id) {
     <div class="modal-row"><span class="modal-label">Родитель</span><span class="modal-value">${parts[0]?.trim()||"—"}</span></div>
     <div class="modal-row"><span class="modal-label">Телефон</span><span class="modal-value">${parts[1]?.trim()||"—"}</span></div>
     <div class="modal-row"><span class="modal-label">Telegram</span><span class="modal-value">${parts[2]?.trim()||"—"}</span></div>
-    <div class="modal-row"><span class="modal-label">Аллергии</span><span class="modal-value">${hasAllergy ? '<span class="allergy-chip">⚠️ ' + c.allergy + '</span>' : "Нет"}</span></div>
+    <div class="modal-row"><span class="modal-label">Аллергии</span><span class="modal-value">${hasAllergy ? '<span class="allergy-chip">' + c.allergy + '</span>' : "Нет"}</span></div>
     <div class="modal-row"><span class="modal-label">Оплата</span><span class="modal-value">${c.payment_status||"—"}</span></div>
     <div class="modal-row"><span class="modal-label">Сегодня</span><span class="modal-value">${stateText}</span></div>
   `;
@@ -481,7 +481,7 @@ function closeModal(e) {
 async function saveAttendance() {
   const filtered = getFiltered();
   const unmarked = filtered.filter(c => attendance[c.id] === null);
-  if(unmarked.length > 0) { showToast("⚠️ Не отмечено: " + unmarked.length + " детей", true); return; }
+  if(unmarked.length > 0) { showToast("Не отмечено: " + unmarked.length + " детей", true); return; }
 
   const dateStr = `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`;
   const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -499,10 +499,10 @@ async function saveAttendance() {
       body: JSON.stringify({attendance: records})
     });
     const result = await resp.json();
-    if(result.ok) { showToast("💾 Журнал сохранён!"); }
-    else { showToast("❌ Ошибка: " + result.error, true); }
+    if(result.ok) { showToast("Журнал сохранён"); }
+    else { showToast("Ошибка: " + result.error, true); }
   } catch(e) {
-    showToast("❌ Ошибка сети", true);
+    showToast("Ошибка сети", true);
   }
 }
 
