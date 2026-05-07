@@ -368,12 +368,40 @@ async function loadChildren() {
     const depts = [...new Set(children.filter(c => c.city === activeCity).map(c => c.dept))];
     activeDept = depts[0] || "";
     console.log("Loaded:", children.length, "children");
+
+    // Загружаем сегодняшние отметки из таблицы
+    await loadTodayAttendance();
+
     renderHome();
     renderAttFilters();
     renderChildList();
   } catch(e) {
     console.error("API error:", e);
     document.getElementById("attList").innerHTML = '<div class="empty">Не удалось загрузить данные</div>';
+  }
+}
+
+// ── LOAD TODAY ATTENDANCE ────────────────────────────────────────
+async function loadTodayAttendance() {
+  try {
+    const dateStr = String(now.getDate()).padStart(2,"0") + "." +
+                    String(now.getMonth()+1).padStart(2,"0") + "." +
+                    now.getFullYear();
+    const city = (staffInfo && staffInfo.city) ? staffInfo.city : "";
+    const url = API_URL + "/attendance?date=" + dateStr + (city ? "&city=" + encodeURIComponent(city) : "");
+    const resp = await fetch(url, {headers:{"ngrok-skip-browser-warning":"true"}});
+    const data = await resp.json();
+    if(!data.ok) return;
+    // Map records to attendance object by child name
+    data.records.forEach(r => {
+      const child = children.find(c => c.name === r.name && c.city === r.city);
+      if(child) {
+        attendance[child.id] = r.status === "present";
+      }
+    });
+    console.log("Loaded today attendance:", data.records.length, "records");
+  } catch(e) {
+    console.error("loadTodayAttendance error:", e);
   }
 }
 
