@@ -202,19 +202,21 @@
     </div>
     <div style="margin-bottom:12px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Дата рождения</div>
-      <input id="f_dob" type="text" placeholder="01.01.2020" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+      <input id="f_dob" type="text" placeholder="ДД.ММ.ГГГГ" maxlength="10"
+        oninput="formatDob(this)"
+        style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Город *</div>
-        <select id="f_city" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+        <select id="f_city" onchange="updateGroupOptions()" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
           <option value="Дананг">Дананг</option>
           <option value="Нячанг">Нячанг</option>
         </select>
       </div>
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Направление *</div>
-        <select id="f_dept" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+        <select id="f_dept" onchange="updateGroupOptions()" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
           <option value="Детский сад">Детский сад</option>
           <option value="Школа">Школа</option>
         </select>
@@ -222,20 +224,30 @@
     </div>
     <div style="margin-bottom:12px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Группа/Класс *</div>
-      <input id="f_group" type="text" placeholder="Младшая / 1 класс" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+      <select id="f_group" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+      </select>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тип *</div>
         <select id="f_type" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
           <option value="Полный">Полный</option>
-          <option value="Короткий">Короткий</option>
+          <option value="Полдня">Полдня</option>
           <option value="Посуточно">Посуточно</option>
         </select>
       </div>
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">До какого времени</div>
-        <input id="f_until" type="text" placeholder="17:00" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+        <select id="f_until" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+          <option value="12:00">12:00</option>
+          <option value="13:00">13:00</option>
+          <option value="14:00">14:00</option>
+          <option value="15:00">15:00</option>
+          <option value="16:00">16:00</option>
+          <option value="17:00" selected>17:00</option>
+          <option value="17:30">17:30</option>
+          <option value="18:00">18:00</option>
+        </select>
       </div>
     </div>
     <div style="margin-bottom:12px">
@@ -750,6 +762,36 @@ function showToast(msg, warn=false) {
   setTimeout(() => t.classList.remove("show"), 2500);
 }
 
+// Groups by city and department
+const GROUPS = {
+  "Дананг": {
+    "Детский сад": ["Младшая (2-3 года)", "Старшая (4-5 лет)", "Младший нулевой (5+)", "Старший нулевой (6+)"],
+    "Школа": ["1 класс","2 класс","3 класс","4 класс","5 класс","6 класс","7 класс","8 класс"]
+  },
+  "Нячанг": {
+    "Детский сад": ["Ясельная","Младшая","Старшая"],
+    "Школа": ["1 класс","2 класс","3 класс","4 класс","5 класс","6 класс","7 класс","8 класс","9 класс"]
+  }
+};
+
+function updateGroupOptions(selectedGroup) {
+  const city = document.getElementById("f_city")?.value || "Дананг";
+  const dept = document.getElementById("f_dept")?.value || "Детский сад";
+  const sel = document.getElementById("f_group");
+  if(!sel) return;
+  const groups = (GROUPS[city] && GROUPS[city][dept]) || [];
+  sel.innerHTML = groups.map(g =>
+    `<option value="${g}"${g === selectedGroup ? " selected" : ""}>${g}</option>`
+  ).join("");
+}
+
+function formatDob(input) {
+  let v = input.value.replace(/\D/g, "");
+  if(v.length > 2) v = v.slice(0,2) + "." + v.slice(2);
+  if(v.length > 5) v = v.slice(0,5) + "." + v.slice(5);
+  input.value = v.slice(0,10);
+}
+
 let staffInfo = null;
 
 async function initStaff(){
@@ -797,7 +839,7 @@ function openEditForm(id) {
   document.getElementById("f_dob").value = c.dob || "";
   document.getElementById("f_city").value = c.city || "Дананг";
   document.getElementById("f_dept").value = c.dept || "Детский сад";
-  document.getElementById("f_group").value = c.group || "";
+  updateGroupOptions(c.group || "");
   document.getElementById("f_type").value = c.type || "Полный";
   document.getElementById("f_until").value = c.until || "";
   const parts = (c.parent || "").split("|");
@@ -809,9 +851,10 @@ function openEditForm(id) {
 }
 
 function clearForm() {
-  ["f_name","f_dob","f_group","f_until","f_parent","f_phone","f_telegram","f_allergy"].forEach(id => {
+  ["f_name","f_dob","f_parent","f_phone","f_telegram","f_allergy"].forEach(id => {
     document.getElementById(id).value = "";
   });
+  updateGroupOptions();
 }
 
 function switchFormTab(tab) {
