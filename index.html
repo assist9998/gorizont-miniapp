@@ -239,11 +239,12 @@
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">До какого времени</div>
         <select id="f_until" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+          <option value="11:30">11:30</option>
           <option value="12:00">12:00</option>
+          <option value="12:30">12:30</option>
           <option value="13:00">13:00</option>
-          <option value="14:00">14:00</option>
-          <option value="15:00">15:00</option>
           <option value="16:00">16:00</option>
+          <option value="16:30">16:30</option>
           <option value="17:00" selected>17:00</option>
           <option value="17:30">17:30</option>
           <option value="18:00">18:00</option>
@@ -765,7 +766,7 @@ function showToast(msg, warn=false) {
 // Groups by city and department
 const GROUPS = {
   "Дананг": {
-    "Детский сад": ["Младшая (2-3 года)", "Старшая (4-5 лет)", "Младший нулевой (5+)", "Старший нулевой (6+)"],
+    "Детский сад": ["Младшая", "Старшая", "Младший нулевой", "Старший нулевой"],
     "Школа": ["1 класс","2 класс","3 класс","4 класс","5 класс","6 класс","7 класс","8 класс"]
   },
   "Нячанг": {
@@ -913,7 +914,7 @@ async function submitForm() {
     city: document.getElementById("f_city").value,
     dept: document.getElementById("f_dept").value,
     type: document.getElementById("f_type").value,
-    until: document.getElementById("f_until").value.trim(),
+    until: document.getElementById("f_until").value,
     parent: document.getElementById("f_parent").value.trim(),
     phone: document.getElementById("f_phone").value.trim(),
     telegram: document.getElementById("f_telegram").value.trim(),
@@ -921,25 +922,26 @@ async function submitForm() {
     status: "Активный",
   };
 
-  try {
-    const url = formMode === "add" ? API_URL + "/children" : API_URL + "/children/" + editChildId;
-    const method = formMode === "add" ? "POST" : "PUT";
-    const resp = await fetch(url, {
-      method,
-      headers: {"Content-Type": "application/json", "ngrok-skip-browser-warning": "true"},
-      body: JSON.stringify(payload)
-    });
-    const result = await resp.json();
-    if(result.ok) {
-      showToast(formMode === "add" ? "Ребёнок добавлен!" : "Данные сохранены!");
-      await loadChildren();
-      goTo("children");
-    } else {
-      showToast("Ошибка: " + result.error, true);
+  // Оптимистичное обновление — сразу закрываем форму
+  showToast(formMode === "add" ? "Ребёнок добавлен!" : "Данные сохранены!");
+  goTo("children");
+
+  // Запрос идёт в фоне
+  const url = formMode === "add" ? API_URL + "/children" : API_URL + "/children/" + editChildId;
+  const method = formMode === "add" ? "POST" : "PUT";
+
+  fetch(url, {
+    method,
+    headers: {"Content-Type": "application/json", "ngrok-skip-browser-warning": "true"},
+    body: JSON.stringify(payload)
+  }).then(r => r.json()).then(result => {
+    if(!result.ok) {
+      showToast("Ошибка сохранения: " + result.error, true);
     }
-  } catch(e) {
-    showToast("Ошибка сети", true);
-  }
+    loadChildren(); // Обновляем список в фоне
+  }).catch(() => {
+    showToast("Ошибка сети при сохранении", true);
+  });
 }
 
 initStaff().then(() => loadChildren());
