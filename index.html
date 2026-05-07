@@ -181,6 +181,11 @@
   <button class="btn-primary" onclick="saveAttendance()">Сохранить журнал</button>
 </div>
 
+<!-- SCREEN: NOTIFICATIONS -->
+<div class="screen" id="screen-notifications">
+  <div id="notifList"><div class="loading"><div class="spinner"></div>Загружаем...</div></div>
+</div>
+
 <!-- SCREEN: ADD/EDIT CHILD -->
 <div class="screen" id="screen-form">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
@@ -288,6 +293,10 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     <span>Дети</span>
   </button>
+  <button class="nav-btn" id="nav-notifications" onclick="goTo('notifications')">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    <span id="nav-notif-label">Уведомления</span>
+  </button>
 </nav>
 
 <!-- MODAL -->
@@ -329,6 +338,7 @@ function goTo(screen) {
   if(screen === "home") renderHome();
   if(screen === "attendance") renderAttFilters();
   if(screen === "children") renderChildList();
+  if(screen === "notifications") renderNotifications();
   if(screen === "form") {
     document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("nav-children")?.classList.add("active");
@@ -791,6 +801,81 @@ function formatDob(input) {
   if(v.length > 2) v = v.slice(0,2) + "." + v.slice(2);
   if(v.length > 5) v = v.slice(0,5) + "." + v.slice(5);
   input.value = v.slice(0,10);
+}
+
+// ── NOTIFICATIONS ────────────────────────────────────────────────
+function renderNotifications() {
+  const list = document.getElementById("notifList");
+  if(!list) return;
+
+  const notifications = [];
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  children.forEach(c => {
+    // Дни рождения — сегодня и ближайшие 7 дней
+    if(c.dob) {
+      try {
+        const parts = c.dob.split(".");
+        const bday = new Date(today.getFullYear(), parseInt(parts[1])-1, parseInt(parts[0]));
+        if(bday < today) bday.setFullYear(today.getFullYear()+1);
+        const diff = Math.round((bday - today) / (1000*60*60*24));
+        if(diff === 0) {
+          notifications.push({type:"birthday", priority:0,
+            icon:"★", title:"День рождения сегодня!",
+            text: c.name + " — " + calcAge(c.dob),
+            color:"var(--accent2)"});
+        } else if(diff <= 7) {
+          notifications.push({type:"birthday", priority:1,
+            icon:"★", title:"День рождения через " + diff + " " + (diff===1?"день":diff<5?"дня":"дней"),
+            text: c.name + " — " + calcAge(c.dob),
+            color:"var(--accent)"});
+        }
+      } catch(e) {}
+    }
+
+    // Задолженность по оплате
+    if(c.payment_status === "Задолженность") {
+      notifications.push({type:"payment", priority:2,
+        icon:"!", title:"Задолженность по оплате",
+        text: c.name + " · " + c.group,
+        color:"var(--danger)"});
+    }
+
+    // Не отмечен сегодня (только если сейчас после 10:00)
+    const hour = new Date().getHours();
+    if(hour >= 10 && attendance[c.id] === null) {
+      notifications.push({type:"attendance", priority:3,
+        icon:"–", title:"Не отмечен сегодня",
+        text: c.name + " · " + c.group,
+        color:"var(--warning)"});
+    }
+  });
+
+  // Sort by priority
+  notifications.sort((a,b) => a.priority - b.priority);
+
+  // Update badge
+  const badge = document.getElementById("nav-notif-label");
+  if(badge) {
+    const urgent = notifications.filter(n => n.priority <= 1).length;
+    badge.textContent = urgent > 0 ? "(" + urgent + ")" : "Уведомления";
+  }
+
+  if(!notifications.length) {
+    list.innerHTML = '<div class="empty">Нет уведомлений</div>';
+    return;
+  }
+
+  list.innerHTML = notifications.map(n =>
+    '<div style="background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start">' +
+      '<div style="font-size:20px;flex-shrink:0;width:32px;height:32px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:' + n.color + ';font-weight:700">' + n.icon + '</div>' +
+      '<div>' +
+        '<div style="font-size:14px;font-weight:600;margin-bottom:3px;color:' + n.color + '">' + n.title + '</div>' +
+        '<div style="font-size:13px;color:var(--text2)">' + n.text + '</div>' +
+      '</div>' +
+    '</div>'
+  ).join("");
 }
 
 let staffInfo = null;
