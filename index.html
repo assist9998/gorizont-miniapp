@@ -1076,8 +1076,7 @@ async function deleteChild() {
   if(!editChildId) return;
   const c = children.find(x => x.id == editChildId);
   const name = c ? c.name : "ребёнка";
-  if(!confirm("Удалить карточку " + name + "?
-Это действие нельзя отменить.")) return;
+  if(!confirm("Удалить карточку " + name + "? Это действие нельзя отменить.")) return;
 
   goTo("children");
   showToast("Карточка удалена");
