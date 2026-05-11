@@ -277,7 +277,8 @@
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Особенности здоровья</div>
       <input id="f_allergy" type="text" placeholder="Аллергии, непереносимости..." style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
     </div>
-    <button onclick="submitForm()" class="btn-primary" style="width:100%;margin-bottom:80px" id="formSubmitBtn">Добавить ребёнка</button>
+    <button onclick="submitForm()" class="btn-primary" style="width:100%;margin-bottom:10px" id="formSubmitBtn">Добавить ребёнка</button>
+    <button onclick="deleteChild()" id="formDeleteBtn" style="display:none;width:100%;padding:13px;border-radius:var(--radius-sm);border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;margin-bottom:80px">Удалить карточку</button>
   </div>
   <div style="height:80px"></div>
 </div>
@@ -947,6 +948,7 @@ function openAddForm() {
   document.getElementById("formTitle").textContent = "Новый ребёнок";
   document.getElementById("formTabs").style.display = "flex";
   document.getElementById("formSubmitBtn").textContent = "Добавить ребёнка";
+  document.getElementById("formDeleteBtn").style.display = "none";
   clearForm();
   switchFormTab("new");
   if(staffInfo && staffInfo.city) document.getElementById("f_city").value = staffInfo.city;
@@ -961,6 +963,7 @@ function openEditForm(id) {
   document.getElementById("formTabs").style.display = "none";
   document.getElementById("trialSelector").style.display = "none";
   document.getElementById("formSubmitBtn").textContent = "Сохранить изменения";
+  document.getElementById("formDeleteBtn").style.display = "block";
   document.getElementById("f_name").value = c.name || "";
   document.getElementById("f_dob").value = c.dob || "";
   document.getElementById("f_city").value = c.city || "Дананг";
@@ -1066,6 +1069,27 @@ async function submitForm() {
     loadChildren(); // Обновляем список в фоне
   }).catch(() => {
     showToast("Ошибка сети при сохранении", true);
+  });
+}
+
+async function deleteChild() {
+  if(!editChildId) return;
+  const c = children.find(x => x.id == editChildId);
+  const name = c ? c.name : "ребёнка";
+  if(!confirm("Удалить карточку " + name + "?
+Это действие нельзя отменить.")) return;
+
+  goTo("children");
+  showToast("Карточка удалена");
+
+  fetch(API_URL + "/children/" + editChildId, {
+    method: "DELETE",
+    headers: {"ngrok-skip-browser-warning": "true"}
+  }).then(r => r.json()).then(result => {
+    if(!result.ok) showToast("Ошибка удаления", true);
+    loadChildren();
+  }).catch(() => {
+    showToast("Ошибка сети", true);
   });
 }
 
