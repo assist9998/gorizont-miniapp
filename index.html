@@ -136,9 +136,8 @@
 <body>
 
 <!-- HEADER -->
-<div class="header">
-  <div class="header-title">🎓 Горизонт</div>
-  <div class="date-badge" id="dateDisplay"></div>
+<div class="header" style="justify-content:center">
+  <div class="header-title" style="font-size:20px">🎓 Горизонт</div>
 </div>
 
 <!-- SCREEN: HOME -->
@@ -326,7 +325,6 @@ if(tg){
 const now = new Date();
 const days = ["вс","пн","вт","ср","чт","пт","сб"];
 const months = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
-document.getElementById("dateDisplay").textContent = `${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]}`;
 
 let children = [];
 // attendance: null=unmarked, true=present, false=absent
