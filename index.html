@@ -110,6 +110,10 @@
   .loading{text-align:center;padding:50px 20px;color:var(--text2)}
   .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
   @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes pulse-red{0%,100%{color:var(--text2)}50%{color:var(--danger);filter:drop-shadow(0 0 4px var(--danger))}}
+  @keyframes pulse-yellow{0%,100%{color:var(--text2)}50%{color:var(--warning);filter:drop-shadow(0 0 4px var(--warning))}}
+  .notif-urgent{animation:pulse-red 1.5s ease-in-out infinite}
+  .notif-warn{animation:pulse-yellow 1.5s ease-in-out infinite}
 
   /* FORM */
   .form-section{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:14px;margin-bottom:12px}
@@ -313,7 +317,11 @@
 <script>
 const API_URL = "https://web-production-ac50f.up.railway.app";
 const tg = window.Telegram?.WebApp;
-if(tg){tg.ready();tg.expand();}
+if(tg){
+  tg.ready();
+  tg.expand();
+  if(tg.requestFullscreen) tg.requestFullscreen();
+}
 
 const now = new Date();
 const days = ["вс","пн","вт","ср","чт","пт","сб"];
@@ -883,11 +891,17 @@ function renderNotifications() {
   // Sort by priority
   notifications.sort((a,b) => a.priority - b.priority);
 
-  // Update badge
-  const badge = document.getElementById("nav-notif-label");
-  if(badge) {
-    const urgent = notifications.filter(n => n.priority <= 1).length;
-    badge.textContent = urgent > 0 ? "(" + urgent + ")" : "Уведомления";
+  // Update badge - animate bell icon
+  const navBtn = document.getElementById("nav-notifications");
+  if(navBtn) {
+    const urgent = notifications.filter(n => n.type === "birthday" && n.priority === 0 || n.type === "payment").length;
+    const warn = notifications.filter(n => n.type === "attendance" || n.priority === 1).length;
+    const svg = navBtn.querySelector("svg");
+    if(svg) {
+      svg.classList.remove("notif-urgent", "notif-warn");
+      if(urgent > 0) svg.classList.add("notif-urgent");
+      else if(warn > 0) svg.classList.add("notif-warn");
+    }
   }
 
   if(!notifications.length) {
