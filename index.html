@@ -62,7 +62,7 @@
   .child-card{background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:border-color .2s,background .2s}
   .child-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--border);transition:background .2s}
   .child-card.present{border-color:rgba(56,217,169,.3);background:rgba(56,217,169,.05)}.child-card.present::before{background:var(--accent2)}
-  .child-card.absent{border-color:rgba(255,212,59,.3);background:rgba(255,212,59,.04)}.child-card.absent::before{background:var(--warning)}
+  .child-card.absent{border-color:rgba(255,107,107,.3);background:rgba(255,107,107,.05)}.child-card.absent::before{background:var(--danger)}
   .avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;background:var(--surface2);color:var(--accent)}
   .child-info{flex:1;min-width:0}
   .child-name{font-size:14px;font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -70,13 +70,11 @@
   .time-badge{background:var(--surface2);padding:1px 7px;border-radius:8px;font-size:11px}
   .allergy-dot{width:5px;height:5px;border-radius:50%;background:var(--warning);flex-shrink:0}
 
-  /* TOGGLE SWITCH */
-  .toggle-switch{position:relative;width:50px;height:28px;flex-shrink:0}
-  .toggle-switch input{opacity:0;width:0;height:0;position:absolute}
-  .toggle-slider{position:absolute;cursor:pointer;inset:0;background:rgba(255,212,59,.15);border:1.5px solid var(--warning);border-radius:14px;transition:all .2s}
-  .toggle-slider:before{content:'';position:absolute;width:20px;height:20px;left:3px;top:50%;transform:translateY(-50%);background:var(--warning);border-radius:50%;transition:all .2s}
-  input:checked + .toggle-slider{background:rgba(56,217,169,.15);border-color:var(--accent2)}
-  input:checked + .toggle-slider:before{transform:translate(22px,-50%);background:var(--accent2)}
+  /* THREE-STATE TOGGLE */
+  .toggle3{display:flex;gap:4px;flex-shrink:0}
+  .t3-btn{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s}
+  .t3-btn.active-yes{background:rgba(56,217,169,.2);border-color:var(--accent2)}
+  .t3-btn.active-no{background:rgba(255,107,107,.2);border-color:var(--danger)}
 
   /* CHILDREN LIST */
   .child-list-item{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .2s}
@@ -147,7 +145,7 @@
   <div id="homeSwitcher"></div>
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-num green" id="h-present">0</div><div class="stat-label">Пришли</div></div>
-    <div class="stat-card"><div class="stat-num yellow" id="h-absent">0</div><div class="stat-label">Не пришли</div></div>
+    <div class="stat-card"><div class="stat-num red" id="h-absent">0</div><div class="stat-label">Отсутствуют</div></div>
     <div class="stat-card"><div class="stat-num yellow" id="h-unmarked">0</div><div class="stat-label">Не отмечены</div></div>
     <div class="stat-card"><div class="stat-num blue" id="h-total">0</div><div class="stat-label">Всего детей</div></div>
   </div>
@@ -164,7 +162,7 @@
   <div class="filters" id="attFilters"></div>
   <div class="att-stats">
     <div class="att-stat"><div class="att-stat-num green" id="a-present">0</div><div class="att-stat-label">Пришли</div></div>
-    <div class="att-stat"><div class="att-stat-num yellow" id="a-absent">0</div><div class="att-stat-label">Не пришли</div></div>
+    <div class="att-stat"><div class="att-stat-num red" id="a-absent">0</div><div class="att-stat-label">Нет</div></div>
     <div class="att-stat"><div class="att-stat-num" style="color:var(--text2)" id="a-unmarked">0</div><div class="att-stat-label">Не отмечены</div></div>
   </div>
   <div id="attList"></div>
@@ -578,9 +576,11 @@ function renderAttList() {
 
     kids.forEach(child => {
       const state = attendance[child.id];
-      const cls = state === true ? "present" : "absent";
+      const cls = state === true ? "present" : state === false ? "absent" : "";
       const initials = child.name.split(" ").map(w => w[0]).join("").slice(0,2);
       const hasAllergy = child.allergy && child.allergy !== "Нет";
+      const yesCls = state === true ? "active-yes" : "";
+      const noCls = state === false ? "active-no" : "";
 
       html += `<div class="child-card ${cls}" onclick="openModal('${child.id}')">
         <div class="avatar">${initials}</div>
@@ -592,10 +592,10 @@ function renderAttList() {
             ${hasAllergy ? '<div class="allergy-dot"></div>' : ""}
           </div>
         </div>
-        <label class="toggle-switch" onclick="event.stopPropagation()">
-          <input type="checkbox" ${state === true ? "checked" : ""} onchange="setAtt(event,'${child.id}',this.checked)">
-          <span class="toggle-slider"></span>
-        </label>
+        <div class="toggle3">
+          <button class="t3-btn ${yesCls}" onclick="setAtt(event,'${child.id}',true)" title="Пришёл">✓</button>
+          <button class="t3-btn ${noCls}" onclick="setAtt(event,'${child.id}',false)" title="Отсутствует">✗</button>
+        </div>
       </div>`;
     });
     html += "</div>";
@@ -606,9 +606,10 @@ function renderAttList() {
 }
 
 function setAtt(e, id, val) {
-  attendance[id] = val;
+  e.stopPropagation();
+  attendance[id] = attendance[id] === val ? null : val;
   renderAttList();
-  renderHome();
+  if(currentScreen === "home") renderHome();
 }
 
 function markAllPresent() {
@@ -771,6 +772,8 @@ function closeModal(e) {
 // ── SAVE ──────────────────────────────────────────────────────────
 async function saveAttendance() {
   const filtered = getFiltered();
+  const unmarked = filtered.filter(c => attendance[c.id] === null);
+  if(unmarked.length > 0) { showToast("Не отмечено: " + unmarked.length + " детей", true); return; }
 
   const dateStr = `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`;
   const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
