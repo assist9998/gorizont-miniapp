@@ -181,7 +181,13 @@
 
 <!-- SCREEN: NOTIFICATIONS -->
 <div class="screen" id="screen-notifications">
-  <div id="notifList"><div class="loading"><div class="spinner"></div>Загружаем...</div></div>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+    <button onclick="refreshNotifications()" id="notifRefreshBtn" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:12px;cursor:pointer">
+      <svg id="notifRefreshIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Обновить
+    </button>
+  </div>
+  <div id="notifList"></div>
 </div>
 
 <!-- SCREEN: ADD/EDIT CHILD -->
@@ -292,8 +298,11 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     <span>Дети</span>
   </button>
-  <button class="nav-btn" id="nav-notifications" onclick="goTo('notifications')">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+  <button class="nav-btn" id="nav-notifications" onclick="goTo('notifications')" style="position:relative">
+    <div style="position:relative;display:inline-flex">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span id="notif-badge" style="display:none;position:absolute;top:-5px;right:-7px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:none;align-items:center;justify-content:center;padding:0 3px;line-height:1"></span>
+    </div>
     <span id="nav-notif-label">Уведомления</span>
   </button>
 </nav>
@@ -881,10 +890,20 @@ function renderNotifications() {
   // Sort by priority
   notifications.sort((a,b) => a.priority - b.priority);
 
-  // Update badge - animate bell icon
+  // Badge с числом + анимация колокольчика
+  const badge = document.getElementById("notif-badge");
   const navBtn = document.getElementById("nav-notifications");
+  const count = notifications.length;
+  if(badge) {
+    if(count > 0) {
+      badge.textContent = count > 99 ? "99+" : count;
+      badge.style.display = "flex";
+    } else {
+      badge.style.display = "none";
+    }
+  }
   if(navBtn) {
-    const urgent = notifications.filter(n => n.type === "birthday" && n.priority === 0 || n.type === "payment").length;
+    const urgent = notifications.filter(n => (n.type === "birthday" && n.priority === 0) || n.type === "payment").length;
     const warn = notifications.filter(n => n.type === "attendance" || n.priority === 1).length;
     const svg = navBtn.querySelector("svg");
     if(svg) {
@@ -910,6 +929,14 @@ function renderNotifications() {
     '</div>'
   ).join("");
   window._notifications = notifications;
+}
+
+async function refreshNotifications() {
+  const icon = document.getElementById("notifRefreshIcon");
+  if(icon) icon.style.animation = "spin .7s linear infinite";
+  await loadChildren();
+  renderNotifications();
+  if(icon) icon.style.animation = "";
 }
 
 function handleNotifTap(i) {
