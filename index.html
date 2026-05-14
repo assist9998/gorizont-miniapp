@@ -59,14 +59,10 @@
   .group-header{display:flex;align-items:center;justify-content:space-between;padding:8px 0 6px}
   .group-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}
   .group-count{font-size:12px;color:var(--text2)}
-  .child-card-wrap{position:relative;margin-bottom:8px;border-radius:var(--radius);overflow:hidden}
-  .swipe-hint-left,.swipe-hint-right{position:absolute;top:0;bottom:0;width:72px;display:flex;align-items:center;justify-content:center;font-size:22px;opacity:0;transition:opacity .15s;pointer-events:none}
-  .swipe-hint-right{left:0;background:rgba(56,217,169,.18);border-radius:var(--radius) 0 0 var(--radius)}
-  .swipe-hint-left{right:0;background:rgba(255,212,59,.18);border-radius:0 var(--radius) var(--radius) 0}
-  .child-card{background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);padding:12px 14px;display:flex;align-items:center;gap:12px;position:relative;transition:border-color .2s,background .2s,transform .08s;will-change:transform;touch-action:pan-y}
-  .child-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--border);transition:background .2s;border-radius:var(--radius) 0 0 var(--radius)}
-  .child-card.present{border-color:rgba(56,217,169,.35);background:rgba(56,217,169,.05)}.child-card.present::before{background:var(--accent2)}
-  .child-card.absent{border-color:rgba(255,212,59,.35);background:rgba(255,212,59,.04)}.child-card.absent::before{background:var(--warning)}
+  .child-card{background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:border-color .2s,background .2s}
+  .child-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--border);transition:background .2s}
+  .child-card.present{border-color:rgba(56,217,169,.3);background:rgba(56,217,169,.05)}.child-card.present::before{background:var(--accent2)}
+  .child-card.absent{border-color:rgba(255,107,107,.3);background:rgba(255,107,107,.05)}.child-card.absent::before{background:var(--danger)}
   .avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;background:var(--surface2);color:var(--accent)}
   .child-info{flex:1;min-width:0}
   .child-name{font-size:14px;font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -74,10 +70,11 @@
   .time-badge{background:var(--surface2);padding:1px 7px;border-radius:8px;font-size:11px}
   .allergy-dot{width:5px;height:5px;border-radius:50%;background:var(--warning);flex-shrink:0}
 
-  /* STATE BADGE */
-  .state-badge{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;transition:all .2s}
-  .state-badge.present{background:rgba(56,217,169,.2);border-color:var(--accent2);color:var(--accent2)}
-  .state-badge.absent{background:rgba(255,212,59,.2);border-color:var(--warning);color:var(--warning)}
+  /* THREE-STATE TOGGLE */
+  .toggle3{display:flex;gap:4px;flex-shrink:0}
+  .t3-btn{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s}
+  .t3-btn.active-yes{background:rgba(56,217,169,.2);border-color:var(--accent2)}
+  .t3-btn.active-no{background:rgba(255,107,107,.2);border-color:var(--danger)}
 
   /* CHILDREN LIST */
   .child-list-item{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .2s}
@@ -582,23 +579,22 @@ function renderAttList() {
       const cls = state === true ? "present" : state === false ? "absent" : "";
       const initials = child.name.split(" ").map(w => w[0]).join("").slice(0,2);
       const hasAllergy = child.allergy && child.allergy !== "Нет";
-      const badgeCls = state === true ? "present" : state === false ? "absent" : "";
-      const badgeIcon = state === true ? "✓" : state === false ? "✗" : "–";
+      const yesCls = state === true ? "active-yes" : "";
+      const noCls = state === false ? "active-no" : "";
 
-      html += `<div class="child-card-wrap" id="wrap-${child.id}">
-        <div class="swipe-hint-right" id="hint-r-${child.id}">✓</div>
-        <div class="swipe-hint-left" id="hint-l-${child.id}">✗</div>
-        <div class="child-card ${cls}" id="card-${child.id}" onclick="openModal('${child.id}')" data-id="${child.id}">
-          <div class="avatar">${initials}</div>
-          <div class="child-info">
-            <div class="child-name">${child.name}</div>
-            <div class="child-meta">
-              <span class="time-badge">до ${child.until}</span>
-              <span>${child.type}</span>
-              ${hasAllergy ? '<div class="allergy-dot"></div>' : ""}
-            </div>
+      html += `<div class="child-card ${cls}" onclick="openModal('${child.id}')">
+        <div class="avatar">${initials}</div>
+        <div class="child-info">
+          <div class="child-name">${child.name}</div>
+          <div class="child-meta">
+            <span class="time-badge">до ${child.until}</span>
+            <span>${child.type}</span>
+            ${hasAllergy ? '<div class="allergy-dot"></div>' : ""}
           </div>
-          <div class="state-badge ${badgeCls}">${badgeIcon}</div>
+        </div>
+        <div class="toggle3">
+          <button class="t3-btn ${yesCls}" onclick="setAtt(event,'${child.id}',true)" title="Пришёл">✓</button>
+          <button class="t3-btn ${noCls}" onclick="setAtt(event,'${child.id}',false)" title="Отсутствует">✗</button>
         </div>
       </div>`;
     });
@@ -607,57 +603,13 @@ function renderAttList() {
 
   if(filtered.length === 0) html = '<div class="empty">Нет детей в этой группе</div>';
   document.getElementById("attList").innerHTML = html;
-  attachSwipeHandlers();
-}
-
-function attachSwipeHandlers() {
-  document.querySelectorAll(".child-card[data-id]").forEach(card => {
-    const id = card.dataset.id;
-    let startX = 0, startY = 0, dragging = false;
-    const THRESHOLD = 60;
-
-    card.addEventListener("touchstart", e => {
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      dragging = true;
-    }, {passive: true});
-
-    card.addEventListener("touchmove", e => {
-      if(!dragging) return;
-      const dx = e.touches[0].clientX - startX;
-      const dy = e.touches[0].clientY - startY;
-      if(Math.abs(dy) > Math.abs(dx)) { dragging = false; return; }
-      const clamped = Math.max(-THRESHOLD, Math.min(THRESHOLD, dx));
-      card.style.transform = `translateX(${clamped * 0.6}px)`;
-      const hintR = document.getElementById("hint-r-" + id);
-      const hintL = document.getElementById("hint-l-" + id);
-      if(hintR) hintR.style.opacity = dx > 10 ? Math.min(1, dx / THRESHOLD) : 0;
-      if(hintL) hintL.style.opacity = dx < -10 ? Math.min(1, -dx / THRESHOLD) : 0;
-    }, {passive: true});
-
-    card.addEventListener("touchend", e => {
-      if(!dragging) return;
-      dragging = false;
-      const dx = e.changedTouches[0].clientX - startX;
-      card.style.transform = "";
-      const hintR = document.getElementById("hint-r-" + id);
-      const hintL = document.getElementById("hint-l-" + id);
-      if(hintR) hintR.style.opacity = 0;
-      if(hintL) hintL.style.opacity = 0;
-      if(Math.abs(dx) < THRESHOLD) return;
-      const newVal = dx > 0 ? true : false;
-      attendance[id] = attendance[id] === newVal ? null : newVal;
-      renderAttList();
-      renderHome();
-    });
-  });
 }
 
 function setAtt(e, id, val) {
   e.stopPropagation();
   attendance[id] = attendance[id] === val ? null : val;
   renderAttList();
-  renderHome();
+  if(currentScreen === "home") renderHome();
 }
 
 function markAllPresent() {
