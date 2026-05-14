@@ -575,7 +575,7 @@ function renderAttList() {
       const initials = child.name.split(" ").map(w => w[0]).join("").slice(0,2);
       const hasAllergy = child.allergy && child.allergy !== "Нет";
 
-      html += `<div class="child-card-wrap">
+      html += `<div class="child-card-wrap" id="att-wrap-${child.id}">
         <div class="child-card ${cls}" data-id="${child.id}" onclick="cycleAtt('${child.id}')">
           <div class="avatar">${initials}</div>
           <div class="child-info">
@@ -847,12 +847,12 @@ function renderNotifications() {
         if(bday < today) bday.setFullYear(today.getFullYear()+1);
         const diff = Math.round((bday - today) / (1000*60*60*24));
         if(diff === 0) {
-          notifications.push({type:"birthday", priority:0,
+          notifications.push({type:"birthday", priority:0, child_id:c.id,
             icon:"★", title:"День рождения сегодня!",
             text: c.name + " — " + calcAge(c.dob),
             color:"var(--accent2)"});
         } else if(diff <= 7) {
-          notifications.push({type:"birthday", priority:1,
+          notifications.push({type:"birthday", priority:1, child_id:c.id,
             icon:"★", title:"День рождения через " + diff + " " + (diff===1?"день":diff<5?"дня":"дней"),
             text: c.name + " — " + calcAge(c.dob),
             color:"var(--accent)"});
@@ -862,7 +862,7 @@ function renderNotifications() {
 
     // Задолженность по оплате
     if(c.payment_status === "Задолженность") {
-      notifications.push({type:"payment", priority:2,
+      notifications.push({type:"payment", priority:2, child_id:c.id,
         icon:"!", title:"Задолженность по оплате",
         text: c.name + " · " + c.group,
         color:"var(--danger)"});
@@ -871,7 +871,7 @@ function renderNotifications() {
     // Не отмечен сегодня (только если сейчас после 10:00)
     const hour = new Date().getHours();
     if(hour >= 10 && attendance[c.id] === null) {
-      notifications.push({type:"attendance", priority:3,
+      notifications.push({type:"attendance", priority:3, child_id:c.id,
         icon:"–", title:"Не отмечен сегодня",
         text: c.name + " · " + c.group,
         color:"var(--warning)"});
@@ -899,15 +899,31 @@ function renderNotifications() {
     return;
   }
 
-  list.innerHTML = notifications.map(n =>
-    '<div style="background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start">' +
+  list.innerHTML = notifications.map((n,i) =>
+    '<div onclick="handleNotifTap(' + i + ')" style="cursor:pointer;background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start;active:opacity:.8">' +
       '<div style="font-size:20px;flex-shrink:0;width:32px;height:32px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:' + n.color + ';font-weight:700">' + n.icon + '</div>' +
-      '<div>' +
+      '<div style="flex:1;min-width:0">' +
         '<div style="font-size:14px;font-weight:600;margin-bottom:3px;color:' + n.color + '">' + n.title + '</div>' +
         '<div style="font-size:13px;color:var(--text2)">' + n.text + '</div>' +
       '</div>' +
+      '<div style="color:var(--text2);font-size:18px;align-self:center">›</div>' +
     '</div>'
   ).join("");
+  window._notifications = notifications;
+}
+
+function handleNotifTap(i) {
+  const n = (window._notifications || [])[i];
+  if(!n) return;
+  if(n.type === "attendance") {
+    goTo("attendance");
+    setTimeout(() => {
+      const el = document.getElementById("att-wrap-" + n.child_id);
+      if(el) el.scrollIntoView({behavior:"smooth", block:"center"});
+    }, 100);
+  } else {
+    openModal(n.child_id);
+  }
 }
 
 let staffInfo = null;
