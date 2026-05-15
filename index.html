@@ -869,8 +869,9 @@ function renderNotifications() {
       } catch(e) {}
     }
 
-    // Задолженность по оплате
-    if(c.payment_status === "Задолженность") {
+    // Задолженность по оплате — грейс-период 1–3 числа каждого месяца
+    const dayOfMonth = new Date().getDate();
+    if(c.payment_status === "Задолженность" && dayOfMonth > 3) {
       notifications.push({type:"payment", priority:2, child_id:c.id,
         icon:"!", title:"Задолженность по оплате",
         text: c.name + " · " + c.group,
