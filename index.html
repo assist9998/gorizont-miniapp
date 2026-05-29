@@ -198,7 +198,7 @@
   </div>
   <div id="formTabs" style="display:flex;gap:8px;margin-bottom:14px">
     <button id="tabNew" onclick="switchFormTab('new')" class="filter-btn active">Новый</button>
-    <button id="tabTrial" onclick="switchFormTab('trial')" class="filter-btn">Из пробного</button>
+    <button id="tabTrial" onclick="switchFormTab('trial')" class="filter-btn">Из заявок</button>
   </div>
   <div id="trialSelector" style="display:none;margin-bottom:14px">
     <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Выберите из последних пробных:</div>
@@ -1038,7 +1038,7 @@ async function loadTrials() {
     if(!data.ok) throw new Error(data.error);
     const list = document.getElementById("trialList");
     if(!data.trials.length) {
-      list.innerHTML = "<div style='color:var(--text2);font-size:13px;padding:10px 0'>Нет подтверждённых пробных</div>";
+      list.innerHTML = "<div style='color:var(--text2);font-size:13px;padding:10px 0'>Нет подтверждённых заявок</div>";
       return;
     }
     window._trialData = data.trials;
