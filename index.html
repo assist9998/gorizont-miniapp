@@ -321,6 +321,16 @@
 <script>
 const API_URL = "https://y95h81n2pl7zlyb6hfca50s2.95.179.188.141.sslip.io";
 const tg = window.Telegram?.WebApp;
+
+// Подписанная строка initData добавляется на каждый запрос — бэкенд проверяет
+// её подлинность (HMAC токеном бота) и что этот telegram_id есть в Staff.
+// Без этого API был открыт всему интернету без авторизации (см. api.py).
+function authHeaders(extra) {
+  return Object.assign(
+    {"ngrok-skip-browser-warning": "true", "X-Telegram-Init-Data": (tg && tg.initData) || ""},
+    extra || {}
+  );
+}
 if(tg){
   tg.ready();
   tg.expand();
@@ -360,7 +370,7 @@ function goTo(screen) {
 async function loadChildren() {
   try {
     const resp = await fetch(API_URL + "/children", {
-      headers: {"ngrok-skip-browser-warning": "true"}
+      headers: authHeaders()
     });
     if(!resp.ok) throw new Error("HTTP " + resp.status);
     const data = await resp.json();
@@ -400,7 +410,7 @@ async function loadTodayAttendance() {
                     now.getFullYear();
     const city = (staffInfo && staffInfo.city) ? staffInfo.city : "";
     const url = API_URL + "/attendance?date=" + dateStr + (city ? "&city=" + encodeURIComponent(city) : "");
-    const resp = await fetch(url, {headers:{"ngrok-skip-browser-warning":"true"}});
+    const resp = await fetch(url, {headers: authHeaders()});
     const data = await resp.json();
     if(!data.ok) return;
     // Map records to attendance object by child name
@@ -681,7 +691,7 @@ async function openModal(id) {
   let history = {current:{present:0,absent:0,total:0}, prev:{present:0,absent:0,total:0}};
   try {
     const resp = await fetch(API_URL + "/history?name=" + encodeURIComponent(c.name) + "&city=" + encodeURIComponent(c.city), {
-      headers: {"ngrok-skip-browser-warning": "true"}
+      headers: authHeaders()
     });
     const data = await resp.json();
     if(data.ok) history = data.history;
@@ -787,7 +797,7 @@ async function saveAttendance() {
   try {
     const resp = await fetch(API_URL + "/attendance", {
       method: "POST",
-      headers: {"Content-Type": "application/json", "ngrok-skip-browser-warning": "true"},
+      headers: authHeaders({"Content-Type": "application/json"}),
       body: JSON.stringify({attendance: records})
     });
     const result = await resp.json();
@@ -961,7 +971,7 @@ async function initStaff(){
     const tgId = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : "";
     if(!tgId) return;
     const resp = await fetch(API_URL + "/staff?tg_id=" + tgId, {
-      headers: {"ngrok-skip-browser-warning": "true"}
+      headers: authHeaders()
     });
     const data = await resp.json();
     if(data.ok) {
@@ -1032,7 +1042,7 @@ async function loadTrials() {
   const city = staffInfo && staffInfo.city ? staffInfo.city : "";
   try {
     const resp = await fetch(API_URL + "/trials?city=" + encodeURIComponent(city), {
-      headers: {"ngrok-skip-browser-warning": "true"}
+      headers: authHeaders()
     });
     const data = await resp.json();
     if(!data.ok) throw new Error(data.error);
@@ -1095,7 +1105,7 @@ async function submitForm() {
 
   fetch(url, {
     method,
-    headers: {"Content-Type": "application/json", "ngrok-skip-browser-warning": "true"},
+    headers: authHeaders({"Content-Type": "application/json"}),
     body: JSON.stringify(payload)
   }).then(r => r.json()).then(result => {
     if(!result.ok) {
@@ -1118,7 +1128,7 @@ async function deleteChild() {
 
   fetch(API_URL + "/children/" + editChildId, {
     method: "DELETE",
-    headers: {"ngrok-skip-browser-warning": "true"}
+    headers: authHeaders()
   }).then(r => r.json()).then(result => {
     if(!result.ok) showToast("Ошибка удаления", true);
     loadChildren();
