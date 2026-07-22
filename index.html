@@ -154,13 +154,25 @@
 
 <!-- SCREEN: ATTENDANCE -->
 <div class="screen" id="screen-attendance">
-  <div class="filters" id="attFilters"></div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    <div class="filters" id="attFilters" style="flex:1;margin-bottom:0"></div>
+    <button onclick="openAttDatePicker()" id="attDateBtn" style="flex-shrink:0;border:1.5px solid var(--border);background:transparent;color:var(--text);border-radius:12px;padding:6px 12px;font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap">📅 Сегодня</button>
+  </div>
   <div class="att-stats">
     <div class="att-stat"><div class="att-stat-num green" id="a-present">0</div><div class="att-stat-label">Пришли</div></div>
     <div class="att-stat"><div class="att-stat-num red" id="a-absent">0</div><div class="att-stat-label">Нет</div></div>
   </div>
   <div id="attList"></div>
   <div style="height:70px"></div>
+</div>
+
+<!-- MODAL: ATTENDANCE DATE PICKER -->
+<div class="modal-overlay" id="attDateModalOverlay" onclick="if(event.target===this) closeAttDatePicker()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-name">Выбрать дату</div>
+    <div id="attDateModalContent"></div>
+  </div>
 </div>
 
 <!-- SCREEN: CHILDREN -->
@@ -344,8 +356,19 @@ let children = [];
 // attendance: true=present, false=absent (по умолчанию absent, как в Balu Kids — без отдельного "не отмечен")
 const attendance = {};
 
-function isWeekend() {
-  const d = now.getDay(); // 0=вс, 6=сб
+// дд.мм.гггг ⇄ Date, тот же формат что хранит бэкенд
+function dmyToDate(dmy) {
+  const [d,m,y] = dmy.split(".").map(Number);
+  return new Date(y, m-1, d);
+}
+function dateToDmy(d) {
+  return String(d.getDate()).padStart(2,'0') + "." + String(d.getMonth()+1).padStart(2,'0') + "." + d.getFullYear();
+}
+
+let attDateStr = dateToDmy(now); // какую дату сейчас просматриваем/редактируем в посещаемости
+
+function isWeekend(dmy) {
+  const d = (dmy ? dmyToDate(dmy) : now).getDay(); // 0=вс, 6=сб
   return d === 0 || d === 6;
 }
 let activeCity = "", activeDept = "", activeGroup = "Все группы";
@@ -395,7 +418,7 @@ async function loadChildren() {
     console.log("Loaded:", children.length, "children");
 
     // Загружаем сегодняшние отметки из таблицы
-    await loadTodayAttendance();
+    await loadAttendanceForDate(attDateStr);
 
     renderHome();
     renderAttFilters();
@@ -406,27 +429,47 @@ async function loadChildren() {
   }
 }
 
-// ── LOAD TODAY ATTENDANCE ────────────────────────────────────────
-async function loadTodayAttendance() {
+// pastAttendance — отметки для ЛЮБОЙ выбранной в календаре даты, кроме сегодня;
+// attendance (глобальный) остаётся только про "сегодня" — на него завязан Home-экран.
+let pastAttendance = {};
+function currentAttMap() {
+  return attDateStr === dateToDmy(now) ? attendance : pastAttendance;
+}
+
+// savedAttendance/savedPastAttendance — снимок того, что реально подтверждено сервером
+// на момент последней загрузки. saveAttendance() шлёт только то, что разошлось с этим
+// снимком (кто реально изменил), а не весь текущий список — иначе при сохранении кто-то
+// один перезаписывает "Кто отметил" у чужих, никем не тронутых в этот раз детей (та же
+// гонка атрибуции, что нашли и почини ли в Balu Kids).
+let savedAttendance = {};
+let savedPastAttendance = {};
+function currentSavedMap() {
+  return attDateStr === dateToDmy(now) ? savedAttendance : savedPastAttendance;
+}
+
+// ── LOAD ATTENDANCE FOR DATE ────────────────────────────────────────
+async function loadAttendanceForDate(dateStr) {
+  const isToday = dateStr === dateToDmy(now);
+  const map = isToday ? attendance : (pastAttendance = {});
+  children.forEach(c => { if(map[c.id] === undefined) map[c.id] = false; });
   try {
-    const dateStr = String(now.getDate()).padStart(2,"0") + "." +
-                    String(now.getMonth()+1).padStart(2,"0") + "." +
-                    now.getFullYear();
     const city = (staffInfo && staffInfo.city) ? staffInfo.city : "";
     const url = API_URL + "/attendance?date=" + dateStr + (city ? "&city=" + encodeURIComponent(city) : "");
     const resp = await fetch(url, {headers: authHeaders()});
     const data = await resp.json();
     if(!data.ok) return;
-    // Map records to attendance object by child name
     data.records.forEach(r => {
       const child = children.find(c => c.name === r.name && c.city === r.city);
-      if(child) {
-        attendance[child.id] = r.status === "present";
-      }
+      if(child) map[child.id] = r.status === "present";
     });
-    console.log("Loaded today attendance:", data.records.length, "records");
+    console.log("Loaded attendance for", dateStr, ":", data.records.length, "records");
   } catch(e) {
-    console.error("loadTodayAttendance error:", e);
+    console.error("loadAttendanceForDate error:", e);
+  } finally {
+    // Снимок фиксируем ПОСЛЕ ответа сервера (успешного или нет) — это то, что мы
+    // считаем "подтверждённым" состоянием прямо сейчас, точка отсчёта для дельты.
+    const saved = isToday ? (savedAttendance = {}) : (savedPastAttendance = {});
+    Object.assign(saved, map);
   }
 }
 
@@ -568,9 +611,11 @@ function getFiltered() {
 }
 
 function renderAttList() {
-  document.getElementById("attActions").style.display = isWeekend() ? "none" : "flex";
+  const isToday = attDateStr === dateToDmy(now);
+  document.getElementById("attDateBtn").textContent = "📅 " + (isToday ? "Сегодня" : attDateStr);
+  document.getElementById("attActions").style.display = isWeekend(attDateStr) ? "none" : "flex";
 
-  if(isWeekend()) {
+  if(isWeekend(attDateStr)) {
     document.getElementById("a-present").textContent = 0;
     document.getElementById("a-absent").textContent = 0;
     document.getElementById("attList").innerHTML =
@@ -582,11 +627,12 @@ function renderAttList() {
     return;
   }
 
+  const map = currentAttMap();
   const filtered = getFiltered();
   const byGroup = {};
   filtered.forEach(c => { if(!byGroup[c.group]) byGroup[c.group] = []; byGroup[c.group].push(c); });
 
-  const present = filtered.filter(c => attendance[c.id] === true).length;
+  const present = filtered.filter(c => map[c.id] === true).length;
   const absent = filtered.length - present;
 
   document.getElementById("a-present").textContent = present;
@@ -594,7 +640,7 @@ function renderAttList() {
 
   let html = "";
   for(const [group, kids] of Object.entries(byGroup)) {
-    const gPresent = kids.filter(k => attendance[k.id] === true).length;
+    const gPresent = kids.filter(k => map[k.id] === true).length;
     html += `<div class="group-section">
       <div class="group-header">
         <div class="group-title">${group}</div>
@@ -602,7 +648,7 @@ function renderAttList() {
       </div>`;
 
     kids.forEach(child => {
-      const state = attendance[child.id];
+      const state = map[child.id];
       const cls = state === true ? "present" : "absent";
       const initials = child.name.split(" ").map(w => w[0]).join("").slice(0,2);
       const hasAllergy = child.allergy && child.allergy !== "Нет";
@@ -641,21 +687,91 @@ function checkPaymentOnPresent(child) {
 }
 
 function cycleAtt(id) {
-  const next = !attendance[id];
-  attendance[id] = next;
+  const map = currentAttMap();
+  const next = !map[id];
+  map[id] = next;
   if(next) {
     const child = children.find(c => c.id == id);
     if(child) checkPaymentOnPresent(child);
   }
   renderAttList();
-  renderHome();
+  if(map === attendance) renderHome();
 }
 
 function markAllPresent() {
-  getFiltered().forEach(c => attendance[c.id] = true);
+  const map = currentAttMap();
+  getFiltered().forEach(c => map[c.id] = true);
   renderAttList();
-  renderHome();
+  if(map === attendance) renderHome();
   showToast("Все отмечены");
+}
+
+// ── ATTENDANCE DATE PICKER (переключение всего экрана на прошлую дату) ──
+let attPickerView = null; // {year, month} — 0-indexed month, пока открыт пикер
+
+function openAttDatePicker() {
+  const d = dmyToDate(attDateStr);
+  attPickerView = { year: d.getFullYear(), month: d.getMonth() };
+  renderAttDatePicker();
+  document.getElementById("attDateModalOverlay").classList.add("show");
+}
+function closeAttDatePicker() {
+  document.getElementById("attDateModalOverlay").classList.remove("show");
+}
+function prevAttPickerMonth() {
+  attPickerView.month === 0 ? (attPickerView.year--, attPickerView.month = 11) : attPickerView.month--;
+  renderAttDatePicker();
+}
+function nextAttPickerMonth() {
+  attPickerView.month === 11 ? (attPickerView.year++, attPickerView.month = 0) : attPickerView.month++;
+  renderAttDatePicker();
+}
+async function selectAttDate(dmy) {
+  if(dmy > dateToDmy(now)) return; // будущее недоступно
+  attDateStr = dmy;
+  closeAttDatePicker();
+  await loadAttendanceForDate(attDateStr);
+  renderAttList();
+}
+
+function renderAttDatePicker() {
+  const { year, month } = attPickerView;
+  const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  const DOW = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+  const todayDmy = dateToDmy(now);
+
+  let startDow = new Date(year, month, 1).getDay();
+  startDow = startDow === 0 ? 6 : startDow - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells = [];
+  for(let i = 0; i < startDow; i++) cells.push(null);
+  for(let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  let grid = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px">';
+  DOW.forEach(d => grid += '<div style="text-align:center;font-size:10px;color:var(--text2);font-weight:600">' + d + '</div>');
+  grid += '</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+
+  cells.forEach(d => {
+    if(d === null) { grid += '<div></div>'; return; }
+    const dmy = dateToDmy(new Date(year, month, d));
+    const isFuture = dmy > todayDmy;
+    const isSelected = dmy === attDateStr;
+    const isTodayCell = dmy === todayDmy;
+    const bg = isSelected ? "var(--accent)" : "var(--surface2)";
+    const color = isFuture ? "var(--text2)" : isSelected ? "#fff" : "var(--text)";
+    const border = isTodayCell && !isSelected ? "1.5px solid var(--accent)" : "none";
+    const onclick = isFuture ? "" : `onclick="selectAttDate('${dmy}')"`;
+    grid += `<div ${onclick} style="aspect-ratio:1;border-radius:8px;background:${bg};color:${color};border:${border};cursor:${isFuture?'default':'pointer'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}</div>`;
+  });
+  grid += '</div>';
+
+  document.getElementById("attDateModalContent").innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+      '<button onclick="prevAttPickerMonth()" style="border:none;background:var(--surface2);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text)">‹</button>' +
+      '<div style="font-weight:700;font-size:13px">' + RU_MONTHS[month] + ' ' + year + '</div>' +
+      '<button onclick="nextAttPickerMonth()" style="border:none;background:var(--surface2);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text)">›</button>' +
+    '</div>' + grid;
 }
 
 // ── CHILDREN LIST ─────────────────────────────────────────────────
@@ -879,16 +995,24 @@ function closeModal(e) {
 
 // ── SAVE ──────────────────────────────────────────────────────────
 async function saveAttendance() {
-  if(isWeekend()) return;
+  if(isWeekend(attDateStr)) return;
+  const map = currentAttMap();
+  const saved = currentSavedMap();
   const filtered = getFiltered();
 
-  const dateStr = `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`;
+  // Шлём только тех, у кого статус реально разошёлся со снимком последней
+  // загрузки — иначе "Кто отметил" у нетронутых чужих детей перезаписывается
+  // на того, кто последним нажал "Сохранить" (гонка атрибуции при одновременной
+  // работе нескольких сотрудников).
+  const changed = filtered.filter(c => !!map[c.id] !== !!saved[c.id]);
+  if(changed.length === 0) { showToast("Изменений нет"); return; }
+
   const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   const marker = (staffInfo && (staffInfo.name || staffInfo.role)) || "";
 
-  const records = filtered.map(c => ({
-    date: dateStr, city: c.city, dept: c.dept, group: c.group,
-    name: c.name, status: attendance[c.id] === true ? "present" : "absent",
+  const records = changed.map(c => ({
+    date: attDateStr, city: c.city, dept: c.dept, group: c.group,
+    name: c.name, status: map[c.id] === true ? "present" : "absent",
     marked_by: marker, time: timeStr
   }));
 
@@ -899,7 +1023,10 @@ async function saveAttendance() {
       body: JSON.stringify({attendance: records})
     });
     const result = await resp.json();
-    if(result.ok) { showToast("Журнал сохранён"); }
+    if(result.ok) {
+      changed.forEach(c => { saved[c.id] = map[c.id]; });
+      showToast("Журнал сохранён");
+    }
     else { showToast("Ошибка: " + result.error, true); }
   } catch(e) {
     showToast("Ошибка сети", true);
