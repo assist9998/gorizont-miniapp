@@ -61,7 +61,7 @@
   .group-count{font-size:12px;color:var(--text2)}
   .child-card{background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);padding:12px 14px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:border-color .25s,background .25s}
   .child-card.present{border-color:rgba(56,217,169,.35);background:rgba(56,217,169,.05)}
-  .child-card.absent{border-color:rgba(255,107,107,.35);background:rgba(255,107,107,.05)}
+  .child-card.absent{border-color:var(--border);background:var(--surface)}
   .avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;background:var(--surface2);color:var(--accent)}
   .child-info{flex:1;min-width:0}
   .child-name{font-size:14px;font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -150,7 +150,7 @@
   <div class="section-title">Заполненность групп</div>
   <div id="groupBars"></div>
   <div class="home-actions">
-    <button class="btn-primary" onclick="goTo('attendance')">Отметить явку</button>
+    <button class="btn-primary" onclick="goTo('attendance')">Отметить посещаемость</button>
     <button class="btn-secondary" onclick="goTo('children')">Список детей</button>
   </div>
 </div>
@@ -319,7 +319,7 @@
   </button>
   <button class="nav-btn" id="nav-attendance" onclick="goTo('attendance')">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-    <span>Явка</span>
+    <span>Посещаемость</span>
   </button>
   <button class="nav-btn" id="nav-children" onclick="goTo('children')">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -368,6 +368,16 @@ const now = new Date();
 const days = ["вс","пн","вт","ср","чт","пт","сб"];
 const months = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
 const STAR_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+// Тап по отпечатку — быстрое переключение пришёл/не пришёл (см. renderAttList),
+// тап по имени/аватарке ребёнка — открывает календарь посещаемости (openAttCalendar).
+const FINGERPRINT_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M12 11a2 2 0 0 1 2 2c0 3.6-.6 6-1.6 8.3"/>' +
+  '<path d="M7.5 20c.6-1.7 1-3.4 1-6a3.5 3.5 0 0 1 7 0"/>' +
+  '<path d="M4.2 17c.5-1.7.8-3.4.8-6a7 7 0 0 1 12.7-4.1"/>' +
+  '<path d="M2 12a10 10 0 0 1 17-7.1"/>' +
+  '<path d="M20 8.5c.4 1.1.6 2.3.6 3.5 0 2 .2 3.8.7 5.5"/>' +
+  '<path d="M17 20.2c-.5-1.7-1-3.5-1-6.2"/>' +
+  '</svg>';
 
 let children = [];
 // attendance: true=present, false=absent (по умолчанию absent, как в Balu Kids — без отдельного "не отмечен")
@@ -671,16 +681,19 @@ function renderAttList() {
       const hasAllergy = child.allergy && child.allergy !== "Нет";
 
       html += `<div class="child-card-wrap" id="att-wrap-${child.id}">
-        <div class="child-card ${cls}" data-id="${child.id}" onclick="cycleAtt('${child.id}')">
-          <div class="avatar">${initials}</div>
-          <div class="child-info">
-            <div class="child-name">${child.name}</div>
-            <div class="child-meta">
-              <span class="time-badge">до ${child.until}</span>
-              <span>${child.type}</span>
-              ${hasAllergy ? '<div class="allergy-dot"></div>' : ""}
+        <div class="child-card ${cls}" data-id="${child.id}">
+          <div onclick="openAttCalendar('${child.id}')" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer">
+            <div class="avatar">${initials}</div>
+            <div class="child-info">
+              <div class="child-name">${child.name}</div>
+              <div class="child-meta">
+                <span class="time-badge">до ${child.until}</span>
+                <span>${child.type}</span>
+                ${hasAllergy ? '<div class="allergy-dot"></div>' : ""}
+              </div>
             </div>
           </div>
+          <button onclick="event.stopPropagation();cycleAtt('${child.id}')" style="flex-shrink:0;border:none;background:none;cursor:pointer;color:${state === true ? "var(--accent2)" : "var(--text2)"};padding:6px">${FINGERPRINT_ICON}</button>
         </div>
       </div>`;
     });
@@ -691,26 +704,9 @@ function renderAttList() {
   document.getElementById("attList").innerHTML = html;
 }
 
-// Оплата: проверка пока ничего не делает по-настоящему — payment_status/payment_date
-// с клиентом ещё не согласованы и в реальных данных не ведутся. Как только появятся —
-// сработает сама, без переделки этой функции (см. project_gorizont_payroll — нет,
-// см. обсуждение блока оплаты посещаемости).
-function checkPaymentOnPresent(child) {
-  if(!child.payment_status || !child.payment_date) return;
-  const paidThrough = child.payment_date.split(".").reverse().join("-");
-  const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
-  const covered = child.payment_status === "Оплачено" && paidThrough >= today;
-  if(!covered) showToast("Не оплачено — обратитесь к администратору", true);
-}
-
 function cycleAtt(id) {
   const map = currentAttMap();
-  const next = !map[id];
-  map[id] = next;
-  if(next) {
-    const child = children.find(c => c.id == id);
-    if(child) checkPaymentOnPresent(child);
-  }
+  map[id] = !map[id];
   renderAttList();
   if(map === attendance) renderHome();
 }
@@ -842,6 +838,16 @@ function calcAge(dob) {
 async function openModal(id) {
   const c = children.find(x => x.id == id);
   if(!c) return;
+  document.getElementById("modalName").textContent = c.name;
+  document.getElementById("modalOverlay").classList.add("show");
+  renderModal(c);
+}
+
+// Открывается с экрана "Посещаемость" (тап по имени) — только календарь, без
+// карточки ребёнка (контакты/аллергии там не нужны, см. openModal/renderModal).
+async function openAttCalendar(id) {
+  const c = children.find(x => x.id == id);
+  if(!c) return;
   window._currentChildForHistory = c;
   window._historyData = null;
   const n = new Date();
@@ -861,7 +867,7 @@ async function openModal(id) {
   } catch(e) { console.error("History:", e); }
 
   window._historyData = history;
-  renderModal(c, history);
+  renderCalendarModal(c, history);
 }
 
 // дд.мм.гггг — тот же формат, что пишет saveAttendance() и хранит бэкенд
@@ -872,12 +878,12 @@ function fmtDMY(year, month, day) {
 function prevHistMonth() {
   const v = window._historyView;
   v.month === 0 ? (v.year--, v.month = 11) : v.month--;
-  renderModal(window._currentChildForHistory, window._historyData);
+  renderCalendarModal(window._currentChildForHistory, window._historyData);
 }
 function nextHistMonth() {
   const v = window._historyView;
   v.month === 11 ? (v.year++, v.month = 0) : v.month++;
-  renderModal(window._currentChildForHistory, window._historyData);
+  renderCalendarModal(window._currentChildForHistory, window._historyData);
 }
 
 async function toggleHistDay(dateStr) {
@@ -890,7 +896,7 @@ async function toggleHistDay(dateStr) {
   const nextStatus = cur ? "absent" : "present";
   const prevStatus = days[dateStr];
   days[dateStr] = nextStatus;
-  renderModal(c, window._historyData);
+  renderCalendarModal(c, window._historyData);
 
   const [dd, mm, yyyy] = dateStr.split(".");
   const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -910,7 +916,7 @@ async function toggleHistDay(dateStr) {
   } catch(e) {
     console.error("toggleHistDay save error:", e);
     days[dateStr] = prevStatus;
-    renderModal(c, window._historyData);
+    renderCalendarModal(c, window._historyData);
     showToast("Не удалось сохранить", true);
   }
 }
@@ -962,28 +968,32 @@ function renderHistCalendar(history) {
   };
 }
 
-function renderModal(c, history) {
-  const parts = (c.parent || "").split("|");
-  const hasAllergy = c.allergy && c.allergy !== "Нет";
-  const age = c.dob ? calcAge(c.dob) : "—";
-  const state = attendance[c.id];
-  const stateColor = state === true ? "var(--accent2)" : "var(--danger)";
-  const todayLabel = state === true ? "Пришёл" : "Отсутствует";
-
+// Модалка с экрана "Посещаемость" (тап по имени ребёнка) — только календарь,
+// без карточки контактов, которая там не нужна.
+function renderCalendarModal(c, history) {
   const cal = renderHistCalendar(history);
-
   document.getElementById("modalContent").innerHTML =
-    // Subtitle
-    '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + age + " · " + c.group + " · " + c.type + " до " + c.until + '</div>' +
-    // Calendar
-    '<div style="background:var(--surface2);border-radius:12px;padding:12px;margin-bottom:14px">' +
+    '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (c.group||"") + '</div>' +
+    '<div style="background:var(--surface2);border-radius:12px;padding:12px">' +
       cal.html +
       '<div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text2)">' +
         '<span>Пришёл: <b style="color:var(--accent2)">' + cal.present + '</b></span>' +
         '<span>Нет: <b style="color:var(--danger)">' + cal.absent + '</b></span>' +
-        '<span>Сегодня: <b style="color:' + stateColor + '">' + todayLabel + '</b></span>' +
       '</div>' +
-    '</div>' +
+    '</div>';
+}
+
+// Карточка ребёнка (вкладка "Дети") — только контакты/аллергии, без календаря
+// посещаемости: календарь релевантен только на экране "Посещаемость" (см.
+// openAttCalendar/renderCalendarModal), тут он был лишним.
+function renderModal(c) {
+  const parts = (c.parent || "").split("|");
+  const hasAllergy = c.allergy && c.allergy !== "Нет";
+  const age = c.dob ? calcAge(c.dob) : "—";
+
+  document.getElementById("modalContent").innerHTML =
+    // Subtitle
+    '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + age + " · " + c.group + " · " + c.type + " до " + c.until + '</div>' +
     // Rows
     '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
       '<span style="color:var(--text2)">Родитель</span>' +
