@@ -368,15 +368,11 @@ const now = new Date();
 const days = ["вс","пн","вт","ср","чт","пт","сб"];
 const months = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
 const STAR_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
-// Тап по отпечатку — быстрое переключение пришёл/не пришёл (см. renderAttList),
+// Тап по галочке — быстрое переключение пришёл/не пришёл (см. renderAttList),
 // тап по имени/аватарке ребёнка — открывает календарь посещаемости (openAttCalendar).
-const FINGERPRINT_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M12 11a2 2 0 0 1 2 2c0 3.6-.6 6-1.6 8.3"/>' +
-  '<path d="M7.5 20c.6-1.7 1-3.4 1-6a3.5 3.5 0 0 1 7 0"/>' +
-  '<path d="M4.2 17c.5-1.7.8-3.4.8-6a7 7 0 0 1 12.7-4.1"/>' +
-  '<path d="M2 12a10 10 0 0 1 17-7.1"/>' +
-  '<path d="M20 8.5c.4 1.1.6 2.3.6 3.5 0 2 .2 3.8.7 5.5"/>' +
-  '<path d="M17 20.2c-.5-1.7-1-3.5-1-6.2"/>' +
+const CHECKIN_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+  '<circle cx="12" cy="12" r="10"/>' +
+  '<polyline points="7.5 12.5 10.5 15.5 16.5 8.5"/>' +
   '</svg>';
 
 let children = [];
@@ -693,7 +689,7 @@ function renderAttList() {
               </div>
             </div>
           </div>
-          <button onclick="event.stopPropagation();cycleAtt('${child.id}')" style="flex-shrink:0;border:none;background:none;cursor:pointer;color:${state === true ? "var(--accent2)" : "var(--text2)"};padding:6px">${FINGERPRINT_ICON}</button>
+          <button onclick="event.stopPropagation();cycleAtt('${child.id}')" style="flex-shrink:0;border:none;background:none;cursor:pointer;color:${state === true ? "var(--accent2)" : "var(--text2)"};padding:6px">${CHECKIN_ICON}</button>
         </div>
       </div>`;
     });
