@@ -1394,26 +1394,37 @@ async function submitForm() {
     status: "Активный",
   };
 
-  // Оптимистичное обновление — сразу закрываем форму
-  showToast(formMode === "add" ? "Ребёнок добавлен!" : "Данные сохранены!");
-  goTo("children");
-
-  // Запрос идёт в фоне
+  // Ждём подтверждения от сервера, прежде чем уходить с формы — раньше форма
+  // закрывалась сразу (оптимистично), и при сбое сети введённые данные было
+  // не восстановить: человек уже видел "успех" и ушёл с экрана. Теперь при
+  // ошибке остаёмся на форме, ничего не очищая, можно просто нажать ещё раз.
   const url = formMode === "add" ? API_URL + "/children" : API_URL + "/children/" + editChildId;
   const method = formMode === "add" ? "POST" : "PUT";
+  const btn = document.getElementById("formSubmitBtn");
+  const prevText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Сохраняем...";
 
-  fetch(url, {
-    method,
-    headers: authHeaders({"Content-Type": "application/json"}),
-    body: JSON.stringify(payload)
-  }).then(r => r.json()).then(result => {
-    if(!result.ok) {
+  try {
+    const resp = await fetch(url, {
+      method,
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify(payload)
+    });
+    const result = await resp.json();
+    if(result.ok) {
+      showToast(formMode === "add" ? "Ребёнок добавлен!" : "Данные сохранены!");
+      goTo("children");
+      loadChildren();
+    } else {
       showToast("Ошибка сохранения: " + result.error, true);
     }
-    loadChildren(); // Обновляем список в фоне
-  }).catch(() => {
-    showToast("Ошибка сети при сохранении", true);
-  });
+  } catch(e) {
+    showToast("Ошибка сети — данные НЕ сохранены, попробуйте ещё раз", true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevText;
+  }
 }
 
 async function deleteChild() {
@@ -1422,19 +1433,23 @@ async function deleteChild() {
   const name = c ? c.name : "ребёнка";
   if(!confirm("Архивировать " + name + "? Ребёнок пропадёт из списка и посещаемости. Можно восстановить через архив.")) return;
 
-  goTo("children");
-  showToast("Ребёнок архивирован");
-
-  fetch(API_URL + "/children/" + editChildId, {
-    method: "PUT",
-    headers: authHeaders({"Content-Type": "application/json"}),
-    body: JSON.stringify({status: "Выбыл"})
-  }).then(r => r.json()).then(result => {
-    if(!result.ok) showToast("Ошибка архивирования", true);
-    loadChildren();
-  }).catch(() => {
-    showToast("Ошибка сети", true);
-  });
+  try {
+    const resp = await fetch(API_URL + "/children/" + editChildId, {
+      method: "PUT",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({status: "Выбыл"})
+    });
+    const result = await resp.json();
+    if(result.ok) {
+      showToast("Ребёнок архивирован");
+      goTo("children");
+      loadChildren();
+    } else {
+      showToast("Ошибка архивирования: " + result.error, true);
+    }
+  } catch(e) {
+    showToast("Ошибка сети — не архивировано, попробуйте ещё раз", true);
+  }
 }
 
 initStaff().then(() => loadChildren());
