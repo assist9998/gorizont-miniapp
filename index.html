@@ -196,6 +196,14 @@
   <button class="btn-primary" onclick="saveAttendance()">Сохранить журнал</button>
 </div>
 
+<!-- SCREEN: STAFF (персонал / расчёт ЗП, Этап 1) -->
+<div class="screen" id="screen-staff">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+    <button onclick="openAddStaffForm()" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">+ Добавить</button>
+  </div>
+  <div id="staffListEl"></div>
+</div>
+
 <!-- SCREEN: NOTIFICATIONS -->
 <div class="screen" id="screen-notifications">
   <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
@@ -302,6 +310,53 @@
   <div style="height:80px"></div>
 </div>
 
+<!-- SCREEN: STAFF FORM (добавить/редактировать сотрудника) -->
+<div class="screen" id="screen-staff-form">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <button onclick="goTo('staff')" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
+    <div style="font-size:16px;font-weight:600;flex:1" id="staffFormTitle">Новый сотрудник</div>
+    <button onclick="openStaffArchive()" id="staffArchiveBtn" style="display:none;border:none;background:var(--surface2);color:var(--text2);font-family:inherit;font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;cursor:pointer;white-space:nowrap">Архив (0)</button>
+  </div>
+  <div style="margin-bottom:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Имя *</div>
+    <input id="s_name" type="text" placeholder="Иван Иванов" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+  </div>
+  <div style="margin-bottom:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Должность</div>
+    <input id="s_position" type="text" placeholder="Няня, воспитатель..." style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Телефон</div>
+      <input id="s_phone" type="text" placeholder="+84..." style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Договор до</div>
+      <input id="s_contract_end" type="text" placeholder="ДД.ММ.ГГГГ" maxlength="10" oninput="formatDob(this)" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
+  </div>
+  <div style="margin-bottom:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тип оплаты</div>
+    <div style="padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text2);font-size:14px">Месячный фикс (другие типы — следующий этап)</div>
+  </div>
+  <div style="margin-bottom:20px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Ставка в месяц (₫)</div>
+    <input id="s_monthly_rate" type="number" inputmode="numeric" placeholder="10500000" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+  </div>
+  <button onclick="submitStaffForm()" class="btn-primary" style="width:100%;margin-bottom:10px" id="staffSubmitBtn">Добавить сотрудника</button>
+  <button onclick="archiveStaffMember()" id="staffDeleteBtn" style="display:none;width:100%;padding:13px;border-radius:var(--radius-sm);border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;margin-bottom:80px">Архивировать</button>
+  <div style="height:80px"></div>
+</div>
+
+<!-- MODAL: STAFF ARCHIVE (архивные сотрудники, восстановление) -->
+<div class="modal-overlay" id="staffArchiveModalOverlay" onclick="if(event.target===this) closeStaffArchive()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-name">Восстановить из архива</div>
+    <div id="staffArchiveModalContent"></div>
+  </div>
+</div>
+
 <!-- MODAL: ARCHIVE (архивные дети, восстановление) -->
 <div class="modal-overlay" id="archiveModalOverlay" onclick="if(event.target===this) closeArchive()">
   <div class="modal">
@@ -324,6 +379,10 @@
   <button class="nav-btn" id="nav-children" onclick="goTo('children')">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     <span>Дети</span>
+  </button>
+  <button class="nav-btn" id="nav-staff" onclick="goTo('staff')">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+    <span>Персонал</span>
   </button>
   <button class="nav-btn" id="nav-notifications" onclick="goTo('notifications')" style="position:relative">
     <div style="position:relative;display:inline-flex">
@@ -410,9 +469,14 @@ function goTo(screen) {
   if(screen === "attendance") renderAttFilters();
   if(screen === "children") renderChildList();
   if(screen === "notifications") renderNotifications();
+  if(screen === "staff") loadStaff();
   if(screen === "form") {
     document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("nav-children")?.classList.add("active");
+  }
+  if(screen === "staff-form") {
+    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById("nav-staff")?.classList.add("active");
   }
 }
 
@@ -1461,6 +1525,345 @@ async function deleteChild() {
   } catch(e) {
     showToast("Ошибка сети — не архивировано, попробуйте ещё раз", true);
   }
+}
+
+// ── PAYROLL: STAFF (расчёт ЗП, Этап 1 — только "месячный фикс") ────
+let staffList = [];
+
+async function loadStaff() {
+  try {
+    const resp = await fetch(API_URL + "/payroll/staff", {headers: authHeaders()});
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.error);
+    staffList = data.staff;
+  } catch(e) {
+    console.error("loadStaff error:", e);
+    staffList = [];
+  }
+  renderStaffList();
+}
+
+function renderStaffList() {
+  let html = "";
+  staffList.forEach(s => {
+    const initials = s.name.split(" ").map(w => w[0]).join("").slice(0,2);
+    const rate = s.monthly_rate ? Number(s.monthly_rate).toLocaleString('ru-RU') + " ₫/мес" : "";
+    html += `<div class="child-list-item" onclick="openStaffCalendar('${s.id}')">
+      <div class="avatar">${initials}</div>
+      <div class="child-detail">
+        <div class="child-detail-name">${s.name}</div>
+        <div class="child-detail-meta">${s.position || "—"}${rate ? " · " + rate : ""}</div>
+      </div>
+      <button onclick="event.stopPropagation();openEditStaffForm('${s.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>
+      <span class="child-arrow">›</span>
+    </div>`;
+  });
+  if(!staffList.length) html = '<div class="empty">Нет сотрудников</div>';
+  document.getElementById("staffListEl").innerHTML = html;
+}
+
+// ── STAFF FORM ──────────────────────────────────────────────────────
+let staffFormMode = "add";
+let editStaffId = null;
+
+function openAddStaffForm() {
+  staffFormMode = "add"; editStaffId = null;
+  document.getElementById("staffFormTitle").textContent = "Новый сотрудник";
+  document.getElementById("staffSubmitBtn").textContent = "Добавить сотрудника";
+  document.getElementById("staffDeleteBtn").style.display = "none";
+  clearStaffForm();
+  refreshStaffArchiveBadge();
+  goTo("staff-form");
+}
+
+function openEditStaffForm(id) {
+  const s = staffList.find(x => x.id == id);
+  if(!s) return;
+  staffFormMode = "edit"; editStaffId = id;
+  document.getElementById("staffFormTitle").textContent = "Редактировать";
+  document.getElementById("staffSubmitBtn").textContent = "Сохранить изменения";
+  document.getElementById("staffDeleteBtn").style.display = "block";
+  document.getElementById("staffArchiveBtn").style.display = "none";
+  document.getElementById("s_name").value = s.name || "";
+  document.getElementById("s_position").value = s.position || "";
+  document.getElementById("s_phone").value = s.phone || "";
+  document.getElementById("s_contract_end").value = s.contract_end || "";
+  document.getElementById("s_monthly_rate").value = s.monthly_rate || "";
+  goTo("staff-form");
+}
+
+function clearStaffForm() {
+  ["s_name","s_position","s_phone","s_contract_end","s_monthly_rate"].forEach(id => {
+    document.getElementById(id).value = "";
+  });
+}
+
+// ── STAFF ARCHIVE (та же схема, что и архив детей — archive/restore через update) ──
+async function refreshStaffArchiveBadge() {
+  const btn = document.getElementById("staffArchiveBtn");
+  try {
+    const resp = await fetch(API_URL + "/payroll/staff?archived=true", {headers: authHeaders()});
+    const data = await resp.json();
+    const n = data.ok ? data.staff.length : 0;
+    if(n > 0) { btn.textContent = "Архив (" + n + ")"; btn.style.display = "block"; window._archivedStaff = data.staff; }
+    else { btn.style.display = "none"; }
+  } catch(e) { btn.style.display = "none"; }
+}
+
+function openStaffArchive() {
+  const list = window._archivedStaff || [];
+  document.getElementById("staffArchiveModalContent").innerHTML = list.length ? list.map(s =>
+    `<div onclick="restoreStaffMember('${s.id}')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface2);border-radius:14px;margin-bottom:8px;cursor:pointer">
+      <div class="avatar">${s.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
+      <div>
+        <div style="font-weight:600;font-size:14px">${s.name}</div>
+        <div style="font-size:12px;color:var(--text2)">${s.position||""}</div>
+      </div>
+    </div>`
+  ).join("") : '<div class="empty">Архив пуст</div>';
+  document.getElementById("staffArchiveModalOverlay").classList.add("show");
+}
+function closeStaffArchive() {
+  document.getElementById("staffArchiveModalOverlay").classList.remove("show");
+}
+async function restoreStaffMember(id) {
+  closeStaffArchive();
+  showToast("Восстанавливаем...");
+  try {
+    const resp = await fetch(API_URL + "/payroll/staff/" + id, {
+      method: "PUT",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({active: true})
+    });
+    const result = await resp.json();
+    if(result.ok) { showToast("Сотрудник восстановлен"); loadStaff(); refreshStaffArchiveBadge(); }
+    else showToast("Не удалось восстановить: " + result.error, true);
+  } catch(e) {
+    showToast("Ошибка сети", true);
+  }
+}
+
+// ── STAFF SUBMIT / ARCHIVE (ждём подтверждения сервера — та же защита
+// от потери данных при сворачивании приложения, что и у submitForm/deleteChild) ──
+async function submitStaffForm() {
+  const name = document.getElementById("s_name").value.trim();
+  if(!name) { showToast("Введите имя сотрудника", true); return; }
+
+  const rateRaw = document.getElementById("s_monthly_rate").value.trim();
+  const payload = {
+    name,
+    position: document.getElementById("s_position").value.trim(),
+    phone: document.getElementById("s_phone").value.trim(),
+    contract_end: document.getElementById("s_contract_end").value.trim(),
+    monthly_rate: rateRaw ? Number(rateRaw) : null,
+  };
+
+  const url = staffFormMode === "add" ? API_URL + "/payroll/staff" : API_URL + "/payroll/staff/" + editStaffId;
+  const method = staffFormMode === "add" ? "POST" : "PUT";
+  const btn = document.getElementById("staffSubmitBtn");
+  const prevText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Сохраняем...";
+
+  try {
+    const resp = await fetch(url, {
+      method,
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify(payload)
+    });
+    const result = await resp.json();
+    if(result.ok) {
+      showToast(staffFormMode === "add" ? "Сотрудник добавлен!" : "Данные сохранены!");
+      goTo("staff");
+      loadStaff();
+    } else {
+      showToast("Ошибка сохранения: " + result.error, true);
+    }
+  } catch(e) {
+    showToast("Ошибка сети — данные НЕ сохранены, попробуйте ещё раз", true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevText;
+  }
+}
+
+async function archiveStaffMember() {
+  if(!editStaffId) return;
+  const s = staffList.find(x => x.id == editStaffId);
+  const name = s ? s.name : "сотрудника";
+  if(!confirm("Архивировать " + name + "? Можно восстановить через архив.")) return;
+
+  try {
+    const resp = await fetch(API_URL + "/payroll/staff/" + editStaffId, {
+      method: "PUT",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({active: false})
+    });
+    const result = await resp.json();
+    if(result.ok) {
+      showToast("Сотрудник архивирован");
+      goTo("staff");
+      loadStaff();
+    } else {
+      showToast("Ошибка архивирования: " + result.error, true);
+    }
+  } catch(e) {
+    showToast("Ошибка сети — не архивировано, попробуйте ещё раз", true);
+  }
+}
+
+// ── STAFF CALENDAR + ЗП (модалка переиспользует modalOverlay/modalContent —
+// та же схема, что и renderModal/renderCalendarModal для детей) ────────────
+window._staffAttPending = window._staffAttPending || new Set();
+
+async function openStaffCalendar(id) {
+  const s = staffList.find(x => x.id == id);
+  if(!s) return;
+  window._currentStaffForCalendar = s;
+  const n = new Date();
+  window._staffCalView = { year: n.getFullYear(), month: n.getMonth() };
+  document.getElementById("modalName").textContent = s.name;
+  document.getElementById("modalContent").innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем...</div>';
+  document.getElementById("modalOverlay").classList.add("show");
+  await loadStaffMonth();
+}
+
+// В отличие от /history для детей (вся история одним запросом), /payroll/attendance
+// требует year+month — грузим по месяцу, при листании календаря дёргаем заново.
+async function loadStaffMonth() {
+  const s = window._currentStaffForCalendar;
+  const { year, month } = window._staffCalView;
+  try {
+    const resp = await fetch(API_URL + "/payroll/attendance?staff_id=" + s.id + "&year=" + year + "&month=" + (month + 1), {
+      headers: authHeaders()
+    });
+    const data = await resp.json();
+    window._staffCalDays = data.ok ? data.days : {};
+  } catch(e) {
+    console.error("Staff attendance:", e);
+    window._staffCalDays = {};
+  }
+  renderStaffCalendarModal();
+}
+
+function prevStaffMonth() {
+  const v = window._staffCalView;
+  v.month === 0 ? (v.year--, v.month = 11) : v.month--;
+  loadStaffMonth();
+}
+function nextStaffMonth() {
+  const v = window._staffCalView;
+  v.month === 11 ? (v.year++, v.month = 0) : v.month++;
+  loadStaffMonth();
+}
+
+// Будних дней (пн-пт) в месяце — та же логика, что payroll._weekdays_in_month
+// на бэкенде, чтобы ЗП на экране совпадала с тем, что реально посчитает сервер.
+function weekdaysInMonth(year, month) {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  let count = 0;
+  for(let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(year, month, d).getDay();
+    if(dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
+async function toggleStaffAttDay(dateStr) {
+  const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
+  if(dateStr > todayDMY) return; // будущее не редактируем
+  const s = window._currentStaffForCalendar;
+  if(!s) return;
+  // Та же блокировка повторного тапа, что и в toggleHistDay — без неё двойной
+  // тап шлёт два параллельных запроса с противоположными статусами.
+  const lockKey = s.id + "|" + dateStr;
+  if(window._staffAttPending.has(lockKey)) return;
+  window._staffAttPending.add(lockKey);
+
+  const days = window._staffCalDays;
+  const cur = days[dateStr] === "present";
+  const nextStatus = cur ? "absent" : "present";
+  const prevStatus = days[dateStr];
+  days[dateStr] = nextStatus;
+  renderStaffCalendarModal();
+
+  try {
+    const resp = await fetch(API_URL + "/payroll/attendance", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({staff_id: s.id, date: dateStr, status: nextStatus})
+    });
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.error || "save failed");
+  } catch(e) {
+    console.error("toggleStaffAttDay error:", e);
+    days[dateStr] = prevStatus;
+    renderStaffCalendarModal();
+    showToast("Не удалось сохранить", true);
+  } finally {
+    window._staffAttPending.delete(lockKey);
+  }
+}
+
+function renderStaffCalendarModal() {
+  const s = window._currentStaffForCalendar;
+  const { year, month } = window._staffCalView;
+  const days = window._staffCalDays;
+  const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  const DOW = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+  const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
+
+  let startDow = new Date(year, month, 1).getDay();
+  startDow = startDow === 0 ? 6 : startDow - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  let present = 0;
+  const cells = [];
+  for(let i = 0; i < startDow; i++) cells.push(null);
+  for(let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  let grid = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px">';
+  DOW.forEach(d => grid += '<div style="text-align:center;font-size:10px;color:var(--text2);font-weight:600">' + d + '</div>');
+  grid += '</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+
+  cells.forEach(d => {
+    if(d === null) { grid += '<div></div>'; return; }
+    const dateStr = fmtDMY(year, month, d);
+    const status = days[dateStr];
+    const isFuture = dateStr > todayDMY;
+    const isWknd = (() => { const dow = new Date(year, month, d).getDay(); return dow === 0 || dow === 6; })();
+    if(status === "present") present++;
+    const bg = isFuture ? "transparent" : status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface2)";
+    const color = isFuture ? "var(--text2)" : "var(--text)";
+    const cursor = isFuture ? "default" : "pointer";
+    const onclick = isFuture ? "" : `onclick="toggleStaffAttDay('${dateStr}')"`;
+    grid += `<div ${onclick} style="aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}</div>`;
+  });
+  grid += '</div>';
+
+  const weekdays = weekdaysInMonth(year, month);
+  const rate = s.monthly_rate ? Number(s.monthly_rate) : 0;
+  const salary = weekdays ? Math.round(rate / weekdays * present) : 0;
+
+  document.getElementById("modalContent").innerHTML =
+    '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (s.position || "") + '</div>' +
+    '<div style="background:var(--surface2);border-radius:12px;padding:12px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+        '<button onclick="prevStaffMonth()" style="border:none;background:var(--surface);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text)">‹</button>' +
+        '<div style="font-weight:700;font-size:13px">' + RU_MONTHS[month] + ' ' + year + '</div>' +
+        '<button onclick="nextStaffMonth()" style="border:none;background:var(--surface);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text)">›</button>' +
+      '</div>' + grid +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;margin-top:10px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
+      '<span style="color:var(--text2)">Отработано (будних дней)</span>' +
+      '<b>' + present + ' / ' + weekdays + '</b>' +
+    '</div>' +
+    (rate > 0 ?
+      '<div style="display:flex;justify-content:space-between;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:14px">' +
+        '<span style="color:var(--text2)">ЗП за месяц</span>' +
+        '<b style="color:var(--accent2)">' + salary.toLocaleString('ru-RU') + ' ₫</b>' +
+      '</div>' :
+      '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Ставка не задана — откройте карточку и укажите</div>');
 }
 
 initStaff().then(() => loadChildren());
