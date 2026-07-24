@@ -423,6 +423,21 @@ if(tg){
   if(tg.requestFullscreen) tg.requestFullscreen();
 }
 
+// Экраны грузят данные один раз при заходе (нет автоперезапуска, как у React
+// useEffect с deps) — если один такой GET транзиентно упадёт (обрыв сети на
+// секунду и т.п.), без ретрая экран тихо остаётся в дефолтном/пустом состоянии
+// до тех пор, пока пользователь не уйдёт с экрана и не вернётся заново (найдено
+// как класс бага в Balu Kids: "Оплаты" не показывали посещаемость из-за именно
+// этого — один из двух параллельных fetch'ей в эффекте не повезло и не сработал).
+async function withRetry(fn, attempts = 3, delayMs = 500) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); }
+    catch (e) { lastErr = e; if (i < attempts - 1) await new Promise(r => setTimeout(r, delayMs)); }
+  }
+  throw lastErr;
+}
+
 const now = new Date();
 const days = ["вс","пн","вт","ср","чт","пт","сб"];
 const months = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
@@ -483,12 +498,13 @@ function goTo(screen) {
 // ── Load data ─────────────────────────────────────────────────────
 async function loadChildren() {
   try {
-    const resp = await fetch(API_URL + "/children", {
-      headers: authHeaders()
+    const data = await withRetry(async () => {
+      const resp = await fetch(API_URL + "/children", { headers: authHeaders() });
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+      const d = await resp.json();
+      if(!d.ok) throw new Error(d.error);
+      return d;
     });
-    if(!resp.ok) throw new Error("HTTP " + resp.status);
-    const data = await resp.json();
-    if(!data.ok) throw new Error(data.error);
     children = data.children.filter(c => c.status !== "Выбыл" && c.name);
     children.forEach(c => { if(attendance[c.id] === undefined) attendance[c.id] = false; });
 
@@ -542,9 +558,13 @@ async function loadAttendanceForDate(dateStr) {
   try {
     const city = (staffInfo && staffInfo.city) ? staffInfo.city : "";
     const url = API_URL + "/attendance?date=" + dateStr + (city ? "&city=" + encodeURIComponent(city) : "");
-    const resp = await fetch(url, {headers: authHeaders()});
-    const data = await resp.json();
-    if(!data.ok) return;
+    const data = await withRetry(async () => {
+      const resp = await fetch(url, {headers: authHeaders()});
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+      const d = await resp.json();
+      if(!d.ok) throw new Error(d.error || "not ok");
+      return d;
+    });
     data.records.forEach(r => {
       const child = children.find(c => c.name === r.name && c.city === r.city);
       if(child) map[child.id] = r.status === "present";
@@ -919,11 +939,15 @@ async function openAttCalendar(id) {
 
   let history = {current:{present:0,absent:0,total:0}, prev:{present:0,absent:0,total:0}, days:{}};
   try {
-    const resp = await fetch(API_URL + "/history?name=" + encodeURIComponent(c.name) + "&city=" + encodeURIComponent(c.city), {
-      headers: authHeaders()
+    history = await withRetry(async () => {
+      const resp = await fetch(API_URL + "/history?name=" + encodeURIComponent(c.name) + "&city=" + encodeURIComponent(c.city), {
+        headers: authHeaders()
+      });
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      if(!data.ok) throw new Error(data.error || "not ok");
+      return data.history;
     });
-    const data = await resp.json();
-    if(data.ok) history = data.history;
   } catch(e) { console.error("History:", e); }
 
   window._historyData = history;
@@ -1297,10 +1321,11 @@ async function initStaff(){
   try {
     const tgId = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : "";
     if(!tgId) return;
-    const resp = await fetch(API_URL + "/staff?tg_id=" + tgId, {
-      headers: authHeaders()
+    const data = await withRetry(async () => {
+      const resp = await fetch(API_URL + "/staff?tg_id=" + tgId, { headers: authHeaders() });
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+      return resp.json();
     });
-    const data = await resp.json();
     if(data.ok) {
       staffInfo = data.staff;
       console.log("Staff:", staffInfo);
@@ -1332,8 +1357,11 @@ function openAddForm() {
 async function refreshArchiveBadge() {
   const btn = document.getElementById("archiveBtn");
   try {
-    const resp = await fetch(API_URL + "/children?archived=true", {headers: authHeaders()});
-    const data = await resp.json();
+    const data = await withRetry(async () => {
+      const resp = await fetch(API_URL + "/children?archived=true", {headers: authHeaders()});
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+      return resp.json();
+    });
     const n = data.ok ? data.children.length : 0;
     if(n > 0) { btn.textContent = "Архив (" + n + ")"; btn.style.display = "block"; window._archivedChildren = data.children; }
     else { btn.style.display = "none"; }
@@ -1415,11 +1443,13 @@ function switchFormTab(tab) {
 async function loadTrials() {
   const city = staffInfo && staffInfo.city ? staffInfo.city : "";
   try {
-    const resp = await fetch(API_URL + "/trials?city=" + encodeURIComponent(city), {
-      headers: authHeaders()
+    const data = await withRetry(async () => {
+      const resp = await fetch(API_URL + "/trials?city=" + encodeURIComponent(city), { headers: authHeaders() });
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+      const d = await resp.json();
+      if(!d.ok) throw new Error(d.error);
+      return d;
     });
-    const data = await resp.json();
-    if(!data.ok) throw new Error(data.error);
     const list = document.getElementById("trialList");
     if(!data.trials.length) {
       list.innerHTML = "<div style='color:var(--text2);font-size:13px;padding:10px 0'>Нет подтверждённых заявок</div>";
@@ -1532,9 +1562,13 @@ let staffList = [];
 
 async function loadStaff() {
   try {
-    const resp = await fetch(API_URL + "/payroll/staff", {headers: authHeaders()});
-    const data = await resp.json();
-    if(!data.ok) throw new Error(data.error);
+    const data = await withRetry(async () => {
+      const resp = await fetch(API_URL + "/payroll/staff", {headers: authHeaders()});
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+      const d = await resp.json();
+      if(!d.ok) throw new Error(d.error);
+      return d;
+    });
     staffList = data.staff;
   } catch(e) {
     console.error("loadStaff error:", e);
@@ -1602,8 +1636,11 @@ function clearStaffForm() {
 async function refreshStaffArchiveBadge() {
   const btn = document.getElementById("staffArchiveBtn");
   try {
-    const resp = await fetch(API_URL + "/payroll/staff?archived=true", {headers: authHeaders()});
-    const data = await resp.json();
+    const data = await withRetry(async () => {
+      const resp = await fetch(API_URL + "/payroll/staff?archived=true", {headers: authHeaders()});
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+      return resp.json();
+    });
     const n = data.ok ? data.staff.length : 0;
     if(n > 0) { btn.textContent = "Архив (" + n + ")"; btn.style.display = "block"; window._archivedStaff = data.staff; }
     else { btn.style.display = "none"; }
@@ -1734,10 +1771,13 @@ async function loadStaffMonth() {
   const s = window._currentStaffForCalendar;
   const { year, month } = window._staffCalView;
   try {
-    const resp = await fetch(API_URL + "/payroll/attendance?staff_id=" + s.id + "&year=" + year + "&month=" + (month + 1), {
-      headers: authHeaders()
+    const data = await withRetry(async () => {
+      const resp = await fetch(API_URL + "/payroll/attendance?staff_id=" + s.id + "&year=" + year + "&month=" + (month + 1), {
+        headers: authHeaders()
+      });
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+      return resp.json();
     });
-    const data = await resp.json();
     window._staffCalDays = data.ok ? data.days : {};
   } catch(e) {
     console.error("Staff attendance:", e);
