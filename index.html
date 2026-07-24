@@ -882,11 +882,21 @@ function nextHistMonth() {
   renderCalendarModal(window._currentChildForHistory, window._historyData);
 }
 
+window._histPending = window._histPending || new Set();
+
 async function toggleHistDay(dateStr) {
   const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
   if(dateStr > todayDMY) return; // будущее не редактируем
   const c = window._currentChildForHistory;
   if(!c) return;
+  // Блокируем повторный тап по этому же дню, пока предыдущий запрос ещё не
+  // завершился — иначе два быстрых тапа шлют два параллельных POST с
+  // противоположными статусами, и итог в БД зависит от того, какой ответ
+  // сервера придёт последним, а не от того, что видно на экране.
+  const lockKey = c.id + "|" + dateStr;
+  if(window._histPending.has(lockKey)) return;
+  window._histPending.add(lockKey);
+
   const days = window._historyData.days;
   const cur = days[dateStr] === "present";
   const nextStatus = cur ? "absent" : "present";
@@ -914,6 +924,8 @@ async function toggleHistDay(dateStr) {
     days[dateStr] = prevStatus;
     renderCalendarModal(c, window._historyData);
     showToast("Не удалось сохранить", true);
+  } finally {
+    window._histPending.delete(lockKey);
   }
 }
 
