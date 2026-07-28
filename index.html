@@ -198,8 +198,9 @@
 
 <!-- SCREEN: STAFF (персонал / расчёт ЗП, Этап 1) -->
 <div class="screen" id="screen-staff">
-  <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-    <button onclick="openAddStaffForm()" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">+ Добавить</button>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div class="city-filter" id="staffCityFilter" style="margin-bottom:0;flex:1"></div>
+    <button onclick="openAddStaffForm()" style="flex-shrink:0;margin-left:8px;padding:6px 14px;border-radius:20px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">+ Добавить</button>
   </div>
   <div id="staffListEl"></div>
 </div>
@@ -320,6 +321,13 @@
   <div style="margin-bottom:12px">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Имя *</div>
     <input id="s_name" type="text" placeholder="Иван Иванов" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+  </div>
+  <div style="margin-bottom:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Город *</div>
+    <select id="s_city" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+      <option value="Дананг">Дананг</option>
+      <option value="Нячанг">Нячанг</option>
+    </select>
   </div>
   <div style="margin-bottom:12px">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Должность</div>
@@ -1559,6 +1567,7 @@ async function deleteChild() {
 
 // ── PAYROLL: STAFF (расчёт ЗП, Этап 1 — только "месячный фикс") ────
 let staffList = [];
+let activeStaffCity = "";
 
 async function loadStaff() {
   try {
@@ -1570,6 +1579,12 @@ async function loadStaff() {
       return d;
     });
     staffList = data.staff;
+    // Как и у детей — admin видит только свой город, director/developer весь список
+    if(staffInfo && staffInfo.role === "admin" && staffInfo.city) {
+      staffList = staffList.filter(s => s.city === staffInfo.city);
+    }
+    const cities = [...new Set(staffList.map(s => s.city).filter(Boolean))];
+    if(!activeStaffCity || !cities.includes(activeStaffCity)) activeStaffCity = cities[0] || "";
   } catch(e) {
     console.error("loadStaff error:", e);
     staffList = [];
@@ -1578,8 +1593,20 @@ async function loadStaff() {
 }
 
 function renderStaffList() {
+  const cities = [...new Set(staffList.map(s => s.city).filter(Boolean))];
+  const cf = document.getElementById("staffCityFilter");
+  cf.innerHTML = "";
+  cities.forEach(city => {
+    const btn = document.createElement("button");
+    btn.className = "filter-btn" + (city === activeStaffCity ? " active" : "");
+    btn.textContent = city;
+    btn.onclick = () => { activeStaffCity = city; renderStaffList(); };
+    cf.appendChild(btn);
+  });
+
+  const filtered = activeStaffCity ? staffList.filter(s => s.city === activeStaffCity) : staffList;
   let html = "";
-  staffList.forEach(s => {
+  filtered.forEach(s => {
     const initials = s.name.split(" ").map(w => w[0]).join("").slice(0,2);
     const rate = s.monthly_rate ? Number(s.monthly_rate).toLocaleString('ru-RU') + " ₫/мес" : "";
     html += `<div class="child-list-item" onclick="openStaffCalendar('${s.id}')">
@@ -1592,7 +1619,7 @@ function renderStaffList() {
       <span class="child-arrow">›</span>
     </div>`;
   });
-  if(!staffList.length) html = '<div class="empty">Нет сотрудников</div>';
+  if(!filtered.length) html = '<div class="empty">Нет сотрудников</div>';
   document.getElementById("staffListEl").innerHTML = html;
 }
 
@@ -1606,6 +1633,8 @@ function openAddStaffForm() {
   document.getElementById("staffSubmitBtn").textContent = "Добавить сотрудника";
   document.getElementById("staffDeleteBtn").style.display = "none";
   clearStaffForm();
+  if(staffInfo && staffInfo.city) document.getElementById("s_city").value = staffInfo.city;
+  else if(activeStaffCity) document.getElementById("s_city").value = activeStaffCity;
   refreshStaffArchiveBadge();
   goTo("staff-form");
 }
@@ -1619,6 +1648,7 @@ function openEditStaffForm(id) {
   document.getElementById("staffDeleteBtn").style.display = "block";
   document.getElementById("staffArchiveBtn").style.display = "none";
   document.getElementById("s_name").value = s.name || "";
+  document.getElementById("s_city").value = s.city || "Дананг";
   document.getElementById("s_position").value = s.position || "";
   document.getElementById("s_phone").value = s.phone || "";
   document.getElementById("s_contract_end").value = s.contract_end || "";
@@ -1689,6 +1719,7 @@ async function submitStaffForm() {
   const rateRaw = document.getElementById("s_monthly_rate").value.trim();
   const payload = {
     name,
+    city: document.getElementById("s_city").value,
     position: document.getElementById("s_position").value.trim(),
     phone: document.getElementById("s_phone").value.trim(),
     contract_end: document.getElementById("s_contract_end").value.trim(),
