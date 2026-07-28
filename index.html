@@ -13,6 +13,12 @@
     --text:#e8eaf0;--text2:#8b90a8;--border:#2d3250;
     --radius:16px;--radius-sm:10px;--nav-h:64px;
   }
+  /* Светлая тема — меняется только фон/поверхности/текст/границы,
+     акцентные цвета (accent/accent2/danger/warning) те же, что в тёмной. */
+  html[data-theme="light"] {
+    --bg:#f4f5f9;--surface:#ffffff;--surface2:#eef0f6;
+    --text:#1a1d27;--text2:#6b7086;--border:#e2e4ee;
+  }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{font-family:'Geologica',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom))}
 
@@ -131,11 +137,12 @@
 <body>
 
 <!-- HEADER -->
-<div class="header" style="justify-content:center">
+<div class="header" style="justify-content:center;position:relative">
   <div class="header-title" style="font-size:20px;display:flex;align-items:center;gap:8px">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/></svg>
     Горизонт
   </div>
+  <button onclick="toggleTheme()" id="themeToggleBtn" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);border:none;background:var(--surface2);color:var(--text2);width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer"></button>
 </div>
 
 <!-- SCREEN: HOME -->
@@ -413,6 +420,28 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// Переключатель темы — меняет только фон/поверхности/текст/границы (см. CSS
+// [data-theme="light"]), акцентные цвета остаются теми же. Сохраняется в
+// localStorage, применяется сразу при загрузке (до остального рендера), чтобы
+// не было мигания неправильной темой.
+const SUN_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+const MOON_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  const btn = document.getElementById("themeToggleBtn");
+  if(btn) btn.innerHTML = theme === "light" ? MOON_ICON : SUN_ICON;
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  const next = current === "light" ? "dark" : "light";
+  localStorage.setItem("gorizont_theme", next);
+  applyTheme(next);
+}
+
+applyTheme(localStorage.getItem("gorizont_theme") || "dark");
+
 const API_URL = "https://y95h81n2pl7zlyb6hfca50s2.95.179.188.141.sslip.io";
 const tg = window.Telegram?.WebApp;
 
