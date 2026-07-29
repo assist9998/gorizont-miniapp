@@ -238,12 +238,18 @@
     <div id="trialList"></div>
   </div>
   <div id="formFields">
-    <div style="margin-bottom:12px">
-      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Имя ребёнка *</div>
-      <input id="f_name" type="text" placeholder="Иван Иванов" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Имя *</div>
+        <input id="f_name" type="text" placeholder="Иван" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Фамилия</div>
+        <input id="f_surname" type="text" placeholder="Иванов" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+      </div>
     </div>
     <div style="margin-bottom:12px">
-      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Дата рождения</div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Дата рождения (возраст считается по ней)</div>
       <input id="f_dob" type="text" placeholder="ДД.ММ.ГГГГ" maxlength="10"
         oninput="formatDob(this)"
         style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
@@ -1433,6 +1439,15 @@ async function restoreChild(id) {
   }
 }
 
+// Имя и фамилия хранятся одной строкой в поле "name" (как и раньше — весь
+// остальной код, от посещаемости до Sheets, сопоставляет детей по полному
+// имени, менять эту модель было бы слишком рискованно). Разделение на два
+// поля — только в форме ввода, для удобства заполнения.
+function splitFullName(fullName) {
+  const parts = (fullName || "").trim().split(/\s+/);
+  return { name: parts[0] || "", surname: parts.slice(1).join(" ") };
+}
+
 function openEditForm(id) {
   const c = children.find(x => x.id == id);
   if(!c) return;
@@ -1443,7 +1458,9 @@ function openEditForm(id) {
   document.getElementById("formSubmitBtn").textContent = "Сохранить изменения";
   document.getElementById("formDeleteBtn").style.display = "block";
   document.getElementById("archiveBtn").style.display = "none";
-  document.getElementById("f_name").value = c.name || "";
+  const nameParts = splitFullName(c.name);
+  document.getElementById("f_name").value = nameParts.name;
+  document.getElementById("f_surname").value = nameParts.surname;
   document.getElementById("f_dob").value = c.dob || "";
   document.getElementById("f_city").value = c.city || "Дананг";
   document.getElementById("f_dept").value = c.dept || "Детский сад";
@@ -1459,7 +1476,7 @@ function openEditForm(id) {
 }
 
 function clearForm() {
-  ["f_name","f_dob","f_parent","f_phone","f_telegram","f_allergy"].forEach(id => {
+  ["f_name","f_surname","f_dob","f_parent","f_phone","f_telegram","f_allergy"].forEach(id => {
     document.getElementById(id).value = "";
   });
   updateGroupOptions();
@@ -1500,7 +1517,9 @@ async function loadTrials() {
 function fillFromTrial(idx) {
   const t = window._trialData[idx];
   if(!t) return;
-  document.getElementById("f_name").value = t.child_name || "";
+  const nameParts = splitFullName(t.child_name);
+  document.getElementById("f_name").value = nameParts.name;
+  document.getElementById("f_surname").value = nameParts.surname;
   document.getElementById("f_city").value = t.city || "Дананг";
   document.getElementById("f_dept").value = t.dept || "Детский сад";
   document.getElementById("f_parent").value = t.parent || "";
@@ -1512,9 +1531,11 @@ function fillFromTrial(idx) {
 }
 
 async function submitForm() {
-  const name = document.getElementById("f_name").value.trim();
+  const firstName = document.getElementById("f_name").value.trim();
+  const surname = document.getElementById("f_surname").value.trim();
+  const name = surname ? `${firstName} ${surname}` : firstName;
   const group = document.getElementById("f_group").value.trim();
-  if(!name) { showToast("Введите имя ребёнка", true); return; }
+  if(!firstName) { showToast("Введите имя ребёнка", true); return; }
   if(!group) { showToast("Введите группу", true); return; }
 
   const payload = {
