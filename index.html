@@ -805,8 +805,8 @@ function renderAttList() {
             <div class="child-info">
               <div class="child-name">${child.name}</div>
               <div class="child-meta">
-                <span class="time-badge">до ${child.until}</span>
-                <span>${child.type}</span>
+                ${child.until ? `<span class="time-badge">до ${child.until}</span>` : ""}
+                ${child.type ? `<span>${child.type}</span>` : ""}
                 ${hasAllergy ? '<div class="allergy-dot"></div>' : ""}
               </div>
             </div>
@@ -927,7 +927,7 @@ function renderChildList() {
       <div class="avatar">${initials}</div>
       <div class="child-detail">
         <div class="child-detail-name">${child.name}</div>
-        <div class="child-detail-meta">${child.group}${age ? " · " + age : ""} · ${child.type}</div>
+        <div class="child-detail-meta">${child.group}${age ? " · " + age : ""}${child.type ? " · " + child.type : ""}</div>
       </div>
       <button onclick="event.stopPropagation();openEditForm('${child.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>
       <span class="child-arrow">›</span>
@@ -1124,10 +1124,14 @@ function renderModal(c) {
   const parts = (c.parent || "").split("|");
   const hasAllergy = c.allergy && c.allergy !== "Нет";
   const age = c.dob ? calcAge(c.dob) : "—";
+  // Тип/до какого времени — только у сада, у школы этих полей нет вообще
+  // (см. typeUntilRow в форме) — не показываем "до" без значения.
+  const typeUntil = c.type ? (c.type + (c.until ? " до " + c.until : "")) : "";
+  const subtitleParts = [age, c.group, typeUntil].filter(Boolean);
 
   document.getElementById("modalContent").innerHTML =
     // Subtitle
-    '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + age + " · " + c.group + " · " + c.type + " до " + c.until + '</div>' +
+    '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + subtitleParts.join(" · ") + '</div>' +
     // Rows
     '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
       '<span style="color:var(--text2)">Родитель</span>' +
