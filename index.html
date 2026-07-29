@@ -275,7 +275,7 @@
       <select id="f_group" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
       </select>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div id="typeUntilRow" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тип *</div>
         <select id="f_type" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
@@ -1228,6 +1228,11 @@ function updateGroupOptions(selectedGroup) {
   sel.innerHTML = groups.map(g =>
     `<option value="${g}"${g === selectedGroup ? " selected" : ""}>${g}</option>`
   ).join("");
+
+  // "Тип" (Полный/Полдня/Посуточно) и "До какого времени" — понятия только
+  // сада, в школе фиксированное расписание, этих полей там не бывает.
+  const row = document.getElementById("typeUntilRow");
+  if(row) row.style.display = dept === "Школа" ? "none" : "grid";
 }
 
 function formatDob(input) {
@@ -1522,6 +1527,7 @@ function fillFromTrial(idx) {
   document.getElementById("f_surname").value = nameParts.surname;
   document.getElementById("f_city").value = t.city || "Дананг";
   document.getElementById("f_dept").value = t.dept || "Детский сад";
+  updateGroupOptions();
   document.getElementById("f_parent").value = t.parent || "";
   document.getElementById("f_phone").value = t.phone || "";
   document.getElementById("f_telegram").value = t.telegram || "";
@@ -1538,13 +1544,15 @@ async function submitForm() {
   if(!firstName) { showToast("Введите имя ребёнка", true); return; }
   if(!group) { showToast("Введите группу", true); return; }
 
+  const dept = document.getElementById("f_dept").value;
+  const isSchool = dept === "Школа";
   const payload = {
     name, group,
     dob: document.getElementById("f_dob").value.trim(),
     city: document.getElementById("f_city").value,
-    dept: document.getElementById("f_dept").value,
-    type: document.getElementById("f_type").value,
-    until: document.getElementById("f_until").value,
+    dept,
+    type: isSchool ? "" : document.getElementById("f_type").value,
+    until: isSchool ? "" : document.getElementById("f_until").value,
     parent: document.getElementById("f_parent").value.trim(),
     phone: document.getElementById("f_phone").value.trim(),
     telegram: document.getElementById("f_telegram").value.trim(),
