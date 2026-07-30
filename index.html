@@ -670,9 +670,12 @@ function renderHome() {
 
   const groups = {};
   filtered.forEach(c => {
-    if(!groups[c.group]) groups[c.group] = {present:0,total:0};
-    groups[c.group].total++;
-    if(attendance[c.id] === true) groups[c.group].present++;
+    // c.group может быть null (группа/класс не заполнены) — без фолбэка
+    // JS отрендерил бы буквально текст "null" вместо названия группы.
+    const groupKey = c.group || "Без группы";
+    if(!groups[groupKey]) groups[groupKey] = {present:0,total:0};
+    groups[groupKey].total++;
+    if(attendance[c.id] === true) groups[groupKey].present++;
   });
 
   let barsHtml = "";
@@ -701,7 +704,7 @@ function setHomeCity(city) {
 function renderAttFilters() {
   const cities = [...new Set(children.map(c => c.city))];
   const depts = [...new Set(children.filter(c => c.city === activeCity).map(c => c.dept))];
-  const groups = ["Все группы", ...new Set(children.filter(c => c.city === activeCity && c.dept === activeDept).map(c => c.group))];
+  const groups = ["Все группы", ...new Set(children.filter(c => c.city === activeCity && c.dept === activeDept).map(c => c.group || "Без группы"))];
   const bar = document.getElementById("attFilters");
   bar.innerHTML = "";
 
@@ -751,7 +754,7 @@ function getFiltered() {
   return children.filter(c =>
     c.city === activeCity &&
     c.dept === activeDept &&
-    (activeGroup === "Все группы" || c.group === activeGroup)
+    (activeGroup === "Все группы" || (c.group || "Без группы") === activeGroup)
   );
 }
 
@@ -775,7 +778,11 @@ function renderAttList() {
   const map = currentAttMap();
   const filtered = getFiltered();
   const byGroup = {};
-  filtered.forEach(c => { if(!byGroup[c.group]) byGroup[c.group] = []; byGroup[c.group].push(c); });
+  filtered.forEach(c => {
+    const groupKey = c.group || "Без группы";
+    if(!byGroup[groupKey]) byGroup[groupKey] = [];
+    byGroup[groupKey].push(c);
+  });
 
   const present = filtered.filter(c => map[c.id] === true).length;
   const absent = filtered.length - present;
@@ -927,7 +934,7 @@ function renderChildList() {
       <div class="avatar">${initials}</div>
       <div class="child-detail">
         <div class="child-detail-name">${child.name}</div>
-        <div class="child-detail-meta">${child.group}${age ? " · " + age : ""}${child.type ? " · " + child.type : ""}</div>
+        <div class="child-detail-meta">${child.group || "Без группы"}${age ? " · " + age : ""}${child.type ? " · " + child.type : ""}</div>
       </div>
       <button onclick="event.stopPropagation();openEditForm('${child.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>
       <span class="child-arrow">›</span>
