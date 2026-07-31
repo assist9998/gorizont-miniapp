@@ -136,6 +136,13 @@
 </head>
 <body>
 
+<!-- Полоска "доступно обновление" — как в Balu Kids: не применяется сама
+     по себе, только по тапу пользователя, поэтому ничего не выдёргивает
+     из-под рук посреди заполнения формы. -->
+<button onclick="window.location.reload()" id="updateBanner" style="display:none;width:100%;border:none;cursor:pointer;background:#4f8ef7;color:#fff;font-family:'Geologica',sans-serif;font-weight:700;font-size:12.5px;padding:8px 16px;padding-top:calc(8px + env(safe-area-inset-top));align-items:center;justify-content:center;gap:6px">
+  🔄 Доступно обновление — нажмите, чтобы применить
+</button>
+
 <!-- HEADER -->
 <div class="header" style="justify-content:center">
   <div class="header-title" onclick="toggleTheme()" style="font-size:20px;display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -163,16 +170,17 @@
 
 <!-- SCREEN: ATTENDANCE -->
 <div class="screen" id="screen-attendance">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-    <div class="filters" id="attFilters" style="flex:1;margin-bottom:0"></div>
-    <button onclick="openAttDatePicker()" id="attDateBtn" style="flex-shrink:0;display:flex;align-items:center;gap:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);border-radius:12px;padding:6px 12px;font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      <span id="attDateLabel">Сегодня</span>
-    </button>
-  </div>
+  <div class="filters" id="attFilters" style="margin-bottom:10px"></div>
   <div class="att-stats">
+    <button onclick="openAttDatePicker()" id="attDateBtn" class="att-stat" style="border:1px solid var(--border);cursor:pointer;font-family:inherit">
+      <div style="display:flex;align-items:center;justify-content:center;gap:4px;color:var(--text)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span class="att-stat-num" style="font-size:13px" id="attDateLabel">Сегодня</span>
+      </div>
+      <div class="att-stat-label">Дата</div>
+    </button>
     <div class="att-stat"><div class="att-stat-num green" id="a-present">0</div><div class="att-stat-label">Пришли</div></div>
-    <div class="att-stat"><div class="att-stat-num red" id="a-absent">0</div><div class="att-stat-label">Нет</div></div>
+    <div class="att-stat"><div class="att-stat-num red" id="a-absent">0</div><div class="att-stat-label">Отсутствуют</div></div>
   </div>
   <div id="attList"></div>
   <div style="height:70px"></div>
@@ -442,6 +450,59 @@ function toggleTheme() {
 }
 
 applyTheme(localStorage.getItem("gorizont_theme") || "dark");
+
+// ── Проверка обновлений — та же схема, что в Balu Kids: при возврате в
+// приложение сверяем реально отдаваемый сервером HTML с тем, что было
+// загружено при старте. Не применяется само по себе — только показывает
+// полоску, обновление накатывает пользователь сам тапом, когда ему удобно,
+// чтобы не выдернуть его посреди заполнения формы.
+//
+// Два нюанса, которые не видны в vanilla-подходе "просто fetch с no-store":
+// 1. GitHub Pages стоит за CDN — на этой же сессии уже ловили момент, когда
+//    сразу после пуша curl отдавал старую закэшированную версию. no-store —
+//    это инструкция БРАУЗЕРУ не трогать свой кэш, а не гарантия что CDN
+//    отдаст свежий ответ. Добавлен cache-busting параметр (?_cb=timestamp) —
+//    для CDN это каждый раз "другой" URL, кэш не имеет шанса подставиться.
+// 2. Если самый первый fetch-снимок при загрузке транзиентно упадёт (сетевой
+//    обрыв на секунду) — без ретрая _htmlSnapshot остался бы null навсегда,
+//    и обновление для этой сессии не обнаруживалось бы вообще (тот же класс
+//    бага, что чинили во всех остальных read-функциях — см. withRetry ниже).
+function _bustCacheUrl() {
+  return location.pathname + location.search + (location.search ? "&" : "?") + "_cb=" + Date.now();
+}
+
+let _htmlSnapshot = null;
+let _lastUpdateCheck = 0;
+
+async function checkForUpdate() {
+  try {
+    const html = await withRetry(async () => {
+      const resp = await fetch(_bustCacheUrl(), { cache: "no-store" });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      return resp.text();
+    });
+    if (_htmlSnapshot && html !== _htmlSnapshot) {
+      document.getElementById("updateBanner").style.display = "flex";
+    }
+  } catch (e) { console.error("checkForUpdate:", e); }
+}
+
+function guardedUpdateCheck() {
+  const now = Date.now();
+  if (now - _lastUpdateCheck < 3000) return; // дедуп почти одновременных срабатываний
+  _lastUpdateCheck = now;
+  checkForUpdate();
+}
+
+withRetry(async () => {
+  const resp = await fetch(_bustCacheUrl(), { cache: "no-store" });
+  if (!resp.ok) throw new Error("HTTP " + resp.status);
+  return resp.text();
+}).then(t => { _htmlSnapshot = t; }).catch(() => {});
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") guardedUpdateCheck(); });
+window.addEventListener("pageshow", (e) => { if (e.persisted) guardedUpdateCheck(); });
+window.addEventListener("focus", guardedUpdateCheck);
+setInterval(() => { if (document.visibilityState === "visible") guardedUpdateCheck(); }, 5 * 60 * 1000);
 
 const API_URL = "https://y95h81n2pl7zlyb6hfca50s2.95.179.188.141.sslip.io";
 const tg = window.Telegram?.WebApp;
@@ -1227,7 +1288,7 @@ function showToast(msg, warn=false) {
 // не включаем (было "Ясельная", "Младший/Старший нулевой" — убраны).
 const GROUPS = {
   "Дананг": {
-    "Детский сад": ["Младшая", "Старшая", "Подготовительная"],
+    "Детский сад": ["Младшая", "Старшая", "Подготовительная (младшая)", "Подготовительная (старшая)"],
     "Школа": ["1 класс","2 класс","3 класс","4 класс","5 класс","6 класс","7 класс","8 класс"]
   },
   "Нячанг": {
