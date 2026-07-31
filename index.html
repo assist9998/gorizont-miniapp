@@ -761,7 +761,13 @@ function getFiltered() {
 function renderAttList() {
   const isToday = attDateStr === dateToDmy(now);
   document.getElementById("attDateLabel").textContent = isToday ? "Сегодня" : attDateStr;
-  document.getElementById("attActions").style.display = isWeekend(attDateStr) ? "none" : "flex";
+  // Эта функция может сработать с задержкой (например, после медленной
+  // начальной загрузки данных) уже когда пользователь ушёл на другой экран —
+  // без проверки currentScreen нижняя панель "утекала" бы на экран "Дети"
+  // и другие, хотя должна быть только на "Посещаемости".
+  if(currentScreen === "attendance") {
+    document.getElementById("attActions").style.display = isWeekend(attDateStr) ? "none" : "flex";
+  }
 
   if(isWeekend(attDateStr)) {
     document.getElementById("a-present").textContent = 0;
