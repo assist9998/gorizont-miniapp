@@ -153,6 +153,7 @@
 
 <!-- SCREEN: HOME -->
 <div class="screen active" id="screen-home">
+  <div id="homeGreeting"></div>
   <div id="homeSwitcher"></div>
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-num green" id="h-present">0</div><div class="stat-label">Пришли</div></div>
@@ -704,8 +705,42 @@ async function loadAttendanceForDate(dateStr) {
 // ── HOME ──────────────────────────────────────────────────────────
 let homeCity = ""; // для директора/девелопера — выбранный город на главной
 
+function renderHomeGreeting(total, present) {
+  const el = document.getElementById("homeGreeting");
+  if(!el) return;
+  const nowLive = new Date(); // не глобальный now — тот фиксируется при загрузке страницы
+  const hour = nowLive.getHours();
+  const greet = hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
+  const name = (staffInfo && staffInfo.name) ? staffInfo.name.split(" ")[0] : "Команда";
+  const dateLabel = nowLive.getDate() + " " + months[nowLive.getMonth()];
+
+  el.innerHTML =
+    '<div style="position:relative;overflow:hidden;border-radius:20px;padding:16px;margin:4px 0 16px;' +
+    'background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 16px 32px -24px rgba(0,0,0,.5)">' +
+      '<div style="display:flex;align-items:center;gap:13px">' +
+        '<div style="width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.22);' +
+        'display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">🌅</div>' +
+        '<div style="flex:1;min-width:0;line-height:1.25">' +
+          '<div style="font-size:13px;color:rgba(255,255,255,.85);font-weight:600">' + greet + ',</div>' +
+          '<div style="font-size:19px;font-weight:800;color:#fff">' + name + '</div>' +
+        '</div>' +
+        '<div style="text-align:right;line-height:1.2;flex-shrink:0">' +
+          '<div style="font-size:11px;color:rgba(255,255,255,.75);font-weight:700">Сегодня</div>' +
+          '<div style="font-size:14px;color:#fff;font-weight:800">' + dateLabel + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:inline-flex;align-items:center;gap:8px;margin-top:13px;' +
+      'background:rgba(255,255,255,.22);border-radius:999px;padding:7px 14px 7px 11px">' +
+        '<span style="width:8px;height:8px;border-radius:50%;background:#fff;flex-shrink:0"></span>' +
+        '<span style="font-size:13px;color:#fff;font-weight:600">' +
+          '<b>' + present + '/' + total + '</b> детей пришли сегодня' +
+        '</span>' +
+      '</div>' +
+    '</div>';
+}
+
 function renderHome() {
-  const isDirector = !staffInfo || staffInfo.role === "director" || staffInfo.role === "developer";
+  const isDirector = !staffInfo || isDirectorRole(staffInfo.role);
 
   // Для admin — всегда его город
   // Для director/developer — homeCity или первый доступный
@@ -730,6 +765,8 @@ function renderHome() {
   document.getElementById("h-absent").textContent = absent;
   document.getElementById("h-unmarked").textContent = unmarked;
   document.getElementById("h-total").textContent = total;
+
+  renderHomeGreeting(total, present);
 
   // City switcher for director/developer
   let switcherHtml = "";
@@ -1465,6 +1502,11 @@ let staffInfo = null;
 // Воспитатель — только отметка посещаемости.
 function isAdminRole(role) {
   return ["Администратор", "Директор", "admin", "director", "developer"].includes(role);
+}
+// Директор/developer видят все города сразу (переключатель на Home), в отличие
+// от Администратора — тот привязан к своему городу (staffInfo.city).
+function isDirectorRole(role) {
+  return ["Директор", "director", "developer"].includes(role);
 }
 
 function applyRolePermissions() {
