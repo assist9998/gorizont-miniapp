@@ -338,9 +338,15 @@
     <div style="font-size:16px;font-weight:600;flex:1" id="staffFormTitle">Новый сотрудник</div>
     <button onclick="openStaffArchive()" id="staffArchiveBtn" style="display:none;border:none;background:var(--surface2);color:var(--text2);font-family:inherit;font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;cursor:pointer;white-space:nowrap">Архив (0)</button>
   </div>
-  <div style="margin-bottom:12px">
-    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Имя *</div>
-    <input id="s_name" type="text" placeholder="Иван Иванов" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Имя *</div>
+      <input id="s_name" type="text" placeholder="Анастасия" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Фамилия</div>
+      <input id="s_surname" type="text" placeholder="Иванова" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
   </div>
   <div style="margin-bottom:12px">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Город *</div>
@@ -352,6 +358,11 @@
   <div style="margin-bottom:12px">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Должность</div>
     <input id="s_position" type="text" placeholder="Няня, воспитатель..." style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+  </div>
+  <div style="margin-bottom:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Telegram ID</div>
+    <input id="s_telegram" type="text" placeholder="Например 824350238" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    <div style="font-size:11px;color:var(--text2);margin-top:5px">Если указан — сотрудник сразу получает доступ к боту и мини-аппу</div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div>
@@ -539,7 +550,7 @@ async function withRetry(fn, attempts = 3, delayMs = 500) {
 
 const now = new Date();
 const days = ["вс","пн","вт","ср","чт","пт","сб"];
-const months = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
+const months = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
 const STAR_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
 // Тап по галочке — быстрое переключение пришёл/не пришёл (см. renderAttList),
 // тап по имени/аватарке ребёнка — открывает календарь посещаемости (openAttCalendar).
@@ -559,6 +570,11 @@ function dmyToDate(dmy) {
 }
 function dateToDmy(d) {
   return String(d.getDate()).padStart(2,'0') + "." + String(d.getMonth()+1).padStart(2,'0') + "." + d.getFullYear();
+}
+// короткая подпись без года, чтобы квадратик с датой не растягивался: "1 авг"
+function formatShortDate(dmy) {
+  const d = dmyToDate(dmy);
+  return d.getDate() + " " + months[d.getMonth()];
 }
 
 let attDateStr = dateToDmy(now); // какую дату сейчас просматриваем/редактируем в посещаемости
@@ -821,7 +837,7 @@ function getFiltered() {
 
 function renderAttList() {
   const isToday = attDateStr === dateToDmy(now);
-  document.getElementById("attDateLabel").textContent = isToday ? "Сегодня" : attDateStr;
+  document.getElementById("attDateLabel").textContent = isToday ? "Сегодня" : formatShortDate(attDateStr);
   // Эта функция может сработать с задержкой (например, после медленной
   // начальной загрузки данных) уже когда пользователь ушёл на другой экран —
   // без проверки currentScreen нижняя панель "утекала" бы на экран "Дети"
@@ -1778,17 +1794,20 @@ function openEditStaffForm(id) {
   document.getElementById("staffSubmitBtn").textContent = "Сохранить изменения";
   document.getElementById("staffDeleteBtn").style.display = "block";
   document.getElementById("staffArchiveBtn").style.display = "none";
-  document.getElementById("s_name").value = s.name || "";
+  const nameParts = splitFullName(s.name);
+  document.getElementById("s_name").value = nameParts.name;
+  document.getElementById("s_surname").value = nameParts.surname;
   document.getElementById("s_city").value = s.city || "Дананг";
   document.getElementById("s_position").value = s.position || "";
   document.getElementById("s_phone").value = s.phone || "";
   document.getElementById("s_contract_end").value = s.contract_end || "";
   document.getElementById("s_monthly_rate").value = s.monthly_rate || "";
+  document.getElementById("s_telegram").value = s.telegram_id || "";
   goTo("staff-form");
 }
 
 function clearStaffForm() {
-  ["s_name","s_position","s_phone","s_contract_end","s_monthly_rate"].forEach(id => {
+  ["s_name","s_surname","s_position","s_phone","s_contract_end","s_monthly_rate","s_telegram"].forEach(id => {
     document.getElementById(id).value = "";
   });
 }
@@ -1844,8 +1863,10 @@ async function restoreStaffMember(id) {
 // ── STAFF SUBMIT / ARCHIVE (ждём подтверждения сервера — та же защита
 // от потери данных при сворачивании приложения, что и у submitForm/deleteChild) ──
 async function submitStaffForm() {
-  const name = document.getElementById("s_name").value.trim();
-  if(!name) { showToast("Введите имя сотрудника", true); return; }
+  const firstName = document.getElementById("s_name").value.trim();
+  const surname = document.getElementById("s_surname").value.trim();
+  const name = surname ? `${firstName} ${surname}` : firstName;
+  if(!firstName) { showToast("Введите имя сотрудника", true); return; }
 
   const rateRaw = document.getElementById("s_monthly_rate").value.trim();
   const payload = {
@@ -1855,6 +1876,7 @@ async function submitStaffForm() {
     phone: document.getElementById("s_phone").value.trim(),
     contract_end: document.getElementById("s_contract_end").value.trim(),
     monthly_rate: rateRaw ? Number(rateRaw) : null,
+    telegram_id: document.getElementById("s_telegram").value.trim(),
   };
 
   const url = staffFormMode === "add" ? API_URL + "/payroll/staff" : API_URL + "/payroll/staff/" + editStaffId;
