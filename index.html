@@ -357,7 +357,12 @@
   </div>
   <div style="margin-bottom:12px">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Должность</div>
-    <input id="s_position" type="text" placeholder="Няня, воспитатель..." style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    <select id="s_position" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+      <option value="Воспитатель">Воспитатель</option>
+      <option value="Администратор">Администратор</option>
+      <option value="Директор">Директор</option>
+    </select>
+    <div style="font-size:11px;color:var(--text2);margin-top:5px">От должности зависит доступ: Воспитатель видит только отметку посещаемости</div>
   </div>
   <div style="margin-bottom:12px">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Telegram ID</div>
@@ -623,8 +628,9 @@ async function loadChildren() {
     children = data.children.filter(c => c.status !== "Выбыл" && c.name);
     children.forEach(c => { if(attendance[c.id] === undefined) attendance[c.id] = false; });
 
-    // Если admin — показываем только его город
-    if(staffInfo && staffInfo.role === "admin" && staffInfo.city) {
+    // Если у сотрудника в карточке указан конкретный город — видит только его
+    // (независимо от должности). Без города (Директор) — видит все города.
+    if(staffInfo && staffInfo.city) {
       children = children.filter(c => c.city === staffInfo.city);
     }
 
@@ -1019,7 +1025,7 @@ function renderChildList() {
         <div class="child-detail-name">${child.name}</div>
         <div class="child-detail-meta">${child.group || "Без группы"}${age ? " · " + age : ""}${child.type ? " · " + child.type : ""}</div>
       </div>
-      <button onclick="event.stopPropagation();openEditForm('${child.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>
+      ${(!staffInfo || isAdminRole(staffInfo.role)) ? `<button onclick="event.stopPropagation();openEditForm('${child.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>` : ""}
       <span class="child-arrow">›</span>
     </div>`;
   });
@@ -1454,6 +1460,19 @@ function handleNotifTap(i) {
 
 let staffInfo = null;
 
+// Полный доступ (вкладка Персонал, редактирование детей) — Администратор и Директор
+// (плюс старые роли admin/director/developer, заведённые напрямую в БД до этого поля).
+// Воспитатель — только отметка посещаемости.
+function isAdminRole(role) {
+  return ["Администратор", "Директор", "admin", "director", "developer"].includes(role);
+}
+
+function applyRolePermissions() {
+  const admin = !staffInfo || isAdminRole(staffInfo.role);
+  const navStaff = document.getElementById("nav-staff");
+  if(navStaff) navStaff.style.display = admin ? "" : "none";
+}
+
 async function initStaff(){
   try {
     const tgId = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : "";
@@ -1466,6 +1485,7 @@ async function initStaff(){
     if(data.ok) {
       staffInfo = data.staff;
       console.log("Staff:", staffInfo);
+      applyRolePermissions();
     }
   } catch(e) {
     console.error("Staff error:", e);
@@ -1726,8 +1746,8 @@ async function loadStaff() {
       return d;
     });
     staffList = data.staff;
-    // Как и у детей — admin видит только свой город, director/developer весь список
-    if(staffInfo && staffInfo.role === "admin" && staffInfo.city) {
+    // Как и у детей — сотрудник с указанным городом видит только его, без города (Директор) — всех
+    if(staffInfo && staffInfo.city) {
       staffList = staffList.filter(s => s.city === staffInfo.city);
     }
     const cities = [...new Set(staffList.map(s => s.city).filter(Boolean))];
