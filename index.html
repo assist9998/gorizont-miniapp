@@ -12,12 +12,18 @@
     --accent:#4f8ef7;--accent2:#38d9a9;--danger:#ff6b6b;--warning:#ffd43b;
     --text:#e8eaf0;--text2:#8b90a8;--border:#2d3250;
     --radius:16px;--radius-sm:10px;--nav-h:64px;
+    /* Отдельные (более тёмные) цвета для больших градиентных заливок —
+       на тёмном фоне яркий accent/accent2 выглядит слишком кислотно. */
+    --grad1:#3f6fd1;--grad2:#22a37e;
   }
   /* Светлая тема — меняется только фон/поверхности/текст/границы,
-     акцентные цвета (accent/accent2/danger/warning) те же, что в тёмной. */
+     акцентные цвета (accent/accent2/danger/warning) те же, что в тёмной.
+     Градиент — исключение: на светлом фоне обычные accent/accent2 смотрятся
+     хорошо, в отличие от тёмной темы, поэтому здесь ярче, чем в :root. */
   html[data-theme="light"] {
     --bg:#f4f5f9;--surface:#ffffff;--surface2:#eef0f6;
     --text:#1a1d27;--text2:#6b7086;--border:#e2e4ee;
+    --grad1:#4f8ef7;--grad2:#38d9a9;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{font-family:'Geologica',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom))}
@@ -100,7 +106,7 @@
 
   /* BOTTOM BAR */
   .bottom-action{position:fixed;bottom:var(--nav-h);left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:10px 16px;display:flex;gap:10px;z-index:150}
-  .btn-primary{flex:1;padding:13px;border-radius:var(--radius-sm);border:none;background:linear-gradient(135deg,var(--accent) 55%,var(--accent2));color:#fff;font-family:'Geologica',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s}
+  .btn-primary{flex:1;padding:13px;border-radius:var(--radius-sm);border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff;font-family:'Geologica',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s}
   .btn-primary:active{opacity:.8}
   .btn-secondary{padding:13px 16px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:'Geologica',sans-serif;font-size:13px;cursor:pointer;white-space:nowrap}
 
@@ -712,7 +718,7 @@ function renderHomeGreeting(total, present) {
     // Тот же градиент, что теперь и у .btn-primary (var(--accent) → var(--accent2)) —
     // сочетается с синими кнопками по всему приложению.
     '<div style="position:relative;overflow:hidden;border-radius:20px;padding:16px;margin:4px 0 16px;' +
-    'background:linear-gradient(135deg,var(--accent) 55%,var(--accent2));box-shadow:0 16px 32px -24px rgba(0,0,0,.5)">' +
+    'background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));box-shadow:0 16px 32px -24px rgba(0,0,0,.5)">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">' +
         '<div style="min-width:0;line-height:1.25">' +
           '<div style="font-size:13px;color:rgba(255,255,255,.85);font-weight:600">' + greet + ',</div>' +
