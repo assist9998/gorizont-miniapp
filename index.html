@@ -155,12 +155,6 @@
 <div class="screen active" id="screen-home">
   <div id="homeGreeting"></div>
   <div id="homeSwitcher"></div>
-  <div class="stats-grid">
-    <div class="stat-card"><div class="stat-num green" id="h-present">0</div><div class="stat-label">Пришли</div></div>
-    <div class="stat-card"><div class="stat-num red" id="h-absent">0</div><div class="stat-label">Отсутствуют</div></div>
-    <div class="stat-card"><div class="stat-num yellow" id="h-unmarked">0</div><div class="stat-label">Не отмечены</div></div>
-    <div class="stat-card"><div class="stat-num blue" id="h-total">0</div><div class="stat-label">Всего детей</div></div>
-  </div>
   <div class="section-title">Заполненность групп</div>
   <div id="groupBars"></div>
   <div class="home-actions">
@@ -715,12 +709,12 @@ function renderHomeGreeting(total, present) {
   const dateLabel = nowLive.getDate() + " " + months[nowLive.getMonth()];
 
   el.innerHTML =
+    // Тот же градиент, что у .btn-primary (var(--accent) → #6c63ff) — чтобы плашка
+    // сочеталась с синими кнопками по всему приложению, а не была сама по себе.
     '<div style="position:relative;overflow:hidden;border-radius:20px;padding:16px;margin:4px 0 16px;' +
-    'background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 16px 32px -24px rgba(0,0,0,.5)">' +
-      '<div style="display:flex;align-items:center;gap:13px">' +
-        '<div style="width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.22);' +
-        'display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">🌅</div>' +
-        '<div style="flex:1;min-width:0;line-height:1.25">' +
+    'background:linear-gradient(135deg,var(--accent),#6c63ff);box-shadow:0 16px 32px -24px rgba(0,0,0,.5)">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">' +
+        '<div style="min-width:0;line-height:1.25">' +
           '<div style="font-size:13px;color:rgba(255,255,255,.85);font-weight:600">' + greet + ',</div>' +
           '<div style="font-size:19px;font-weight:800;color:#fff">' + name + '</div>' +
         '</div>' +
@@ -758,13 +752,6 @@ function renderHome() {
 
   const total = filtered.length;
   const present = filtered.filter(c => attendance[c.id] === true).length;
-  const absent = filtered.filter(c => attendance[c.id] === false).length;
-  const unmarked = filtered.filter(c => attendance[c.id] === null).length;
-
-  document.getElementById("h-present").textContent = present;
-  document.getElementById("h-absent").textContent = absent;
-  document.getElementById("h-unmarked").textContent = unmarked;
-  document.getElementById("h-total").textContent = total;
 
   renderHomeGreeting(total, present);
 
