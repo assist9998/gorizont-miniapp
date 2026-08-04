@@ -160,7 +160,6 @@
 <!-- SCREEN: HOME -->
 <div class="screen active" id="screen-home">
   <div id="homeGreeting"></div>
-  <div id="selfAttendance"></div>
   <div id="homeSwitcher"></div>
   <div class="section-title">Заполненность групп</div>
   <div id="groupBars"></div>
@@ -706,8 +705,10 @@ async function loadAttendanceForDate(dateStr) {
 
 // ── HOME ──────────────────────────────────────────────────────────
 let homeCity = ""; // для директора/девелопера — выбранный город на главной
+let _lastHomeCounts = {total: 0, present: 0}; // для перерисовки плашки после initSelfAttendance/markSelfAttendance
 
 function renderHomeGreeting(total, present) {
+  _lastHomeCounts = {total, present};
   const el = document.getElementById("homeGreeting");
   if(!el) return;
   const nowLive = new Date(); // не глобальный now — тот фиксируется при загрузке страницы
@@ -715,6 +716,22 @@ function renderHomeGreeting(total, present) {
   const greet = hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер";
   const name = (staffInfo && staffInfo.name) ? staffInfo.name.split(" ")[0] : "Команда";
   const dateLabel = nowLive.getDate() + " " + months[nowLive.getMonth()];
+
+  // Своя посещаемость — только если есть связка с payroll_staff (см. initStaff)
+  // и статус на сегодня уже известен (initSelfAttendance успел отработать).
+  let selfRow = "";
+  if(staffInfo && staffInfo.payroll_staff_id && selfAttendanceMarked !== null) {
+    selfRow = selfAttendanceMarked
+      ? '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;' +
+        'background:rgba(255,255,255,.22);border-radius:999px;padding:7px 14px 7px 11px;color:#fff">' +
+          CHECKIN_ICON + '<span style="font-size:13px;font-weight:600">Вы отмечены на сегодня</span>' +
+        '</div>'
+      : '<button onclick="markSelfAttendance()" style="display:flex;align-items:center;justify-content:center;gap:8px;' +
+        'width:100%;margin-top:10px;border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
+        'padding:9px 14px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
+          CHECKIN_ICON + 'Отметить, что я сегодня на работе' +
+        '</button>';
+  }
 
   el.innerHTML =
     // Тот же градиент, что теперь и у .btn-primary (var(--accent) → var(--accent2)) —
@@ -738,6 +755,7 @@ function renderHomeGreeting(total, present) {
           '<b>' + present + '/' + total + '</b> детей пришли сегодня' +
         '</span>' +
       '</div>' +
+      selfRow +
     '</div>';
 }
 
@@ -1531,13 +1549,14 @@ async function initStaff(){
 }
 
 // ── SELF ATTENDANCE (сотрудник отмечает сам себя, marked_by берёт
-// сервер из initData — см. handle_post_payroll_attendance) ──────────
-async function initSelfAttendance() {
-  const el = document.getElementById("selfAttendance");
-  if(!el || !staffInfo || !staffInfo.payroll_staff_id) { if(el) el.innerHTML = ""; return; }
+// сервер из initData — см. handle_post_payroll_attendance). Встроено прямо
+// в синюю плашку приветствия (renderHomeGreeting), не отдельный блок —
+// selfAttendanceMarked хранит статус между перерисовками карточки.
+let selfAttendanceMarked = null; // null=ещё не знаем, true/false=известно
 
+async function initSelfAttendance() {
+  if(!staffInfo || !staffInfo.payroll_staff_id) return;
   const todayDmy = dateToDmy(now);
-  let marked = false;
   try {
     const data = await withRetry(async () => {
       const resp = await fetch(
@@ -1548,27 +1567,12 @@ async function initSelfAttendance() {
       if(!resp.ok) throw new Error("HTTP " + resp.status);
       return resp.json();
     });
-    marked = data.ok && data.days && data.days[todayDmy] === "present";
+    selfAttendanceMarked = data.ok && data.days && data.days[todayDmy] === "present";
   } catch(e) {
     console.error("Self attendance check:", e);
+    selfAttendanceMarked = false;
   }
-  renderSelfAttendance(marked);
-}
-
-function renderSelfAttendance(marked) {
-  const el = document.getElementById("selfAttendance");
-  if(!el) return;
-  if(marked) {
-    el.innerHTML =
-      '<div style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1.5px solid var(--border);' +
-      'border-radius:14px;padding:12px 14px;margin-bottom:14px;color:var(--accent2);font-size:13px;font-weight:600">' +
-      '✅ Вы отмечены на сегодня</div>';
-  } else {
-    el.innerHTML =
-      '<button onclick="markSelfAttendance()" style="width:100%;border:1.5px solid var(--accent2);background:transparent;' +
-      'color:var(--accent2);border-radius:14px;padding:12px 14px;margin-bottom:14px;font-family:inherit;font-size:13px;' +
-      'font-weight:600;cursor:pointer">✅ Отметить, что я сегодня на работе</button>';
-  }
+  renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
 }
 
 async function markSelfAttendance() {
@@ -1585,7 +1589,8 @@ async function markSelfAttendance() {
     });
     const result = await resp.json();
     if(result.ok) {
-      renderSelfAttendance(true);
+      selfAttendanceMarked = true;
+      renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
       showToast("Отмечено!");
     } else {
       showToast("Не удалось отметить, попробуйте ещё раз", true);
