@@ -160,6 +160,7 @@
 <!-- SCREEN: HOME -->
 <div class="screen active" id="screen-home">
   <div id="homeGreeting"></div>
+  <div id="selfAttendance"></div>
   <div id="homeSwitcher"></div>
   <div class="section-title">Заполненность групп</div>
   <div id="groupBars"></div>
@@ -1522,9 +1523,75 @@ async function initStaff(){
       staffInfo = data.staff;
       console.log("Staff:", staffInfo);
       applyRolePermissions();
+      initSelfAttendance();
     }
   } catch(e) {
     console.error("Staff error:", e);
+  }
+}
+
+// ── SELF ATTENDANCE (сотрудник отмечает сам себя, marked_by берёт
+// сервер из initData — см. handle_post_payroll_attendance) ──────────
+async function initSelfAttendance() {
+  const el = document.getElementById("selfAttendance");
+  if(!el || !staffInfo || !staffInfo.payroll_staff_id) { if(el) el.innerHTML = ""; return; }
+
+  const todayDmy = dateToDmy(now);
+  let marked = false;
+  try {
+    const data = await withRetry(async () => {
+      const resp = await fetch(
+        API_URL + "/payroll/attendance?staff_id=" + staffInfo.payroll_staff_id +
+        "&year=" + now.getFullYear() + "&month=" + (now.getMonth() + 1),
+        { headers: authHeaders() }
+      );
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+      return resp.json();
+    });
+    marked = data.ok && data.days && data.days[todayDmy] === "present";
+  } catch(e) {
+    console.error("Self attendance check:", e);
+  }
+  renderSelfAttendance(marked);
+}
+
+function renderSelfAttendance(marked) {
+  const el = document.getElementById("selfAttendance");
+  if(!el) return;
+  if(marked) {
+    el.innerHTML =
+      '<div style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1.5px solid var(--border);' +
+      'border-radius:14px;padding:12px 14px;margin-bottom:14px;color:var(--accent2);font-size:13px;font-weight:600">' +
+      '✅ Вы отмечены на сегодня</div>';
+  } else {
+    el.innerHTML =
+      '<button onclick="markSelfAttendance()" style="width:100%;border:1.5px solid var(--accent2);background:transparent;' +
+      'color:var(--accent2);border-radius:14px;padding:12px 14px;margin-bottom:14px;font-family:inherit;font-size:13px;' +
+      'font-weight:600;cursor:pointer">✅ Отметить, что я сегодня на работе</button>';
+  }
+}
+
+async function markSelfAttendance() {
+  if(!staffInfo || !staffInfo.payroll_staff_id) return;
+  try {
+    const resp = await fetch(API_URL + "/payroll/attendance", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        staff_id: staffInfo.payroll_staff_id,
+        date: dateToDmy(now),
+        status: "present",
+      }),
+    });
+    const result = await resp.json();
+    if(result.ok) {
+      renderSelfAttendance(true);
+      showToast("Отмечено!");
+    } else {
+      showToast("Не удалось отметить, попробуйте ещё раз", true);
+    }
+  } catch(e) {
+    showToast("Ошибка сети", true);
   }
 }
 
