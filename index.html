@@ -746,7 +746,9 @@ function renderHomeGreeting(total, present) {
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">' +
         '<div style="min-width:0;line-height:1.25">' +
           '<div style="font-size:13px;color:rgba(255,255,255,.85);font-weight:600">' + greet + ',</div>' +
-          '<div style="font-size:19px;font-weight:800;color:#fff">' + name + '</div>' +
+          (staffInfo && staffInfo.payroll_staff_id
+            ? '<div onclick="openMyAttendanceCalendar()" style="font-size:19px;font-weight:800;color:#fff;cursor:pointer">' + name + '</div>'
+            : '<div style="font-size:19px;font-weight:800;color:#fff">' + name + '</div>') +
         '</div>' +
         '<div style="text-align:right;line-height:1.2;flex-shrink:0">' +
           '<div style="font-size:11px;color:rgba(255,255,255,.75);font-weight:700">Сегодня</div>' +
@@ -2096,9 +2098,24 @@ async function openStaffCalendar(id) {
   const s = staffList.find(x => x.id == id);
   if(!s) return;
   window._currentStaffForCalendar = s;
+  window._staffCalReadOnly = false;
   const n = new Date();
   window._staffCalView = { year: n.getFullYear(), month: n.getMonth() };
   document.getElementById("modalName").textContent = s.name;
+  document.getElementById("modalContent").innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем...</div>';
+  document.getElementById("modalOverlay").classList.add("show");
+  await loadStaffMonth();
+}
+
+// Тап по своему имени на Home — только просмотр (без редактирования,
+// без зарплаты), в отличие от openStaffCalendar (админ, полный доступ).
+async function openMyAttendanceCalendar() {
+  if(!staffInfo || !staffInfo.payroll_staff_id) return;
+  window._currentStaffForCalendar = { id: staffInfo.payroll_staff_id, name: staffInfo.name, position: staffInfo.role };
+  window._staffCalReadOnly = true;
+  const n = new Date();
+  window._staffCalView = { year: n.getFullYear(), month: n.getMonth() };
+  document.getElementById("modalName").textContent = "Моя посещаемость";
   document.getElementById("modalContent").innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем...</div>';
   document.getElementById("modalOverlay").classList.add("show");
   await loadStaffMonth();
@@ -2186,6 +2203,7 @@ async function toggleStaffAttDay(dateStr) {
 
 function renderStaffCalendarModal() {
   const s = window._currentStaffForCalendar;
+  const readOnly = !!window._staffCalReadOnly;
   const { year, month } = window._staffCalView;
   const days = window._staffCalDays;
   const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
@@ -2214,8 +2232,8 @@ function renderStaffCalendarModal() {
     if(status === "present") present++;
     const bg = isFuture ? "transparent" : status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface2)";
     const color = isFuture ? "var(--text2)" : "var(--text)";
-    const cursor = isFuture ? "default" : "pointer";
-    const onclick = isFuture ? "" : `onclick="toggleStaffAttDay('${dateStr}')"`;
+    const cursor = (isFuture || readOnly) ? "default" : "pointer";
+    const onclick = (isFuture || readOnly) ? "" : `onclick="toggleStaffAttDay('${dateStr}')"`;
     grid += `<div ${onclick} style="aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}</div>`;
   });
   grid += '</div>';
@@ -2225,7 +2243,7 @@ function renderStaffCalendarModal() {
   const salary = weekdays ? Math.round(rate / weekdays * present) : 0;
 
   document.getElementById("modalContent").innerHTML =
-    '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (s.position || "") + '</div>' +
+    (readOnly ? "" : '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (s.position || "") + '</div>') +
     '<div style="background:var(--surface2);border-radius:12px;padding:12px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
         '<button onclick="prevStaffMonth()" style="border:none;background:var(--surface);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text)">‹</button>' +
@@ -2237,12 +2255,13 @@ function renderStaffCalendarModal() {
       '<span style="color:var(--text2)">Отработано (будних дней)</span>' +
       '<b>' + present + ' / ' + weekdays + '</b>' +
     '</div>' +
-    (rate > 0 ?
+    // Зарплата — только в админском (не read-only) режиме, не для просмотра себя.
+    (readOnly ? "" : (rate > 0 ?
       '<div style="display:flex;justify-content:space-between;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:14px">' +
         '<span style="color:var(--text2)">ЗП за месяц</span>' +
         '<b style="color:var(--accent2)">' + salary.toLocaleString('ru-RU') + ' ₫</b>' +
       '</div>' :
-      '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Ставка не задана — откройте карточку и укажите</div>');
+      '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Ставка не задана — откройте карточку и укажите</div>'));
 }
 
 initStaff().then(() => loadChildren());
