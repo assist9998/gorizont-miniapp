@@ -722,14 +722,19 @@ function renderHomeGreeting(total, present) {
   let selfRow = "";
   if(staffInfo && staffInfo.payroll_staff_id && selfAttendanceMarked !== null) {
     selfRow = selfAttendanceMarked
-      ? '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;' +
-        'background:rgba(255,255,255,.22);border-radius:999px;padding:7px 14px 7px 11px;color:#fff">' +
-          CHECKIN_ICON + '<span style="font-size:13px;font-weight:600">Вы отмечены на сегодня</span>' +
-        '</div>'
-      : '<button onclick="markSelfAttendance()" style="display:flex;align-items:center;justify-content:center;gap:8px;' +
-        'width:100%;margin-top:10px;border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
-        'padding:9px 14px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
-          CHECKIN_ICON + 'Отметить, что я сегодня на работе' +
+      // И "отмечено", и кнопка — одинаковый inline-flex (не на всю ширину,
+      // прижато влево), как пилюля "N/M детей пришли" выше — иначе при
+      // переключении между ними верстку "дёргает" (было center у кнопки,
+      // flex-start у бейджа). Отмечено — зелёным (var(--accent2)), тап отменяет.
+      ? '<button onclick="unmarkSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;' +
+        'border:none;background:rgba(255,255,255,.22);color:var(--accent2);border-radius:999px;' +
+        'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
+          CHECKIN_ICON + '<span>Вы отмечены на сегодня</span>' +
+        '</button>'
+      : '<button onclick="markSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;' +
+        'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
+        'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
+          CHECKIN_ICON + '<span>Отметить, что я сегодня на работе</span>' +
         '</button>';
   }
 
@@ -1594,6 +1599,32 @@ async function markSelfAttendance() {
       showToast("Отмечено!");
     } else {
       showToast("Не удалось отметить, попробуйте ещё раз", true);
+    }
+  } catch(e) {
+    showToast("Ошибка сети", true);
+  }
+}
+
+// Тап по "Вы отмечены" — на случай случайного нажатия на "Отметить".
+async function unmarkSelfAttendance() {
+  if(!staffInfo || !staffInfo.payroll_staff_id) return;
+  try {
+    const resp = await fetch(API_URL + "/payroll/attendance", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        staff_id: staffInfo.payroll_staff_id,
+        date: dateToDmy(now),
+        status: "absent",
+      }),
+    });
+    const result = await resp.json();
+    if(result.ok) {
+      selfAttendanceMarked = false;
+      renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
+      showToast("Отметка снята");
+    } else {
+      showToast("Не удалось отменить, попробуйте ещё раз", true);
     }
   } catch(e) {
     showToast("Ошибка сети", true);
