@@ -2556,17 +2556,19 @@ function renderStaffCalendarModal() {
         '<button onclick="nextStaffMonth()" style="border:none;background:var(--surface);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text)">›</button>' +
       '</div>' + grid +
     '</div>' +
-    '<div style="display:flex;justify-content:space-between;margin-top:10px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
-      '<span style="color:var(--text2)">Отработано (будних дней)</span>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
+      '<span style="color:var(--text2);display:flex;align-items:center;gap:6px">Отработано (будних дней)' +
+        '<span style="width:14px;height:14px;border-radius:4px;background:rgba(56,217,169,.25)"></span></span>' +
       '<b>' + present + ' / ' + weekdays + '</b>' +
     '</div>' +
     // Расшифровка уроков/продлёнки за месяц — только если у сотрудника
     // вообще есть такие ставки, показываем даже в read-only (это просто
-    // сводка, не расчёт денег).
+    // сводка, не расчёт денег). Бейдж-подсказка рядом с подписью — пример
+    // вида, а не значение (само значение справа в <b>).
     (s.lesson_rate ?
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
         '<span style="color:var(--text2);display:flex;align-items:center;gap:6px">Уроков за месяц' +
-        (sal ? BADGE_PILL("у") : "") + '</span>' +
+        (sal ? BADGE_PILL("4у") : "") + '</span>' +
         '<b>' + (sal ? sal.lessons_total : "—") + '</b>' +
       '</div>' : "") +
     (s.extended_day_rate ?
