@@ -2340,18 +2340,26 @@ function renderStaffCalendarModal() {
     const isWknd = (() => { const dow = new Date(year, month, d).getDay(); return dow === 0 || dow === 6; })();
     if(status === "present") present++;
     const isSub = status === "present" && subs.has(dateStr);
-    const bg = isFuture ? "transparent" : isSub ? "rgba(255,180,0,.28)" : status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface2)";
+    // Замена НЕ меняет цвет клетки — остаётся обычный зелёный "пришла",
+    // отличается только маленьким бейджиком в углу (см. ниже).
+    const bg = isFuture ? "transparent" : status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface2)";
     const color = isFuture ? "var(--text2)" : "var(--text)";
     const cursor = (isFuture || readOnly) ? "default" : "pointer";
     const onclick = (isFuture || readOnly) ? "" : `onclick="toggleStaffAttDay('${dateStr}')"`;
-    // Значок замены — только у "за смену", только на уже отмеченный "пришла"
+    // Бейдж замены — только у "за смену", только на уже отмеченный "пришла"
     // день, отдельный тап (stopPropagation, чтобы не переключить present/absent).
     // Доступен и в read-only самопросмотре — няня сама отмечает, когда
     // замещала воспитателя (в отличие от present/absent и зарплаты, которые
-    // в самопросмотре остаются недоступны).
+    // в самопросмотре остаются недоступны). Всегда виден (не только когда
+    // включён) — иначе некуда тапнуть, чтобы включить замену в первый раз.
     const showSubBadge = !isFuture && status === "present" && s.pay_type === "per_shift";
     const subBadge = showSubBadge
-      ? `<span onclick="event.stopPropagation();toggleSubstitution('${dateStr}')" title="Замена воспитателя" style="position:absolute;top:1px;right:2px;font-size:9px;line-height:1;opacity:${isSub?1:.3}">🔄</span>`
+      ? `<span onclick="event.stopPropagation();toggleSubstitution('${dateStr}')" title="Замена воспитателя" ` +
+        `style="position:absolute;top:-3px;right:-3px;width:14px;height:14px;border-radius:50%;` +
+        `background:${isSub ? "var(--accent2)" : "var(--surface)"};border:1px solid ${isSub ? "var(--accent2)" : "var(--border)"};` +
+        `color:${isSub ? "#0f1117" : "var(--text2)"};display:flex;align-items:center;justify-content:center;` +
+        `box-shadow:0 1px 3px rgba(0,0,0,.25);opacity:${isSub ? 1 : .6}">` +
+        SUBSTITUTION_ICON.replace('width="18" height="18"', 'width="9" height="9"') + '</span>'
       : "";
     grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}</div>`;
   });
