@@ -2524,19 +2524,19 @@ function renderStaffCalendarModal() {
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
         `font-size:10.5px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">${lessonCount}у</span>`
       : "";
-    // Бейдж продлёнки — справа посередине (не в угол, чтобы не пересекаться
-    // с бейджем уроков сверху справа). Чисто информационный, не кликабельный.
-    // Ввод — через тот же диалог, что и уроки (promptLessonCount). z-index и
-    // небольшой заход за границу клетки — специально: пользователь ок с тем,
-    // что бейдж чуть-чуть залезает на соседнюю клетку справа, лишь бы не
-    // обрезался под ней.
+    // Бейдж продлёнки — под бейджем уроков (тот сверху справа), с небольшим
+    // отступом между ними, чтобы не пересекались. Тот же размер, что и
+    // бейдж уроков. Чисто информационный, не кликабельный. Ввод — через тот
+    // же диалог, что и уроки (promptLessonCount). z-index и небольшой заход
+    // за границу клетки — специально: пользователь ок с тем, что бейдж
+    // чуть-чуть залезает на соседнюю клетку справа, лишь бы не обрезался под ней.
     const isExt = !!lessonInfo.worked_extended_day;
     const showExtBadge = !isFuture && s.extended_day_rate && isExt;
     const extBadge = showExtBadge
       ? `<span title="Продлёнка" ` +
-        `style="position:absolute;top:50%;right:-4px;transform:translateY(-50%);z-index:2;width:16px;height:16px;border-radius:50%;` +
+        `style="position:absolute;top:18px;right:-5px;z-index:2;width:20px;height:20px;border-radius:50%;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
-        `font-size:7px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">Пр</span>`
+        `font-size:9px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">Пр</span>`
       : "";
     grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}${lessonBadge}${extBadge}</div>`;
   });
