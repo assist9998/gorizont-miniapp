@@ -750,22 +750,41 @@ function renderHomeGreeting(total, present) {
   // и статус на сегодня уже известен (initSelfAttendance успел отработать).
   let selfRow = "";
   if(staffInfo && staffInfo.payroll_staff_id && selfAttendanceMarked !== null) {
-    const attBtn = selfAttendanceMarked
+    // Нулёвка (есть ставка за урок и/или продлёнку) — простой галочки
+    // "я на работе" недостаточно, ЗП считается от числа уроков/продлёнки,
+    // поэтому кнопка сразу открывает тот же диалог, что и в календаре
+    // (openTodayLessonModal), а не молча ставит "present" без деталей.
+    const isNulevkaSelf = !!(staffInfo.lesson_rate || staffInfo.extended_day_rate);
+    const attBtn = isNulevkaSelf
+      ? (selfAttendanceMarked
+          ? '<button onclick="openTodayLessonModal()" style="display:inline-flex;align-items:center;gap:6px;' +
+            'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
+            'padding:6px 14px 6px 6px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
+              (staffInfo.lesson_rate ? BADGE_PILL((selfTodayLessonCount || 0) + "у", 20, 10.5) : "") +
+              (staffInfo.extended_day_rate && selfTodayExt ? BADGE_PILL("Пр") : "") +
+              '<span>Уроки за сегодня</span>' +
+            '</button>'
+          : '<button onclick="openTodayLessonModal()" style="display:inline-flex;align-items:center;gap:8px;' +
+            'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
+            'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
+              CHECKIN_ICON + '<span>Указать уроки за сегодня</span>' +
+            '</button>')
       // И "отмечено", и кнопка — одинаковый inline-flex (не на всю ширину,
       // прижато влево), как пилюля "N/M детей пришли" выше — иначе при
       // переключении между ними верстку "дёргает" (было center у кнопки,
       // flex-start у бейджа). Текст остаётся белым (зелёный на синем градиенте
       // сливается и плохо читается) — зелёным только иконка, тап отменяет.
-      ? '<button onclick="unmarkSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;' +
-        'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
-        'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
-          '<span style="color:var(--accent2);display:flex">' + CHECKIN_ICON + '</span><span>Вы отмечены на сегодня</span>' +
-        '</button>'
-      : '<button onclick="markSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;' +
-        'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
-        'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
-          CHECKIN_ICON + '<span>Отметить, что я сегодня на работе</span>' +
-        '</button>';
+      : (selfAttendanceMarked
+          ? '<button onclick="unmarkSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;' +
+            'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
+            'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
+              '<span style="color:var(--accent2);display:flex">' + CHECKIN_ICON + '</span><span>Вы отмечены на сегодня</span>' +
+            '</button>'
+          : '<button onclick="markSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;' +
+            'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
+            'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
+              CHECKIN_ICON + '<span>Отметить, что я сегодня на работе</span>' +
+            '</button>');
 
     // Круглая кнопка "замена воспитателя" — только у "за смену", и только
     // когда сегодня уже отмечена (иначе заменять нечего).
@@ -1598,6 +1617,8 @@ async function initStaff(){
 // selfAttendanceMarked хранит статус между перерисовками карточки.
 let selfAttendanceMarked = null; // null=ещё не знаем, true/false=известно
 let selfSubstitutionMarked = null; // то же самое, но "сегодня замещаю воспитателя" (только per_shift)
+let selfTodayLessonCount = null; // нулёвка: сколько уроков сегодня уже внесено (для кнопки на Home)
+let selfTodayExt = false; // нулёвка: была ли сегодня продлёнка
 
 async function initSelfAttendance() {
   if(!staffInfo || !staffInfo.payroll_staff_id) return;
@@ -1614,12 +1635,38 @@ async function initSelfAttendance() {
     });
     selfAttendanceMarked = data.ok && data.days && data.days[todayDmy] === "present";
     selfSubstitutionMarked = data.ok && Array.isArray(data.substitutions) && data.substitutions.includes(todayDmy);
+    const todayLesson = data.ok && data.lesson_details ? data.lesson_details[todayDmy] : null;
+    selfTodayLessonCount = todayLesson ? (todayLesson.lessons_count ?? null) : null;
+    selfTodayExt = !!(todayLesson && todayLesson.worked_extended_day);
   } catch(e) {
     console.error("Self attendance check:", e);
     selfAttendanceMarked = false;
     selfSubstitutionMarked = false;
+    selfTodayLessonCount = null;
+    selfTodayExt = false;
   }
   renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
+}
+
+// Нулёвка (есть ставка за урок и/или продлёнку) — отметка "я сегодня на
+// работе" не может быть просто галочкой: сама зарплата считается от числа
+// уроков/продлёнки, так что сразу при отметке открываем тот же диалог, что
+// и в календаре (promptLessonCount/saveLessonDay), только для СЕГОДНЯ и без
+// открытия самого календаря — см. project_gorizont_payroll.
+function openTodayLessonModal() {
+  if(!staffInfo || !staffInfo.payroll_staff_id) return;
+  const todayDmy = dateToDmy(now);
+  window._currentStaffForCalendar = {
+    id: staffInfo.payroll_staff_id, name: staffInfo.name, pay_type: staffInfo.pay_type,
+    lesson_rate: staffInfo.lesson_rate, extended_day_rate: staffInfo.extended_day_rate,
+  };
+  window._staffCalReadOnly = true;
+  window._staffCalView = { year: now.getFullYear(), month: now.getMonth() };
+  window._staffCalDays = window._staffCalDays || {};
+  window._staffCalLessonDetails = window._staffCalLessonDetails || {};
+  window._staffCalLessonDetails[todayDmy] = { lessons_count: selfTodayLessonCount, worked_extended_day: selfTodayExt };
+  window._staffCalSubstitutions = window._staffCalSubstitutions || new Set();
+  promptLessonCount(todayDmy);
 }
 
 async function markSelfAttendance() {
@@ -2447,6 +2494,16 @@ async function saveLessonDay() {
     const data = await resp.json();
     if(!data.ok) throw new Error(data.error || "save failed");
     await loadStaffMonth();
+    // Если это своя карточка и сегодняшний день — синхронизируем плашку на
+    // Home (кнопка самоотметки читает selfAttendanceMarked/selfTodayLessonCount,
+    // не window._staffCal*, у них разное происхождение данных).
+    if(staffInfo && s.id === staffInfo.payroll_staff_id && dateStr === dateToDmy(now)) {
+      selfAttendanceMarked = nextStatus === "present";
+      const td = (window._staffCalLessonDetails && window._staffCalLessonDetails[dateStr]) || {};
+      selfTodayLessonCount = td.lessons_count ?? null;
+      selfTodayExt = !!td.worked_extended_day;
+      renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
+    }
   } catch(e) {
     console.error("saveLessonDay error:", e);
     days[dateStr] = prevStatus;
