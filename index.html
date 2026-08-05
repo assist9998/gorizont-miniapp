@@ -2343,9 +2343,9 @@ const LESSON_COUNT_OPTIONS = [0, 1, 2, 3, 4, 5];
 // Тот же значок-пилюля, что на бейджах в клетках календаря ("Nу" / "Пр"),
 // для сводки уроков/продлёнки за месяц — визуально одна и та же метка.
 function BADGE_PILL(label) {
-  return `<span style="min-width:14px;height:14px;padding:0 4px;border-radius:7px;` +
+  return `<span style="width:16px;height:16px;border-radius:50%;` +
     `background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;` +
-    `font-size:9px;font-weight:800">${label}</span>`;
+    `font-size:7px;font-weight:800;letter-spacing:-.5px">${label}</span>`;
 }
 
 function promptLessonCount(dateStr) {
@@ -2517,9 +2517,9 @@ function renderStaffCalendarModal() {
     const lessonInfo = (window._staffCalLessonDetails && window._staffCalLessonDetails[dateStr]) || {};
     const lessonCount = lessonInfo.lessons_count;
     const lessonBadge = (!isFuture && s.lesson_rate && lessonCount != null && lessonCount > 0)
-      ? `<span style="position:absolute;top:-3px;right:-3px;z-index:2;min-width:14px;height:14px;padding:0 2px;border-radius:7px;` +
+      ? `<span style="position:absolute;top:-3px;right:-4px;z-index:2;width:16px;height:16px;border-radius:50%;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
-        `font-size:8px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">${lessonCount}у</span>`
+        `font-size:7px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">${lessonCount}у</span>`
       : "";
     // Бейдж продлёнки — справа посередине (не в угол, чтобы не пересекаться
     // с бейджем уроков сверху справа). Чисто информационный, не кликабельный.
@@ -2531,9 +2531,9 @@ function renderStaffCalendarModal() {
     const showExtBadge = !isFuture && s.extended_day_rate && isExt;
     const extBadge = showExtBadge
       ? `<span title="Продлёнка" ` +
-        `style="position:absolute;top:50%;right:-7px;transform:translateY(-50%);z-index:2;min-width:16px;height:14px;padding:0 2px;border-radius:7px;` +
+        `style="position:absolute;top:50%;right:-4px;transform:translateY(-50%);z-index:2;width:16px;height:16px;border-radius:50%;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
-        `font-size:7px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">Пр</span>`
+        `font-size:7px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">Пр</span>`
       : "";
     grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}${lessonBadge}${extBadge}</div>`;
   });
@@ -2564,15 +2564,15 @@ function renderStaffCalendarModal() {
     // сводка, не расчёт денег).
     (s.lesson_rate ?
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
-        '<span style="color:var(--text2)">Уроков за месяц</span>' +
-        '<b style="display:flex;align-items:center;gap:5px">' + (sal ? sal.lessons_total : "—") +
-        (sal ? BADGE_PILL("у") : "") + '</b>' +
+        '<span style="color:var(--text2);display:flex;align-items:center;gap:6px">Уроков за месяц' +
+        (sal ? BADGE_PILL("у") : "") + '</span>' +
+        '<b>' + (sal ? sal.lessons_total : "—") + '</b>' +
       '</div>' : "") +
     (s.extended_day_rate ?
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
-        '<span style="color:var(--text2)">Дней продлёнки</span>' +
-        '<b style="display:flex;align-items:center;gap:5px">' + (sal ? sal.extended_days_total : "—") +
-        (sal ? BADGE_PILL("Пр") : "") + '</b>' +
+        '<span style="color:var(--text2);display:flex;align-items:center;gap:6px">Дней продлёнки' +
+        (sal ? BADGE_PILL("Пр") : "") + '</span>' +
+        '<b>' + (sal ? sal.extended_days_total : "—") + '</b>' +
       '</div>' : "") +
     // Зарплата — только в админском (не read-only) режиме, не для просмотра себя.
     // Считается на бэкенде (payroll.calculate_salary), учитывает дни замены,
