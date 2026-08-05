@@ -424,6 +424,15 @@
   </div>
 </div>
 
+<!-- MODAL: LESSON DAY (нулёвка — число уроков + продлёнка за конкретный день) -->
+<div class="modal-overlay" id="lessonModalOverlay" onclick="if(event.target===this) closeLessonModal()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-name" id="lessonModalDate">Дата</div>
+    <div id="lessonModalContent"></div>
+  </div>
+</div>
+
 <!-- NAV -->
 <nav class="nav">
   <button class="nav-btn active" id="nav-home" onclick="goTo('home')">
@@ -2324,37 +2333,90 @@ async function toggleStaffAttDay(dateStr) {
   }
 }
 
-// Нулёвка: тап по дню спрашивает число уроков и/или продлёнку одним
-// диалогом (не переключает пришла/нет циклом, как toggleStaffAttDay).
-// Бейджи (число уроков, "П") — чисто информационные, не кликабельны,
-// как и бейдж замены — весь ввод идёт через этот единый тап по клетке.
-async function promptLessonCount(dateStr) {
+// Нулёвка: тап по дню открывает своё окно (не системный prompt) — число
+// уроков кнопками-цифрами и/или переключатель продлёнки. Бейджи в самом
+// календаре (число уроков, "П") — чисто информационные, весь ввод идёт
+// только отсюда.
+const LESSON_COUNT_OPTIONS = [0, 1, 2, 3, 4, 5];
+
+function promptLessonCount(dateStr) {
   const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
   if(dateStr > todayDMY) return;
   const s = window._currentStaffForCalendar;
   if(!s) return;
+  const prevDetails = window._staffCalLessonDetails[dateStr] || {};
+  window._lessonModalDate = dateStr;
+  window._lessonModalCount = prevDetails.lessons_count ?? null;
+  window._lessonModalExt = prevDetails.worked_extended_day || false;
+  document.getElementById("lessonModalDate").textContent = dateStr;
+  renderLessonModal();
+  document.getElementById("lessonModalOverlay").classList.add("show");
+}
+
+function closeLessonModal() {
+  document.getElementById("lessonModalOverlay").classList.remove("show");
+}
+
+function pickLessonCount(n) {
+  window._lessonModalCount = n;
+  renderLessonModal();
+}
+
+function toggleLessonExt() {
+  window._lessonModalExt = !window._lessonModalExt;
+  renderLessonModal();
+}
+
+function renderLessonModal() {
+  const s = window._currentStaffForCalendar;
+  const count = window._lessonModalCount;
+  const ext = window._lessonModalExt;
+
+  const countRow = s.lesson_rate
+    ? '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Сколько уроков</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">' +
+      LESSON_COUNT_OPTIONS.map(n =>
+        `<button onclick="pickLessonCount(${n})" style="width:44px;height:44px;border-radius:50%;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;` +
+        (count === n
+          ? 'border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff'
+          : 'border:1.5px solid var(--border);background:var(--surface2);color:var(--text)') +
+        `">${n}</button>`
+      ).join("") +
+      '</div>'
+    : "";
+
+  const extRow = s.extended_day_rate
+    ? '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Продлёнка</div>' +
+      `<button onclick="toggleLessonExt()" style="display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:9px 16px;` +
+      'font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:18px;' +
+      (ext
+        ? 'border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff'
+        : 'border:1.5px solid var(--border);background:var(--surface2);color:var(--text2)') +
+      `">${ext ? "✓ Была" : "Не было"}</button>`
+    : "";
+
+  document.getElementById("lessonModalContent").innerHTML =
+    countRow + extRow +
+    '<button onclick="saveLessonDay()" class="btn-primary" style="width:100%">Сохранить</button>';
+}
+
+async function saveLessonDay() {
+  const dateStr = window._lessonModalDate;
+  const s = window._currentStaffForCalendar;
+  if(!s || !dateStr) return;
   const lockKey = s.id + "|" + dateStr;
   if(window._staffAttPending.has(lockKey)) return;
-
-  const prevDetails = window._staffCalLessonDetails[dateStr] || {};
-  let count = prevDetails.lessons_count ?? 0;
-  if(s.lesson_rate) {
-    const input = prompt("Сколько уроков провёл(а) " + dateStr + "? (0 — если не было)", prevDetails.lessons_count ?? "");
-    if(input === null) return; // отменил
-    count = parseInt(input, 10);
-    if(isNaN(count) || count < 0) { showToast("Введите число 0 или больше", true); return; }
-  }
-  let extToday = prevDetails.worked_extended_day || false;
-  if(s.extended_day_rate) {
-    extToday = confirm("Была продлёнка " + dateStr + "?" + (extToday ? "\n\n(сейчас отмечена — ОК оставит, Отмена уберёт)" : ""));
-  }
-
   window._staffAttPending.add(lockKey);
+
+  const count = s.lesson_rate ? (window._lessonModalCount ?? 0) : 0;
+  const extToday = s.extended_day_rate ? window._lessonModalExt : false;
+  const prevDetails = window._staffCalLessonDetails[dateStr] || {};
   const days = window._staffCalDays;
   const prevStatus = days[dateStr];
   const nextStatus = (count > 0 || extToday) ? "present" : "absent";
   days[dateStr] = nextStatus;
   window._staffCalLessonDetails[dateStr] = { lessons_count: count, worked_extended_day: extToday };
+  closeLessonModal();
   renderStaffCalendarModal();
 
   try {
@@ -2367,7 +2429,7 @@ async function promptLessonCount(dateStr) {
     if(!data.ok) throw new Error(data.error || "save failed");
     await loadStaffMonth();
   } catch(e) {
-    console.error("promptLessonCount error:", e);
+    console.error("saveLessonDay error:", e);
     days[dateStr] = prevStatus;
     window._staffCalLessonDetails[dateStr] = prevDetails;
     renderStaffCalendarModal();
@@ -2438,7 +2500,9 @@ function renderStaffCalendarModal() {
     const lessonInfo = (window._staffCalLessonDetails && window._staffCalLessonDetails[dateStr]) || {};
     const lessonCount = lessonInfo.lessons_count;
     const lessonBadge = (!isFuture && s.lesson_rate && lessonCount != null && lessonCount > 0)
-      ? `<span style="position:absolute;bottom:1px;right:2px;font-size:8px;font-weight:700;color:var(--accent);line-height:1">${lessonCount}у</span>`
+      ? `<span style="position:absolute;bottom:-3px;right:-3px;min-width:14px;height:14px;padding:0 2px;border-radius:7px;` +
+        `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
+        `font-size:8px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">${lessonCount}</span>`
       : "";
     // Бейдж продлёнки — сверху справа, как и бейдж замены: чисто
     // информационный, не кликабельный, виден только когда реально стоит.
