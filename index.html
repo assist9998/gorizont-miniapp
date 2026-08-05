@@ -2493,11 +2493,17 @@ function renderStaffCalendarModal() {
     // отличается только маленьким бейджиком в углу (см. ниже).
     const bg = isFuture ? "transparent" : status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface2)";
     const color = isFuture ? "var(--text2)" : "var(--text)";
-    const cursor = (isFuture || readOnly) ? "default" : "pointer";
     // Нулёвка (есть ставка за урок и/или продлёнку) — тап по дню не
     // переключает пришла/нет циклом, а спрашивает число уроков и/или
-    // продлёнку одним диалогом (см. promptLessonCount).
-    const onclick = (isFuture || readOnly) ? "" : ((s.lesson_rate || s.extended_day_rate)
+    // продлёнку одним диалогом (см. promptLessonCount). В своём (readOnly)
+    // календаре воспитатель нулёвки НЕ может редактировать чужие/прошлые
+    // дни, но должен уметь сам внести уроки/продлёнку за СЕГОДНЯ — иначе
+    // этот учёт вносить некому (в отличие от обычных сотрудников, у которых
+    // для этого есть отдельная кнопка на Home, см. toggleSelfAttendance).
+    const isNulevka = !!(s.lesson_rate || s.extended_day_rate);
+    const canEdit = !isFuture && (!readOnly || (isNulevka && dateStr === todayDMY));
+    const cursor = canEdit ? "pointer" : "default";
+    const onclick = !canEdit ? "" : (isNulevka
       ? `onclick="promptLessonCount('${dateStr}')"`
       : `onclick="toggleStaffAttDay('${dateStr}')"`);
     // Бейдж замены — только у "за смену", только когда замена реально стоит.
@@ -2548,6 +2554,13 @@ function renderStaffCalendarModal() {
   // Раньше проверяли только rate (обычная ставка) — у нулёвки её может не
   // быть вообще, только ставка за урок/продлёнку, но ЗП всё равно считается.
   const hasAnyRate = rate > 0 || !!s.lesson_rate || !!s.extended_day_rate;
+  // Уроки/продлёнку за месяц считаем прямо тут из уже загруженных
+  // lesson_details, а не берём из sal (расчёт ЗП) — тот грузится только в
+  // админском режиме (!readOnly), из-за чего в своём календаре (read-only)
+  // эти цифры всегда были "—", хотя сами данные уже загружены.
+  const lessonDetailsAll = window._staffCalLessonDetails || {};
+  const lessonsTotal = Object.values(lessonDetailsAll).reduce((sum, d) => sum + (d.lessons_count || 0), 0);
+  const extDaysTotal = Object.values(lessonDetailsAll).reduce((sum, d) => sum + (d.worked_extended_day ? 1 : 0), 0);
 
   document.getElementById("modalContent").innerHTML =
     (readOnly ? "" : '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (s.position || "") + '</div>') +
@@ -2570,14 +2583,14 @@ function renderStaffCalendarModal() {
     (s.lesson_rate ?
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
         '<span style="color:var(--text2);display:flex;align-items:center;gap:6px">Уроков за месяц' +
-        (sal ? BADGE_PILL("4у", 20, 10.5) : "") + '</span>' +
-        '<b>' + (sal ? sal.lessons_total : "—") + '</b>' +
+        BADGE_PILL("4у", 20, 10.5) + '</span>' +
+        '<b>' + lessonsTotal + '</b>' +
       '</div>' : "") +
     (s.extended_day_rate ?
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
         '<span style="color:var(--text2);display:flex;align-items:center;gap:6px">Дней продлёнки' +
-        (sal ? BADGE_PILL("Пр") : "") + '</span>' +
-        '<b>' + (sal ? sal.extended_days_total : "—") + '</b>' +
+        BADGE_PILL("Пр") + '</span>' +
+        '<b>' + extDaysTotal + '</b>' +
       '</div>' : "") +
     // Зарплата — только в админском (не read-only) режиме, не для просмотра себя.
     // Считается на бэкенде (payroll.calculate_salary), учитывает дни замены,
@@ -2594,7 +2607,7 @@ function renderStaffCalendarModal() {
       ? '<div style="margin-top:8px;font-size:11px;color:var(--text2)">🔄 в углу дня — отметить замену воспитателя (другая ставка)</div>'
       : "") +
     ((s.lesson_rate || s.extended_day_rate)
-      ? '<div style="margin-top:6px;font-size:11px;color:var(--text2)">Тап по дню — указать' +
+      ? '<div style="margin-top:6px;font-size:11px;color:var(--text2)">Тап по ' + (readOnly ? "сегодняшнему дню" : "дню") + ' — указать' +
         (s.lesson_rate ? ' число уроков' : '') + (s.lesson_rate && s.extended_day_rate ? ' и' : '') +
         (s.extended_day_rate ? ' продлёнку' : '') + '</div>'
       : "");
