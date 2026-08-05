@@ -2520,7 +2520,7 @@ function renderStaffCalendarModal() {
     const lessonInfo = (window._staffCalLessonDetails && window._staffCalLessonDetails[dateStr]) || {};
     const lessonCount = lessonInfo.lessons_count;
     const lessonBadge = (!isFuture && s.lesson_rate && lessonCount != null && lessonCount > 0)
-      ? `<span style="position:absolute;top:-4px;right:-5px;z-index:2;width:20px;height:20px;border-radius:50%;` +
+      ? `<span style="position:absolute;top:-4px;right:-3px;z-index:2;width:20px;height:20px;border-radius:50%;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
         `font-size:10.5px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">${lessonCount}у</span>`
       : "";
@@ -2534,7 +2534,7 @@ function renderStaffCalendarModal() {
     const showExtBadge = !isFuture && s.extended_day_rate && isExt;
     const extBadge = showExtBadge
       ? `<span title="Продлёнка" ` +
-        `style="position:absolute;top:18px;right:-5px;z-index:2;width:20px;height:20px;border-radius:50%;` +
+        `style="position:absolute;top:18px;right:-3px;z-index:2;width:20px;height:20px;border-radius:50%;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
         `font-size:9px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">Пр</span>`
       : "";
