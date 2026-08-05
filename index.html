@@ -383,10 +383,13 @@
   </div>
   <div style="margin-bottom:12px">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тип оплаты</div>
-    <div style="padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text2);font-size:14px">Месячный фикс (другие типы — следующий этап)</div>
+    <select id="s_pay_type" onchange="updatePayTypeLabel()" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+      <option value="monthly_fixed">Месячный фикс</option>
+      <option value="per_shift">За смену</option>
+    </select>
   </div>
   <div style="margin-bottom:20px">
-    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Ставка в месяц (₫)</div>
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px" id="s_rate_label">Ставка в месяц (₫)</div>
     <input id="s_monthly_rate" type="number" inputmode="numeric" placeholder="10500000" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
   </div>
   <button onclick="submitStaffForm()" class="btn-primary" style="width:100%;margin-bottom:10px" id="staffSubmitBtn">Добавить сотрудника</button>
@@ -1913,7 +1916,7 @@ function renderStaffList() {
   let html = "";
   filtered.forEach(s => {
     const initials = s.name.split(" ").map(w => w[0]).join("").slice(0,2);
-    const rate = s.monthly_rate ? Number(s.monthly_rate).toLocaleString('ru-RU') + " ₫/мес" : "";
+    const rate = s.monthly_rate ? Number(s.monthly_rate).toLocaleString('ru-RU') + (s.pay_type === "per_shift" ? " ₫/смену" : " ₫/мес") : "";
     html += `<div class="child-list-item" onclick="openStaffCalendar('${s.id}')">
       <div class="avatar">${initials}</div>
       <div class="child-detail">
@@ -1959,15 +1962,28 @@ function openEditStaffForm(id) {
   document.getElementById("s_position").value = s.position || "";
   document.getElementById("s_phone").value = s.phone || "";
   document.getElementById("s_contract_end").value = s.contract_end || "";
+  document.getElementById("s_pay_type").value = s.pay_type || "monthly_fixed";
   document.getElementById("s_monthly_rate").value = s.monthly_rate || "";
   document.getElementById("s_telegram").value = s.telegram_id || "";
+  updatePayTypeLabel();
   goTo("staff-form");
+}
+
+// Ставка одна и та же колонка (monthly_rate) что для "в месяц", что для
+// "за смену" — меняется только подпись поля, единица измерения зависит
+// от выбранного типа оплаты (см. payroll.calculate_salary на бэкенде).
+function updatePayTypeLabel() {
+  const payType = document.getElementById("s_pay_type").value;
+  document.getElementById("s_rate_label").textContent =
+    payType === "per_shift" ? "Ставка за смену (₫)" : "Ставка в месяц (₫)";
 }
 
 function clearStaffForm() {
   ["s_name","s_surname","s_position","s_phone","s_contract_end","s_monthly_rate","s_telegram"].forEach(id => {
     document.getElementById(id).value = "";
   });
+  document.getElementById("s_pay_type").value = "monthly_fixed";
+  updatePayTypeLabel();
 }
 
 // ── STAFF ARCHIVE (та же схема, что и архив детей — archive/restore через update) ──
@@ -2033,6 +2049,7 @@ async function submitStaffForm() {
     position: document.getElementById("s_position").value.trim(),
     phone: document.getElementById("s_phone").value.trim(),
     contract_end: document.getElementById("s_contract_end").value.trim(),
+    pay_type: document.getElementById("s_pay_type").value,
     monthly_rate: rateRaw ? Number(rateRaw) : null,
     telegram_id: document.getElementById("s_telegram").value.trim(),
   };
@@ -2241,7 +2258,11 @@ function renderStaffCalendarModal() {
 
   const weekdays = weekdaysInMonth(year, month);
   const rate = s.monthly_rate ? Number(s.monthly_rate) : 0;
-  const salary = weekdays ? Math.round(rate / weekdays * present) : 0;
+  // За смену: ставка × дни присутствия, без деления на будние дни месяца
+  // (см. payroll.calculate_salary на бэкенде — та же логика).
+  const salary = s.pay_type === "per_shift"
+    ? Math.round(rate * present)
+    : (weekdays ? Math.round(rate / weekdays * present) : 0);
 
   document.getElementById("modalContent").innerHTML =
     (readOnly ? "" : '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (s.position || "") + '</div>') +
