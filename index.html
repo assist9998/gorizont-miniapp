@@ -2179,7 +2179,7 @@ async function openStaffCalendar(id) {
 // без зарплаты), в отличие от openStaffCalendar (админ, полный доступ).
 async function openMyAttendanceCalendar() {
   if(!staffInfo || !staffInfo.payroll_staff_id) return;
-  window._currentStaffForCalendar = { id: staffInfo.payroll_staff_id, name: staffInfo.name, position: staffInfo.role };
+  window._currentStaffForCalendar = { id: staffInfo.payroll_staff_id, name: staffInfo.name, position: staffInfo.role, pay_type: staffInfo.pay_type };
   window._staffCalReadOnly = true;
   const n = new Date();
   window._staffCalView = { year: n.getFullYear(), month: n.getMonth() };
