@@ -568,6 +568,12 @@ const CHECKIN_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none
   '<circle cx="12" cy="12" r="10"/>' +
   '<polyline points="7.5 12.5 10.5 15.5 16.5 8.5"/>' +
   '</svg>';
+// "Замена воспитателя" — круглая кнопка рядом с самоотметкой на Home (только
+// у сотрудников с оплатой "за смену"), см. renderHomeGreeting.
+const SUBSTITUTION_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>' +
+  '<polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>' +
+  '</svg>';
 
 let children = [];
 // attendance: true=present, false=absent (по умолчанию absent, как в Balu Kids — без отдельного "не отмечен")
@@ -724,22 +730,33 @@ function renderHomeGreeting(total, present) {
   // и статус на сегодня уже известен (initSelfAttendance успел отработать).
   let selfRow = "";
   if(staffInfo && staffInfo.payroll_staff_id && selfAttendanceMarked !== null) {
-    selfRow = selfAttendanceMarked
+    const attBtn = selfAttendanceMarked
       // И "отмечено", и кнопка — одинаковый inline-flex (не на всю ширину,
       // прижато влево), как пилюля "N/M детей пришли" выше — иначе при
       // переключении между ними верстку "дёргает" (было center у кнопки,
       // flex-start у бейджа). Текст остаётся белым (зелёный на синем градиенте
       // сливается и плохо читается) — зелёным только иконка, тап отменяет.
-      ? '<button onclick="unmarkSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;' +
+      ? '<button onclick="unmarkSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;' +
         'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
         'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
           '<span style="color:var(--accent2);display:flex">' + CHECKIN_ICON + '</span><span>Вы отмечены на сегодня</span>' +
         '</button>'
-      : '<button onclick="markSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;margin-top:10px;' +
+      : '<button onclick="markSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;' +
         'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
         'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
           CHECKIN_ICON + '<span>Отметить, что я сегодня на работе</span>' +
         '</button>';
+
+    // Круглая кнопка "замена воспитателя" — только у "за смену", и только
+    // когда сегодня уже отмечена (иначе заменять нечего).
+    const subBtn = (staffInfo.pay_type === "per_shift" && selfAttendanceMarked)
+      ? '<button onclick="toggleSelfSubstitution()" title="Замена воспитателя сегодня" style="display:flex;align-items:center;justify-content:center;' +
+        'width:34px;height:34px;flex-shrink:0;border:none;border-radius:50%;cursor:pointer;' +
+        'background:' + (selfSubstitutionMarked ? 'var(--accent2)' : 'rgba(255,255,255,.22)') + ';' +
+        'color:' + (selfSubstitutionMarked ? '#0f1117' : '#fff') + '">' + SUBSTITUTION_ICON + '</button>'
+      : '';
+
+    selfRow = '<div style="display:flex;align-items:center;gap:8px;margin-top:10px">' + attBtn + subBtn + '</div>';
   }
 
   el.innerHTML =
@@ -1560,6 +1577,7 @@ async function initStaff(){
 // в синюю плашку приветствия (renderHomeGreeting), не отдельный блок —
 // selfAttendanceMarked хранит статус между перерисовками карточки.
 let selfAttendanceMarked = null; // null=ещё не знаем, true/false=известно
+let selfSubstitutionMarked = null; // то же самое, но "сегодня замещаю воспитателя" (только per_shift)
 
 async function initSelfAttendance() {
   if(!staffInfo || !staffInfo.payroll_staff_id) return;
@@ -1575,9 +1593,11 @@ async function initSelfAttendance() {
       return resp.json();
     });
     selfAttendanceMarked = data.ok && data.days && data.days[todayDmy] === "present";
+    selfSubstitutionMarked = data.ok && Array.isArray(data.substitutions) && data.substitutions.includes(todayDmy);
   } catch(e) {
     console.error("Self attendance check:", e);
     selfAttendanceMarked = false;
+    selfSubstitutionMarked = false;
   }
   renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
 }
@@ -1627,6 +1647,36 @@ async function unmarkSelfAttendance() {
       showToast("Отметка снята");
     } else {
       showToast("Не удалось отменить, попробуйте ещё раз", true);
+    }
+  } catch(e) {
+    showToast("Ошибка сети", true);
+  }
+}
+
+// Круглая кнопка "замена" рядом с самоотметкой (только per_shift). Работает
+// только если сегодняшний день уже отмечен "пришла" — замена без присутствия
+// не имеет смысла (см. status:"present" в теле запроса, как и в календаре).
+async function toggleSelfSubstitution() {
+  if(!staffInfo || !staffInfo.payroll_staff_id || !selfAttendanceMarked) return;
+  const nextSub = !selfSubstitutionMarked;
+  try {
+    const resp = await fetch(API_URL + "/payroll/attendance", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        staff_id: staffInfo.payroll_staff_id,
+        date: dateToDmy(now),
+        status: "present",
+        is_substitution: nextSub,
+      }),
+    });
+    const result = await resp.json();
+    if(result.ok) {
+      selfSubstitutionMarked = nextSub;
+      renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
+      showToast(nextSub ? "Отмечено как замена" : "Отметка замены снята");
+    } else {
+      showToast("Не удалось сохранить", true);
     }
   } catch(e) {
     showToast("Ошибка сети", true);
