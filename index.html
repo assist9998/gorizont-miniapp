@@ -2343,10 +2343,12 @@ const LESSON_COUNT_OPTIONS = [0, 1, 2, 3, 4, 5];
 
 // Тот же значок-пилюля, что на бейджах в клетках календаря ("Nу" / "Пр"),
 // для сводки уроков/продлёнки за месяц — визуально одна и та же метка.
-function BADGE_PILL(label) {
-  return `<span style="width:16px;height:16px;border-radius:50%;` +
+// size/font — для бейджей с числом уроков цифра крупнее (+50%, по просьбе
+// пользователя — "цифра маловата"), у продлёнки ("Пр") размер не менялся.
+function BADGE_PILL(label, size = 16, font = 7) {
+  return `<span style="width:${size}px;height:${size}px;border-radius:50%;` +
     `background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;` +
-    `font-size:7px;font-weight:800;letter-spacing:-.5px">${label}</span>`;
+    `font-size:${font}px;font-weight:800;letter-spacing:-.5px">${label}</span>`;
 }
 
 function promptLessonCount(dateStr) {
@@ -2518,9 +2520,9 @@ function renderStaffCalendarModal() {
     const lessonInfo = (window._staffCalLessonDetails && window._staffCalLessonDetails[dateStr]) || {};
     const lessonCount = lessonInfo.lessons_count;
     const lessonBadge = (!isFuture && s.lesson_rate && lessonCount != null && lessonCount > 0)
-      ? `<span style="position:absolute;top:-3px;right:-4px;z-index:2;width:16px;height:16px;border-radius:50%;` +
+      ? `<span style="position:absolute;top:-4px;right:-5px;z-index:2;width:20px;height:20px;border-radius:50%;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
-        `font-size:7px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">${lessonCount}у</span>`
+        `font-size:10.5px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">${lessonCount}у</span>`
       : "";
     // Бейдж продлёнки — справа посередине (не в угол, чтобы не пересекаться
     // с бейджем уроков сверху справа). Чисто информационный, не кликабельный.
@@ -2568,7 +2570,7 @@ function renderStaffCalendarModal() {
     (s.lesson_rate ?
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
         '<span style="color:var(--text2);display:flex;align-items:center;gap:6px">Уроков за месяц' +
-        (sal ? BADGE_PILL("4у") : "") + '</span>' +
+        (sal ? BADGE_PILL("4у", 20, 10.5) : "") + '</span>' +
         '<b>' + (sal ? sal.lessons_total : "—") + '</b>' +
       '</div>' : "") +
     (s.extended_day_rate ?
