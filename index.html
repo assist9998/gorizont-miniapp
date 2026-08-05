@@ -2324,8 +2324,10 @@ async function toggleStaffAttDay(dateStr) {
   }
 }
 
-// Нулёвка: тап по дню спрашивает число уроков (не переключает пришла/нет
-// циклом, как toggleStaffAttDay — тут просто вводится число).
+// Нулёвка: тап по дню спрашивает число уроков и/или продлёнку одним
+// диалогом (не переключает пришла/нет циклом, как toggleStaffAttDay).
+// Бейджи (число уроков, "П") — чисто информационные, не кликабельны,
+// как и бейдж замены — весь ввод идёт через этот единый тап по клетке.
 async function promptLessonCount(dateStr) {
   const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
   if(dateStr > todayDMY) return;
@@ -2335,15 +2337,21 @@ async function promptLessonCount(dateStr) {
   if(window._staffAttPending.has(lockKey)) return;
 
   const prevDetails = window._staffCalLessonDetails[dateStr] || {};
-  const input = prompt("Сколько уроков провёл(а) " + dateStr + "? (0 — если не было)", prevDetails.lessons_count ?? "");
-  if(input === null) return; // отменил
-  const count = parseInt(input, 10);
-  if(isNaN(count) || count < 0) { showToast("Введите число 0 или больше", true); return; }
+  let count = prevDetails.lessons_count ?? 0;
+  if(s.lesson_rate) {
+    const input = prompt("Сколько уроков провёл(а) " + dateStr + "? (0 — если не было)", prevDetails.lessons_count ?? "");
+    if(input === null) return; // отменил
+    count = parseInt(input, 10);
+    if(isNaN(count) || count < 0) { showToast("Введите число 0 или больше", true); return; }
+  }
+  let extToday = prevDetails.worked_extended_day || false;
+  if(s.extended_day_rate) {
+    extToday = confirm("Была продлёнка " + dateStr + "?" + (extToday ? "\n\n(сейчас отмечена — ОК оставит, Отмена уберёт)" : ""));
+  }
 
   window._staffAttPending.add(lockKey);
   const days = window._staffCalDays;
   const prevStatus = days[dateStr];
-  const extToday = prevDetails.worked_extended_day || false;
   const nextStatus = (count > 0 || extToday) ? "present" : "absent";
   days[dateStr] = nextStatus;
   window._staffCalLessonDetails[dateStr] = { lessons_count: count, worked_extended_day: extToday };
@@ -2360,47 +2368,6 @@ async function promptLessonCount(dateStr) {
     await loadStaffMonth();
   } catch(e) {
     console.error("promptLessonCount error:", e);
-    days[dateStr] = prevStatus;
-    window._staffCalLessonDetails[dateStr] = prevDetails;
-    renderStaffCalendarModal();
-    showToast("Не удалось сохранить", true);
-  } finally {
-    window._staffAttPending.delete(lockKey);
-  }
-}
-
-// Продлёнка — независимый флаг на день, свой тап-таргет (кнопка в углу),
-// не завязан на promptLessonCount/toggleStaffAttDay.
-async function toggleExtendedDay(dateStr) {
-  const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
-  if(dateStr > todayDMY) return;
-  const s = window._currentStaffForCalendar;
-  if(!s) return;
-  const lockKey = s.id + "|ext|" + dateStr;
-  if(window._staffAttPending.has(lockKey)) return;
-  window._staffAttPending.add(lockKey);
-
-  const days = window._staffCalDays;
-  const prevStatus = days[dateStr];
-  const prevDetails = window._staffCalLessonDetails[dateStr] || {};
-  const nextExt = !prevDetails.worked_extended_day;
-  const lessonsToday = prevDetails.lessons_count || 0;
-  const nextStatus = (nextExt || lessonsToday > 0) ? "present" : "absent";
-  days[dateStr] = nextStatus;
-  window._staffCalLessonDetails[dateStr] = { lessons_count: prevDetails.lessons_count, worked_extended_day: nextExt };
-  renderStaffCalendarModal();
-
-  try {
-    const resp = await fetch(API_URL + "/payroll/attendance", {
-      method: "POST",
-      headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({staff_id: s.id, date: dateStr, status: nextStatus, lessons_count: prevDetails.lessons_count, worked_extended_day: nextExt})
-    });
-    const data = await resp.json();
-    if(!data.ok) throw new Error(data.error || "save failed");
-    await loadStaffMonth();
-  } catch(e) {
-    console.error("toggleExtendedDay error:", e);
     days[dateStr] = prevStatus;
     window._staffCalLessonDetails[dateStr] = prevDetails;
     renderStaffCalendarModal();
@@ -2446,10 +2413,10 @@ function renderStaffCalendarModal() {
     const bg = isFuture ? "transparent" : status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface2)";
     const color = isFuture ? "var(--text2)" : "var(--text)";
     const cursor = (isFuture || readOnly) ? "default" : "pointer";
-    // Нулёвка (есть ставка за урок) — тап по дню не переключает пришла/нет,
-    // а спрашивает число уроков (см. promptLessonCount); обычный цикл
-    // present/absent/замена тут не подходит, там просто число.
-    const onclick = (isFuture || readOnly) ? "" : (s.lesson_rate
+    // Нулёвка (есть ставка за урок и/или продлёнку) — тап по дню не
+    // переключает пришла/нет циклом, а спрашивает число уроков и/или
+    // продлёнку одним диалогом (см. promptLessonCount).
+    const onclick = (isFuture || readOnly) ? "" : ((s.lesson_rate || s.extended_day_rate)
       ? `onclick="promptLessonCount('${dateStr}')"`
       : `onclick="toggleStaffAttDay('${dateStr}')"`);
     // Бейдж замены — только у "за смену", только когда замена реально стоит.
@@ -2473,17 +2440,16 @@ function renderStaffCalendarModal() {
     const lessonBadge = (!isFuture && s.lesson_rate && lessonCount != null && lessonCount > 0)
       ? `<span style="position:absolute;bottom:1px;right:2px;font-size:8px;font-weight:700;color:var(--accent);line-height:1">${lessonCount}у</span>`
       : "";
-    // Продлёнка — отдельная кнопка снизу-слева, кликабельна независимо от
-    // основного тапа по клетке (stopPropagation), только когда у сотрудника
-    // вообще есть ставка за продлёнку.
+    // Бейдж продлёнки — сверху справа, как и бейдж замены: чисто
+    // информационный, не кликабельный, виден только когда реально стоит.
+    // Ввод — через тот же диалог, что и уроки (promptLessonCount).
     const isExt = !!lessonInfo.worked_extended_day;
-    const showExtBadge = !isFuture && !readOnly && s.extended_day_rate && (isExt || s.lesson_rate || s.pay_type !== "per_shift");
+    const showExtBadge = !isFuture && s.extended_day_rate && isExt;
     const extBadge = showExtBadge
-      ? `<span onclick="event.stopPropagation();toggleExtendedDay('${dateStr}')" title="Продлёнка" ` +
-        `style="position:absolute;bottom:-3px;left:-3px;width:14px;height:14px;border-radius:50%;` +
-        `background:${isExt ? "var(--accent)" : "var(--surface)"};border:1px solid ${isExt ? "var(--accent)" : "var(--border)"};` +
-        `color:${isExt ? "#fff" : "var(--text2)"};display:flex;align-items:center;justify-content:center;` +
-        `font-size:7px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25);opacity:${isExt ? 1 : .6}">П</span>`
+      ? `<span title="Продлёнка" ` +
+        `style="position:absolute;top:-3px;right:-3px;width:14px;height:14px;border-radius:50%;` +
+        `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
+        `font-size:8px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">П</span>`
       : "";
     grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}${lessonBadge}${extBadge}</div>`;
   });
@@ -2536,11 +2502,10 @@ function renderStaffCalendarModal() {
     (s.pay_type === "per_shift"
       ? '<div style="margin-top:8px;font-size:11px;color:var(--text2)">🔄 в углу дня — отметить замену воспитателя (другая ставка)</div>'
       : "") +
-    (s.lesson_rate
-      ? '<div style="margin-top:6px;font-size:11px;color:var(--text2)">Тап по дню — указать число уроков</div>'
-      : "") +
-    (s.extended_day_rate
-      ? '<div style="margin-top:6px;font-size:11px;color:var(--text2)">П в углу дня — отметить продлёнку</div>'
+    ((s.lesson_rate || s.extended_day_rate)
+      ? '<div style="margin-top:6px;font-size:11px;color:var(--text2)">Тап по дню — указать' +
+        (s.lesson_rate ? ' число уроков' : '') + (s.lesson_rate && s.extended_day_rate ? ' и' : '') +
+        (s.extended_day_rate ? ' продлёнку' : '') + '</div>'
       : "");
 }
 
