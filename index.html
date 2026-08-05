@@ -392,6 +392,15 @@
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px" id="s_rate_label">Ставка в месяц (₫)</div>
     <input id="s_monthly_rate" type="number" inputmode="numeric" placeholder="10500000" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
   </div>
+  <div style="margin-bottom:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Ставка за урок (₫)</div>
+    <input id="s_lesson_rate" type="number" inputmode="numeric" placeholder="150000" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    <div style="font-size:11px;color:var(--text2);margin-top:5px">Только для Подготовительной группы — необязательно, можно и вместе с обычной ставкой</div>
+  </div>
+  <div style="margin-bottom:20px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Ставка за продлёнку (₫/день)</div>
+    <input id="s_extended_day_rate" type="number" inputmode="numeric" placeholder="200000" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+  </div>
   <button onclick="submitStaffForm()" class="btn-primary" style="width:100%;margin-bottom:10px" id="staffSubmitBtn">Добавить сотрудника</button>
   <button onclick="archiveStaffMember()" id="staffDeleteBtn" style="display:none;width:100%;padding:13px;border-radius:var(--radius-sm);border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;margin-bottom:80px">Архивировать</button>
   <div style="height:80px"></div>
@@ -2014,6 +2023,8 @@ function openEditStaffForm(id) {
   document.getElementById("s_contract_end").value = s.contract_end || "";
   document.getElementById("s_pay_type").value = s.pay_type || "monthly_fixed";
   document.getElementById("s_monthly_rate").value = s.monthly_rate || "";
+  document.getElementById("s_lesson_rate").value = s.lesson_rate || "";
+  document.getElementById("s_extended_day_rate").value = s.extended_day_rate || "";
   document.getElementById("s_telegram").value = s.telegram_id || "";
   updatePayTypeLabel();
   goTo("staff-form");
@@ -2029,7 +2040,7 @@ function updatePayTypeLabel() {
 }
 
 function clearStaffForm() {
-  ["s_name","s_surname","s_position","s_phone","s_contract_end","s_monthly_rate","s_telegram"].forEach(id => {
+  ["s_name","s_surname","s_position","s_phone","s_contract_end","s_monthly_rate","s_telegram","s_lesson_rate","s_extended_day_rate"].forEach(id => {
     document.getElementById(id).value = "";
   });
   document.getElementById("s_pay_type").value = "monthly_fixed";
@@ -2093,6 +2104,8 @@ async function submitStaffForm() {
   if(!firstName) { showToast("Введите имя сотрудника", true); return; }
 
   const rateRaw = document.getElementById("s_monthly_rate").value.trim();
+  const lessonRateRaw = document.getElementById("s_lesson_rate").value.trim();
+  const extDayRateRaw = document.getElementById("s_extended_day_rate").value.trim();
   const payload = {
     name,
     city: document.getElementById("s_city").value,
@@ -2101,6 +2114,8 @@ async function submitStaffForm() {
     contract_end: document.getElementById("s_contract_end").value.trim(),
     pay_type: document.getElementById("s_pay_type").value,
     monthly_rate: rateRaw ? Number(rateRaw) : null,
+    lesson_rate: lessonRateRaw ? Number(lessonRateRaw) : null,
+    extended_day_rate: extDayRateRaw ? Number(extDayRateRaw) : null,
     telegram_id: document.getElementById("s_telegram").value.trim(),
   };
 
@@ -2179,7 +2194,10 @@ async function openStaffCalendar(id) {
 // без зарплаты), в отличие от openStaffCalendar (админ, полный доступ).
 async function openMyAttendanceCalendar() {
   if(!staffInfo || !staffInfo.payroll_staff_id) return;
-  window._currentStaffForCalendar = { id: staffInfo.payroll_staff_id, name: staffInfo.name, position: staffInfo.role, pay_type: staffInfo.pay_type };
+  window._currentStaffForCalendar = {
+    id: staffInfo.payroll_staff_id, name: staffInfo.name, position: staffInfo.role, pay_type: staffInfo.pay_type,
+    lesson_rate: staffInfo.lesson_rate, extended_day_rate: staffInfo.extended_day_rate,
+  };
   window._staffCalReadOnly = true;
   const n = new Date();
   window._staffCalView = { year: n.getFullYear(), month: n.getMonth() };
@@ -2204,10 +2222,12 @@ async function loadStaffMonth() {
     });
     window._staffCalDays = data.ok ? data.days : {};
     window._staffCalSubstitutions = new Set(data.ok ? (data.substitutions || []) : []);
+    window._staffCalLessonDetails = data.ok ? (data.lesson_details || {}) : {};
   } catch(e) {
     console.error("Staff attendance:", e);
     window._staffCalDays = {};
     window._staffCalSubstitutions = new Set();
+    window._staffCalLessonDetails = {};
   }
   // ЗП считаем на бэкенде (payroll.calculate_salary), не дублируем формулу
   // (в т.ч. с учётом дней замены) в двух местах — риск разойтись.
@@ -2304,6 +2324,92 @@ async function toggleStaffAttDay(dateStr) {
   }
 }
 
+// Нулёвка: тап по дню спрашивает число уроков (не переключает пришла/нет
+// циклом, как toggleStaffAttDay — тут просто вводится число).
+async function promptLessonCount(dateStr) {
+  const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
+  if(dateStr > todayDMY) return;
+  const s = window._currentStaffForCalendar;
+  if(!s) return;
+  const lockKey = s.id + "|" + dateStr;
+  if(window._staffAttPending.has(lockKey)) return;
+
+  const prevDetails = window._staffCalLessonDetails[dateStr] || {};
+  const input = prompt("Сколько уроков провёл(а) " + dateStr + "? (0 — если не было)", prevDetails.lessons_count ?? "");
+  if(input === null) return; // отменил
+  const count = parseInt(input, 10);
+  if(isNaN(count) || count < 0) { showToast("Введите число 0 или больше", true); return; }
+
+  window._staffAttPending.add(lockKey);
+  const days = window._staffCalDays;
+  const prevStatus = days[dateStr];
+  const extToday = prevDetails.worked_extended_day || false;
+  const nextStatus = (count > 0 || extToday) ? "present" : "absent";
+  days[dateStr] = nextStatus;
+  window._staffCalLessonDetails[dateStr] = { lessons_count: count, worked_extended_day: extToday };
+  renderStaffCalendarModal();
+
+  try {
+    const resp = await fetch(API_URL + "/payroll/attendance", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({staff_id: s.id, date: dateStr, status: nextStatus, lessons_count: count, worked_extended_day: extToday})
+    });
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.error || "save failed");
+    await loadStaffMonth();
+  } catch(e) {
+    console.error("promptLessonCount error:", e);
+    days[dateStr] = prevStatus;
+    window._staffCalLessonDetails[dateStr] = prevDetails;
+    renderStaffCalendarModal();
+    showToast("Не удалось сохранить", true);
+  } finally {
+    window._staffAttPending.delete(lockKey);
+  }
+}
+
+// Продлёнка — независимый флаг на день, свой тап-таргет (кнопка в углу),
+// не завязан на promptLessonCount/toggleStaffAttDay.
+async function toggleExtendedDay(dateStr) {
+  const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
+  if(dateStr > todayDMY) return;
+  const s = window._currentStaffForCalendar;
+  if(!s) return;
+  const lockKey = s.id + "|ext|" + dateStr;
+  if(window._staffAttPending.has(lockKey)) return;
+  window._staffAttPending.add(lockKey);
+
+  const days = window._staffCalDays;
+  const prevStatus = days[dateStr];
+  const prevDetails = window._staffCalLessonDetails[dateStr] || {};
+  const nextExt = !prevDetails.worked_extended_day;
+  const lessonsToday = prevDetails.lessons_count || 0;
+  const nextStatus = (nextExt || lessonsToday > 0) ? "present" : "absent";
+  days[dateStr] = nextStatus;
+  window._staffCalLessonDetails[dateStr] = { lessons_count: prevDetails.lessons_count, worked_extended_day: nextExt };
+  renderStaffCalendarModal();
+
+  try {
+    const resp = await fetch(API_URL + "/payroll/attendance", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({staff_id: s.id, date: dateStr, status: nextStatus, lessons_count: prevDetails.lessons_count, worked_extended_day: nextExt})
+    });
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.error || "save failed");
+    await loadStaffMonth();
+  } catch(e) {
+    console.error("toggleExtendedDay error:", e);
+    days[dateStr] = prevStatus;
+    window._staffCalLessonDetails[dateStr] = prevDetails;
+    renderStaffCalendarModal();
+    showToast("Не удалось сохранить", true);
+  } finally {
+    window._staffAttPending.delete(lockKey);
+  }
+}
+
 function renderStaffCalendarModal() {
   const s = window._currentStaffForCalendar;
   const readOnly = !!window._staffCalReadOnly;
@@ -2340,7 +2446,12 @@ function renderStaffCalendarModal() {
     const bg = isFuture ? "transparent" : status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface2)";
     const color = isFuture ? "var(--text2)" : "var(--text)";
     const cursor = (isFuture || readOnly) ? "default" : "pointer";
-    const onclick = (isFuture || readOnly) ? "" : `onclick="toggleStaffAttDay('${dateStr}')"`;
+    // Нулёвка (есть ставка за урок) — тап по дню не переключает пришла/нет,
+    // а спрашивает число уроков (см. promptLessonCount); обычный цикл
+    // present/absent/замена тут не подходит, там просто число.
+    const onclick = (isFuture || readOnly) ? "" : (s.lesson_rate
+      ? `onclick="promptLessonCount('${dateStr}')"`
+      : `onclick="toggleStaffAttDay('${dateStr}')"`);
     // Бейдж замены — только у "за смену", только когда замена реально стоит.
     // Чисто информационный, не кликабельный нигде (ни у админа, ни у няни).
     // Как ставится/снимается: няня — только за сегодня, кнопкой на Home
@@ -2354,13 +2465,36 @@ function renderStaffCalendarModal() {
         `box-shadow:0 1px 3px rgba(0,0,0,.25)">` +
         SUBSTITUTION_ICON.replace('width="18" height="18"', 'width="9" height="9"') + '</span>'
       : "";
-    grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}</div>`;
+
+    // Нулёвка: число уроков — маленькая цифра снизу-справа (не кликабельна
+    // сама по себе, число меняется тапом по всей клетке — promptLessonCount).
+    const lessonInfo = (window._staffCalLessonDetails && window._staffCalLessonDetails[dateStr]) || {};
+    const lessonCount = lessonInfo.lessons_count;
+    const lessonBadge = (!isFuture && s.lesson_rate && lessonCount != null && lessonCount > 0)
+      ? `<span style="position:absolute;bottom:1px;right:2px;font-size:8px;font-weight:700;color:var(--accent);line-height:1">${lessonCount}у</span>`
+      : "";
+    // Продлёнка — отдельная кнопка снизу-слева, кликабельна независимо от
+    // основного тапа по клетке (stopPropagation), только когда у сотрудника
+    // вообще есть ставка за продлёнку.
+    const isExt = !!lessonInfo.worked_extended_day;
+    const showExtBadge = !isFuture && !readOnly && s.extended_day_rate && (isExt || s.lesson_rate || s.pay_type !== "per_shift");
+    const extBadge = showExtBadge
+      ? `<span onclick="event.stopPropagation();toggleExtendedDay('${dateStr}')" title="Продлёнка" ` +
+        `style="position:absolute;bottom:-3px;left:-3px;width:14px;height:14px;border-radius:50%;` +
+        `background:${isExt ? "var(--accent)" : "var(--surface)"};border:1px solid ${isExt ? "var(--accent)" : "var(--border)"};` +
+        `color:${isExt ? "#fff" : "var(--text2)"};display:flex;align-items:center;justify-content:center;` +
+        `font-size:7px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25);opacity:${isExt ? 1 : .6}">П</span>`
+      : "";
+    grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}${lessonBadge}${extBadge}</div>`;
   });
   grid += '</div>';
 
   const weekdays = weekdaysInMonth(year, month);
   const rate = s.monthly_rate ? Number(s.monthly_rate) : 0;
   const sal = window._staffCalSalary;
+  // Раньше проверяли только rate (обычная ставка) — у нулёвки её может не
+  // быть вообще, только ставка за урок/продлёнку, но ЗП всё равно считается.
+  const hasAnyRate = rate > 0 || !!s.lesson_rate || !!s.extended_day_rate;
 
   document.getElementById("modalContent").innerHTML =
     (readOnly ? "" : '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (s.position || "") + '</div>') +
@@ -2375,18 +2509,38 @@ function renderStaffCalendarModal() {
       '<span style="color:var(--text2)">Отработано (будних дней)</span>' +
       '<b>' + present + ' / ' + weekdays + '</b>' +
     '</div>' +
+    // Расшифровка уроков/продлёнки за месяц — только если у сотрудника
+    // вообще есть такие ставки, показываем даже в read-only (это просто
+    // сводка, не расчёт денег).
+    (s.lesson_rate ?
+      '<div style="display:flex;justify-content:space-between;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
+        '<span style="color:var(--text2)">Уроков за месяц</span>' +
+        '<b>' + (sal ? sal.lessons_total : "—") + '</b>' +
+      '</div>' : "") +
+    (s.extended_day_rate ?
+      '<div style="display:flex;justify-content:space-between;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
+        '<span style="color:var(--text2)">Дней продлёнки</span>' +
+        '<b>' + (sal ? sal.extended_days_total : "—") + '</b>' +
+      '</div>' : "") +
     // Зарплата — только в админском (не read-only) режиме, не для просмотра себя.
-    // Считается на бэкенде (payroll.calculate_salary), учитывает дни замены.
-    (readOnly ? "" : (rate > 0 && sal ?
+    // Считается на бэкенде (payroll.calculate_salary), учитывает дни замены,
+    // уроки и продлёнку.
+    (readOnly ? "" : (hasAnyRate && sal ?
       '<div style="display:flex;justify-content:space-between;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:14px">' +
         '<span style="color:var(--text2)">ЗП за месяц</span>' +
         '<b style="color:var(--accent2)">' + sal.salary.toLocaleString('ru-RU') + ' ₫</b>' +
       '</div>' :
-      rate > 0
+      hasAnyRate
         ? '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Считаем...</div>'
         : '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Ставка не задана — откройте карточку и укажите</div>')) +
     (s.pay_type === "per_shift"
       ? '<div style="margin-top:8px;font-size:11px;color:var(--text2)">🔄 в углу дня — отметить замену воспитателя (другая ставка)</div>'
+      : "") +
+    (s.lesson_rate
+      ? '<div style="margin-top:6px;font-size:11px;color:var(--text2)">Тап по дню — указать число уроков</div>'
+      : "") +
+    (s.extended_day_rate
+      ? '<div style="margin-top:6px;font-size:11px;color:var(--text2)">П в углу дня — отметить продлёнку</div>'
       : "");
 }
 
