@@ -2153,11 +2153,51 @@ async function loadStaffMonth() {
       return resp.json();
     });
     window._staffCalDays = data.ok ? data.days : {};
+    window._staffCalSubstitutions = new Set(data.ok ? (data.substitutions || []) : []);
   } catch(e) {
     console.error("Staff attendance:", e);
     window._staffCalDays = {};
+    window._staffCalSubstitutions = new Set();
+  }
+  // ЗП считаем на бэкенде (payroll.calculate_salary), не дублируем формулу
+  // (в т.ч. с учётом дней замены) в двух местах — риск разойтись.
+  window._staffCalSalary = null;
+  if(!window._staffCalReadOnly) {
+    try {
+      const salData = await withRetry(async () => {
+        const resp = await fetch(API_URL + "/payroll/salary?staff_id=" + s.id + "&year=" + year + "&month=" + (month + 1), {
+          headers: authHeaders()
+        });
+        if(!resp.ok) throw new Error("HTTP " + resp.status);
+        return resp.json();
+      });
+      window._staffCalSalary = salData.ok ? salData.salary : null;
+    } catch(e) {
+      console.error("Staff salary:", e);
+    }
   }
   renderStaffCalendarModal();
+}
+
+// Тап по значку 🔄 в углу дня (только per_shift, только уже отмеченный
+// "пришла" день) — переключает "в этот день замещала воспитателя".
+async function toggleSubstitution(dateStr) {
+  const s = window._currentStaffForCalendar;
+  if(!s || s.pay_type !== "per_shift") return;
+  const nextSub = !window._staffCalSubstitutions.has(dateStr);
+  try {
+    const resp = await fetch(API_URL + "/payroll/attendance", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({staff_id: s.id, date: dateStr, status: "present", is_substitution: nextSub})
+    });
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.error || "save failed");
+    await loadStaffMonth(); // подтягиваем и обновлённую ЗП, не только календарь
+  } catch(e) {
+    console.error("toggleSubstitution error:", e);
+    showToast("Не удалось сохранить", true);
+  }
 }
 
 function prevStaffMonth() {
@@ -2241,6 +2281,7 @@ function renderStaffCalendarModal() {
   DOW.forEach(d => grid += '<div style="text-align:center;font-size:10px;color:var(--text2);font-weight:600">' + d + '</div>');
   grid += '</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
 
+  const subs = window._staffCalSubstitutions || new Set();
   cells.forEach(d => {
     if(d === null) { grid += '<div></div>'; return; }
     const dateStr = fmtDMY(year, month, d);
@@ -2248,21 +2289,24 @@ function renderStaffCalendarModal() {
     const isFuture = dateStr > todayDMY;
     const isWknd = (() => { const dow = new Date(year, month, d).getDay(); return dow === 0 || dow === 6; })();
     if(status === "present") present++;
-    const bg = isFuture ? "transparent" : status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface2)";
+    const isSub = status === "present" && subs.has(dateStr);
+    const bg = isFuture ? "transparent" : isSub ? "rgba(255,180,0,.28)" : status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface2)";
     const color = isFuture ? "var(--text2)" : "var(--text)";
     const cursor = (isFuture || readOnly) ? "default" : "pointer";
     const onclick = (isFuture || readOnly) ? "" : `onclick="toggleStaffAttDay('${dateStr}')"`;
-    grid += `<div ${onclick} style="aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}</div>`;
+    // Значок замены — только у "за смену", только на уже отмеченный "пришла"
+    // день, отдельный тап (stopPropagation, чтобы не переключить present/absent).
+    const showSubBadge = !isFuture && !readOnly && status === "present" && s.pay_type === "per_shift";
+    const subBadge = showSubBadge
+      ? `<span onclick="event.stopPropagation();toggleSubstitution('${dateStr}')" title="Замена воспитателя" style="position:absolute;top:1px;right:2px;font-size:9px;line-height:1;opacity:${isSub?1:.3}">🔄</span>`
+      : "";
+    grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}</div>`;
   });
   grid += '</div>';
 
   const weekdays = weekdaysInMonth(year, month);
   const rate = s.monthly_rate ? Number(s.monthly_rate) : 0;
-  // За смену: ставка × дни присутствия, без деления на будние дни месяца
-  // (см. payroll.calculate_salary на бэкенде — та же логика).
-  const salary = s.pay_type === "per_shift"
-    ? Math.round(rate * present)
-    : (weekdays ? Math.round(rate / weekdays * present) : 0);
+  const sal = window._staffCalSalary;
 
   document.getElementById("modalContent").innerHTML =
     (readOnly ? "" : '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (s.position || "") + '</div>') +
@@ -2278,12 +2322,18 @@ function renderStaffCalendarModal() {
       '<b>' + present + ' / ' + weekdays + '</b>' +
     '</div>' +
     // Зарплата — только в админском (не read-only) режиме, не для просмотра себя.
-    (readOnly ? "" : (rate > 0 ?
+    // Считается на бэкенде (payroll.calculate_salary), учитывает дни замены.
+    (readOnly ? "" : (rate > 0 && sal ?
       '<div style="display:flex;justify-content:space-between;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:14px">' +
         '<span style="color:var(--text2)">ЗП за месяц</span>' +
-        '<b style="color:var(--accent2)">' + salary.toLocaleString('ru-RU') + ' ₫</b>' +
+        '<b style="color:var(--accent2)">' + sal.salary.toLocaleString('ru-RU') + ' ₫</b>' +
       '</div>' :
-      '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Ставка не задана — откройте карточку и укажите</div>'));
+      rate > 0
+        ? '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Считаем...</div>'
+        : '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Ставка не задана — откройте карточку и укажите</div>')) +
+    (s.pay_type === "per_shift" && !readOnly
+      ? '<div style="margin-top:8px;font-size:11px;color:var(--text2)">🔄 в углу дня — отметить замену воспитателя (другая ставка)</div>'
+      : "");
 }
 
 initStaff().then(() => loadChildren());
