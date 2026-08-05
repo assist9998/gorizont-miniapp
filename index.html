@@ -762,12 +762,12 @@ function renderHomeGreeting(total, present) {
             'padding:6px 14px 6px 6px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
               (staffInfo.lesson_rate ? BADGE_PILL((selfTodayLessonCount || 0) + "у", 20, 10.5) : "") +
               (staffInfo.extended_day_rate && selfTodayExt ? BADGE_PILL("Пр") : "") +
-              '<span>Уроки за сегодня</span>' +
+              '<span>Вы отмечены на сегодня</span>' +
             '</button>'
           : '<button onclick="openTodayLessonModal()" style="display:inline-flex;align-items:center;gap:8px;' +
             'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
             'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
-              CHECKIN_ICON + '<span>Указать уроки за сегодня</span>' +
+              CHECKIN_ICON + '<span>Отметить, что я сегодня на работе</span>' +
             '</button>')
       // И "отмечено", и кнопка — одинаковый inline-flex (не на всю ширину,
       // прижато влево), как пилюля "N/M детей пришли" выше — иначе при
