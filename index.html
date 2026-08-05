@@ -2495,25 +2495,26 @@ function renderStaffCalendarModal() {
         SUBSTITUTION_ICON.replace('width="18" height="18"', 'width="9" height="9"') + '</span>'
       : "";
 
-    // Нулёвка: число уроков — маленькая цифра снизу-справа (не кликабельна
-    // сама по себе, число меняется тапом по всей клетке — promptLessonCount).
+    // Нулёвка: число уроков — сверху справа (тот же угол, что и замена у
+    // других сотрудников — конфликта нет, это разные люди). Не кликабельна
+    // сама по себе, число меняется тапом по всей клетке — promptLessonCount.
     const lessonInfo = (window._staffCalLessonDetails && window._staffCalLessonDetails[dateStr]) || {};
     const lessonCount = lessonInfo.lessons_count;
     const lessonBadge = (!isFuture && s.lesson_rate && lessonCount != null && lessonCount > 0)
-      ? `<span style="position:absolute;bottom:-3px;right:-3px;min-width:14px;height:14px;padding:0 2px;border-radius:7px;` +
+      ? `<span style="position:absolute;top:-3px;right:-3px;min-width:14px;height:14px;padding:0 2px;border-radius:7px;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
         `font-size:8px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">${lessonCount}</span>`
       : "";
-    // Бейдж продлёнки — сверху справа, как и бейдж замены: чисто
-    // информационный, не кликабельный, виден только когда реально стоит.
+    // Бейдж продлёнки — справа посередине (не в угол, чтобы не пересекаться
+    // с бейджем уроков сверху справа). Чисто информационный, не кликабельный.
     // Ввод — через тот же диалог, что и уроки (promptLessonCount).
     const isExt = !!lessonInfo.worked_extended_day;
     const showExtBadge = !isFuture && s.extended_day_rate && isExt;
     const extBadge = showExtBadge
       ? `<span title="Продлёнка" ` +
-        `style="position:absolute;top:-3px;right:-3px;width:14px;height:14px;border-radius:50%;` +
+        `style="position:absolute;top:50%;right:-5px;transform:translateY(-50%);min-width:16px;height:14px;padding:0 2px;border-radius:7px;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
-        `font-size:8px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">П</span>`
+        `font-size:7px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">Пр</span>`
       : "";
     grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}${lessonBadge}${extBadge}</div>`;
   });
