@@ -2229,27 +2229,6 @@ async function loadStaffMonth() {
   renderStaffCalendarModal();
 }
 
-// Тап по значку 🔄 в углу дня (только per_shift, только уже отмеченный
-// "пришла" день) — переключает "в этот день замещала воспитателя".
-async function toggleSubstitution(dateStr) {
-  const s = window._currentStaffForCalendar;
-  if(!s || s.pay_type !== "per_shift") return;
-  const nextSub = !window._staffCalSubstitutions.has(dateStr);
-  try {
-    const resp = await fetch(API_URL + "/payroll/attendance", {
-      method: "POST",
-      headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({staff_id: s.id, date: dateStr, status: "present", is_substitution: nextSub})
-    });
-    const data = await resp.json();
-    if(!data.ok) throw new Error(data.error || "save failed");
-    await loadStaffMonth(); // подтягиваем и обновлённую ЗП, не только календарь
-  } catch(e) {
-    console.error("toggleSubstitution error:", e);
-    showToast("Не удалось сохранить", true);
-  }
-}
-
 function prevStaffMonth() {
   const v = window._staffCalView;
   v.month === 0 ? (v.year--, v.month = 11) : v.month--;
@@ -2285,23 +2264,39 @@ async function toggleStaffAttDay(dateStr) {
   window._staffAttPending.add(lockKey);
 
   const days = window._staffCalDays;
-  const cur = days[dateStr] === "present";
-  const nextStatus = cur ? "absent" : "present";
+  const subs = window._staffCalSubstitutions;
   const prevStatus = days[dateStr];
+  const prevSub = subs.has(dateStr);
+  let nextStatus, nextSub;
+  if(s.pay_type === "per_shift") {
+    // За смену — 3 состояния по кругу: нет/отсутствует -> пришла -> пришла+замена -> нет.
+    // Только тут (в календаре, доступ только у администратора) можно и
+    // поставить, и снять замену за ЛЮБОЙ день — сама няня так может только
+    // за сегодня, кнопкой на Home (toggleSelfSubstitution).
+    if(prevStatus !== "present") { nextStatus = "present"; nextSub = false; }
+    else if(!prevSub) { nextStatus = "present"; nextSub = true; }
+    else { nextStatus = "absent"; nextSub = false; }
+  } else {
+    nextStatus = prevStatus === "present" ? "absent" : "present";
+    nextSub = false;
+  }
   days[dateStr] = nextStatus;
+  if(nextSub) subs.add(dateStr); else subs.delete(dateStr);
   renderStaffCalendarModal();
 
   try {
     const resp = await fetch(API_URL + "/payroll/attendance", {
       method: "POST",
       headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({staff_id: s.id, date: dateStr, status: nextStatus})
+      body: JSON.stringify({staff_id: s.id, date: dateStr, status: nextStatus, is_substitution: nextSub})
     });
     const data = await resp.json();
     if(!data.ok) throw new Error(data.error || "save failed");
+    await loadStaffMonth(); // подтягиваем пересчитанную ЗП с бэкенда, не только клетку
   } catch(e) {
     console.error("toggleStaffAttDay error:", e);
     days[dateStr] = prevStatus;
+    if(prevSub) subs.add(dateStr); else subs.delete(dateStr);
     renderStaffCalendarModal();
     showToast("Не удалось сохранить", true);
   } finally {
@@ -2346,19 +2341,17 @@ function renderStaffCalendarModal() {
     const color = isFuture ? "var(--text2)" : "var(--text)";
     const cursor = (isFuture || readOnly) ? "default" : "pointer";
     const onclick = (isFuture || readOnly) ? "" : `onclick="toggleStaffAttDay('${dateStr}')"`;
-    // Бейдж замены — только у "за смену", только на уже отмеченный "пришла"
-    // день, отдельный тап (stopPropagation, чтобы не переключить present/absent).
-    // Доступен и в read-only самопросмотре — няня сама отмечает, когда
-    // замещала воспитателя (в отличие от present/absent и зарплаты, которые
-    // в самопросмотре остаются недоступны). Всегда виден (не только когда
-    // включён) — иначе некуда тапнуть, чтобы включить замену в первый раз.
-    const showSubBadge = !isFuture && status === "present" && s.pay_type === "per_shift";
+    // Бейдж замены — только у "за смену", только когда замена реально стоит.
+    // Чисто информационный, не кликабельный нигде (ни у админа, ни у няни).
+    // Как ставится/снимается: няня — только за сегодня, кнопкой на Home
+    // (toggleSelfSubstitution). Админ — тапом по самой клетке дня в этом
+    // календаре (toggleStaffAttDay, 3-позиционный цикл для per_shift).
+    const showSubBadge = !isFuture && status === "present" && s.pay_type === "per_shift" && isSub;
     const subBadge = showSubBadge
-      ? `<span onclick="event.stopPropagation();toggleSubstitution('${dateStr}')" title="Замена воспитателя" ` +
+      ? `<span title="Замена воспитателя" ` +
         `style="position:absolute;top:-3px;right:-3px;width:14px;height:14px;border-radius:50%;` +
-        `background:${isSub ? "var(--accent2)" : "var(--surface)"};border:1px solid ${isSub ? "var(--accent2)" : "var(--border)"};` +
-        `color:${isSub ? "#0f1117" : "var(--text2)"};display:flex;align-items:center;justify-content:center;` +
-        `box-shadow:0 1px 3px rgba(0,0,0,.25);opacity:${isSub ? 1 : .6}">` +
+        `background:var(--accent2);color:#0f1117;display:flex;align-items:center;justify-content:center;` +
+        `box-shadow:0 1px 3px rgba(0,0,0,.25)">` +
         SUBSTITUTION_ICON.replace('width="18" height="18"', 'width="9" height="9"') + '</span>'
       : "";
     grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}</div>`;
