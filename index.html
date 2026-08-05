@@ -2296,7 +2296,10 @@ function renderStaffCalendarModal() {
     const onclick = (isFuture || readOnly) ? "" : `onclick="toggleStaffAttDay('${dateStr}')"`;
     // Значок замены — только у "за смену", только на уже отмеченный "пришла"
     // день, отдельный тап (stopPropagation, чтобы не переключить present/absent).
-    const showSubBadge = !isFuture && !readOnly && status === "present" && s.pay_type === "per_shift";
+    // Доступен и в read-only самопросмотре — няня сама отмечает, когда
+    // замещала воспитателя (в отличие от present/absent и зарплаты, которые
+    // в самопросмотре остаются недоступны).
+    const showSubBadge = !isFuture && status === "present" && s.pay_type === "per_shift";
     const subBadge = showSubBadge
       ? `<span onclick="event.stopPropagation();toggleSubstitution('${dateStr}')" title="Замена воспитателя" style="position:absolute;top:1px;right:2px;font-size:9px;line-height:1;opacity:${isSub?1:.3}">🔄</span>`
       : "";
@@ -2331,7 +2334,7 @@ function renderStaffCalendarModal() {
       rate > 0
         ? '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Считаем...</div>'
         : '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Ставка не задана — откройте карточку и укажите</div>')) +
-    (s.pay_type === "per_shift" && !readOnly
+    (s.pay_type === "per_shift"
       ? '<div style="margin-top:8px;font-size:11px;color:var(--text2)">🔄 в углу дня — отметить замену воспитателя (другая ставка)</div>'
       : "");
 }
