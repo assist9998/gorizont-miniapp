@@ -428,7 +428,8 @@
 <div class="modal-overlay" id="lessonModalOverlay" onclick="if(event.target===this) closeLessonModal()">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-name" id="lessonModalDate">Дата</div>
+    <div class="modal-name" id="lessonModalTitle">Сколько уроков?</div>
+    <div style="font-size:13px;color:var(--text2);margin-top:-8px;margin-bottom:14px" id="lessonModalDate">Дата</div>
     <div id="lessonModalContent"></div>
   </div>
 </div>
@@ -2339,6 +2340,14 @@ async function toggleStaffAttDay(dateStr) {
 // только отсюда.
 const LESSON_COUNT_OPTIONS = [0, 1, 2, 3, 4, 5];
 
+// Тот же значок-пилюля, что на бейджах в клетках календаря ("Nу" / "Пр"),
+// для сводки уроков/продлёнки за месяц — визуально одна и та же метка.
+function BADGE_PILL(label) {
+  return `<span style="min-width:14px;height:14px;padding:0 4px;border-radius:7px;` +
+    `background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;` +
+    `font-size:9px;font-weight:800">${label}</span>`;
+}
+
 function promptLessonCount(dateStr) {
   const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
   if(dateStr > todayDMY) return;
@@ -2348,7 +2357,11 @@ function promptLessonCount(dateStr) {
   window._lessonModalDate = dateStr;
   window._lessonModalCount = prevDetails.lessons_count ?? null;
   window._lessonModalExt = prevDetails.worked_extended_day || false;
-  document.getElementById("lessonModalDate").textContent = dateStr;
+  const isToday = dateStr === todayDMY;
+  document.getElementById("lessonModalTitle").textContent = s.lesson_rate
+    ? (isToday ? "Сколько уроков было сегодня?" : "Сколько уроков было проведено?")
+    : "Была продлёнка?";
+  document.getElementById("lessonModalDate").textContent = isToday ? "Сегодня, " + dateStr : dateStr;
   renderLessonModal();
   document.getElementById("lessonModalOverlay").classList.add("show");
 }
@@ -2372,9 +2385,10 @@ function renderLessonModal() {
   const count = window._lessonModalCount;
   const ext = window._lessonModalExt;
 
+  // Заголовок модалки уже озвучивает вопрос ("Сколько уроков было...?"),
+  // отдельная подпись-капс над кнопками была бы дублем — убрана.
   const countRow = s.lesson_rate
-    ? '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Сколько уроков</div>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">' +
+    ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">' +
       LESSON_COUNT_OPTIONS.map(n =>
         `<button onclick="pickLessonCount(${n})" style="width:44px;height:44px;border-radius:50%;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;` +
         (count === n
@@ -2385,8 +2399,10 @@ function renderLessonModal() {
       '</div>'
     : "";
 
+  // Подпись "Продлёнка" нужна только когда над ней уже есть блок уроков —
+  // иначе (только продлёнка) вопрос уже в заголовке модалки, дублировать не надо.
   const extRow = s.extended_day_rate
-    ? '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Продлёнка</div>' +
+    ? (s.lesson_rate ? '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Продлёнка</div>' : "") +
       `<button onclick="toggleLessonExt()" style="display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:9px 16px;` +
       'font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:18px;' +
       (ext
@@ -2501,18 +2517,21 @@ function renderStaffCalendarModal() {
     const lessonInfo = (window._staffCalLessonDetails && window._staffCalLessonDetails[dateStr]) || {};
     const lessonCount = lessonInfo.lessons_count;
     const lessonBadge = (!isFuture && s.lesson_rate && lessonCount != null && lessonCount > 0)
-      ? `<span style="position:absolute;top:-3px;right:-3px;min-width:14px;height:14px;padding:0 2px;border-radius:7px;` +
+      ? `<span style="position:absolute;top:-3px;right:-3px;z-index:2;min-width:14px;height:14px;padding:0 2px;border-radius:7px;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
-        `font-size:8px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">${lessonCount}</span>`
+        `font-size:8px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">${lessonCount}у</span>`
       : "";
     // Бейдж продлёнки — справа посередине (не в угол, чтобы не пересекаться
     // с бейджем уроков сверху справа). Чисто информационный, не кликабельный.
-    // Ввод — через тот же диалог, что и уроки (promptLessonCount).
+    // Ввод — через тот же диалог, что и уроки (promptLessonCount). z-index и
+    // небольшой заход за границу клетки — специально: пользователь ок с тем,
+    // что бейдж чуть-чуть залезает на соседнюю клетку справа, лишь бы не
+    // обрезался под ней.
     const isExt = !!lessonInfo.worked_extended_day;
     const showExtBadge = !isFuture && s.extended_day_rate && isExt;
     const extBadge = showExtBadge
       ? `<span title="Продлёнка" ` +
-        `style="position:absolute;top:50%;right:-5px;transform:translateY(-50%);min-width:16px;height:14px;padding:0 2px;border-radius:7px;` +
+        `style="position:absolute;top:50%;right:-7px;transform:translateY(-50%);z-index:2;min-width:16px;height:14px;padding:0 2px;border-radius:7px;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
         `font-size:7px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">Пр</span>`
       : "";
@@ -2544,14 +2563,16 @@ function renderStaffCalendarModal() {
     // вообще есть такие ставки, показываем даже в read-only (это просто
     // сводка, не расчёт денег).
     (s.lesson_rate ?
-      '<div style="display:flex;justify-content:space-between;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
         '<span style="color:var(--text2)">Уроков за месяц</span>' +
-        '<b>' + (sal ? sal.lessons_total : "—") + '</b>' +
+        '<b style="display:flex;align-items:center;gap:5px">' + (sal ? sal.lessons_total : "—") +
+        (sal ? BADGE_PILL("у") : "") + '</b>' +
       '</div>' : "") +
     (s.extended_day_rate ?
-      '<div style="display:flex;justify-content:space-between;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
         '<span style="color:var(--text2)">Дней продлёнки</span>' +
-        '<b>' + (sal ? sal.extended_days_total : "—") + '</b>' +
+        '<b style="display:flex;align-items:center;gap:5px">' + (sal ? sal.extended_days_total : "—") +
+        (sal ? BADGE_PILL("Пр") : "") + '</b>' +
       '</div>' : "") +
     // Зарплата — только в админском (не read-only) режиме, не для просмотра себя.
     // Считается на бэкенде (payroll.calculate_salary), учитывает дни замены,
