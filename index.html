@@ -390,16 +390,16 @@
     <select id="s_pay_type" onchange="updatePayTypeLabel()" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
       <option value="monthly_fixed">Месячный фикс</option>
       <option value="per_shift">За смену</option>
+      <option value="per_lesson">За урок</option>
     </select>
   </div>
-  <div style="margin-bottom:20px">
+  <div style="margin-bottom:20px" id="s_monthly_rate_group">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px" id="s_rate_label">Ставка в месяц (₫)</div>
     <input id="s_monthly_rate" type="number" inputmode="numeric" placeholder="10500000" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
   </div>
-  <div style="margin-bottom:12px">
+  <div style="margin-bottom:20px;display:none" id="s_lesson_rate_group">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Ставка за урок (₫)</div>
     <input id="s_lesson_rate" type="number" inputmode="numeric" placeholder="150000" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
-    <div style="font-size:11px;color:var(--text2);margin-top:5px">Только для Подготовительной группы — необязательно, можно и вместе с обычной ставкой</div>
   </div>
   <div style="margin-bottom:20px">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Ставка за продлёнку (₫/день)</div>
@@ -2324,8 +2324,14 @@ function openEditStaffForm(id) {
 // Ставка одна и та же колонка (monthly_rate) что для "в месяц", что для
 // "за смену" — меняется только подпись поля, единица измерения зависит
 // от выбранного типа оплаты (см. payroll.calculate_salary на бэкенде).
+// "За урок" — отдельный тип оплаты (не довесок поверх других, как продлёнка
+// и переработка): у сотрудника либо ставка в месяц/за смену, либо ставка за
+// урок, не оба сразу — переключатель показывает ровно одно поле.
 function updatePayTypeLabel() {
   const payType = document.getElementById("s_pay_type").value;
+  const isPerLesson = payType === "per_lesson";
+  document.getElementById("s_monthly_rate_group").style.display = isPerLesson ? "none" : "";
+  document.getElementById("s_lesson_rate_group").style.display = isPerLesson ? "" : "none";
   document.getElementById("s_rate_label").textContent =
     payType === "per_shift" ? "Ставка за смену (₫)" : "Ставка в месяц (₫)";
 }
@@ -2394,19 +2400,23 @@ async function submitStaffForm() {
   const name = surname ? `${firstName} ${surname}` : firstName;
   if(!firstName) { showToast("Введите имя сотрудника", true); return; }
 
+  const payType = document.getElementById("s_pay_type").value;
   const rateRaw = document.getElementById("s_monthly_rate").value.trim();
   const lessonRateRaw = document.getElementById("s_lesson_rate").value.trim();
   const extDayRateRaw = document.getElementById("s_extended_day_rate").value.trim();
   const overtimeRateRaw = document.getElementById("s_overtime_rate").value.trim();
+  // "За урок" — отдельный тип оплаты, а не довесок: только одно из двух
+  // полей реально относится к текущему типу, второе игнорируем (даже если
+  // в скрытом инпуте осталось старое значение от предыдущего выбора).
   const payload = {
     name,
     city: document.getElementById("s_city").value,
     position: document.getElementById("s_position").value.trim(),
     phone: document.getElementById("s_phone").value.trim(),
     contract_end: document.getElementById("s_contract_end").value.trim(),
-    pay_type: document.getElementById("s_pay_type").value,
-    monthly_rate: rateRaw ? Number(rateRaw) : null,
-    lesson_rate: lessonRateRaw ? Number(lessonRateRaw) : null,
+    pay_type: payType,
+    monthly_rate: payType === "per_lesson" ? null : (rateRaw ? Number(rateRaw) : null),
+    lesson_rate: payType === "per_lesson" ? (lessonRateRaw ? Number(lessonRateRaw) : null) : null,
     extended_day_rate: extDayRateRaw ? Number(extDayRateRaw) : null,
     overtime_rate: overtimeRateRaw ? Number(overtimeRateRaw) : null,
     telegram_id: document.getElementById("s_telegram").value.trim(),
