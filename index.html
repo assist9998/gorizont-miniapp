@@ -759,9 +759,10 @@ function renderHomeGreeting(total, present) {
       ? (selfAttendanceMarked
           ? '<button onclick="openTodayLessonModal()" style="display:inline-flex;align-items:center;gap:6px;' +
             'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
-            'padding:6px 14px 6px 6px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
+            'padding:6px 14px 6px 8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
+              '<span style="color:var(--accent2);display:flex">' + CHECKIN_ICON + '</span>' +
               (staffInfo.lesson_rate ? BADGE_PILL((selfTodayLessonCount || 0) + "у", 20, 10.5) : "") +
-              (staffInfo.extended_day_rate && selfTodayExt ? BADGE_PILL("Пр") : "") +
+              (staffInfo.extended_day_rate && selfTodayExt ? BADGE_PILL("Пр", 20, 10.5) : "") +
               '<span>Вы отмечены на сегодня</span>' +
             '</button>'
           : '<button onclick="openTodayLessonModal()" style="display:inline-flex;align-items:center;gap:8px;' +
@@ -2548,7 +2549,10 @@ function renderStaffCalendarModal() {
     const isSub = status === "present" && subs.has(dateStr);
     // Замена НЕ меняет цвет клетки — остаётся обычный зелёный "пришла",
     // отличается только маленьким бейджиком в углу (см. ниже).
-    const bg = isFuture ? "transparent" : status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface2)";
+    // "Absent" отдельным цветом не заливаем — по просьбе пользователя: если
+    // человека нет, клетка выглядит так же, как день вообще без отметки
+    // (var(--surface2)), красная заливка только путала.
+    const bg = isFuture ? "transparent" : status === "present" ? "rgba(56,217,169,.25)" : "var(--surface2)";
     const color = isFuture ? "var(--text2)" : "var(--text)";
     // Нулёвка (есть ставка за урок и/или продлёнку) — тап по дню не
     // переключает пришла/нет циклом, а спрашивает число уроков и/или
@@ -2646,7 +2650,7 @@ function renderStaffCalendarModal() {
     (s.extended_day_rate ?
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
         '<span style="color:var(--text2);display:flex;align-items:center;gap:6px">Дней продлёнки' +
-        BADGE_PILL("Пр") + '</span>' +
+        BADGE_PILL("Пр", 20, 10.5) + '</span>' +
         '<b>' + extDaysTotal + '</b>' +
       '</div>' : "") +
     // Зарплата — только в админском (не read-only) режиме, не для просмотра себя.
