@@ -402,6 +402,11 @@
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Ставка за продлёнку (₫/день)</div>
     <input id="s_extended_day_rate" type="number" inputmode="numeric" placeholder="200000" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
   </div>
+  <div style="margin-bottom:20px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Ставка за переработку (₫/день)</div>
+    <input id="s_overtime_rate" type="number" inputmode="numeric" placeholder="190000" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    <div style="font-size:11px;color:var(--text2);margin-top:5px">Необязательно — фикс. доплата за день, если задержался дольше обычного</div>
+  </div>
   <button onclick="submitStaffForm()" class="btn-primary" style="width:100%;margin-bottom:10px" id="staffSubmitBtn">Добавить сотрудника</button>
   <button onclick="archiveStaffMember()" id="staffDeleteBtn" style="display:none;width:100%;padding:13px;border-radius:var(--radius-sm);border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;margin-bottom:80px">Архивировать</button>
   <div style="height:80px"></div>
@@ -593,6 +598,16 @@ const CHECKIN_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none
 const SUBSTITUTION_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
   '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>' +
   '<polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>' +
+  '</svg>';
+// "Переработка" — вторая круглая кнопка рядом с самоотметкой (project_gorizont_payroll,
+// только у тех, кому задана ставка overtime_rate), см. renderHomeGreeting.
+const OVERTIME_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>' +
+  '</svg>';
+// "≡" — раскрывает кружки замены/переработки на Home, чтобы не занимать
+// строку двумя кнопками сразу у тех, кому доступно и то и другое.
+const EXPAND_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>' +
   '</svg>';
 
 let children = [];
@@ -787,16 +802,34 @@ function renderHomeGreeting(total, present) {
               CHECKIN_ICON + '<span>Отметить, что я сегодня на работе</span>' +
             '</button>');
 
-    // Круглая кнопка "замена воспитателя" — только у "за смену", и только
-    // когда сегодня уже отмечена (иначе заменять нечего).
-    const subBtn = (staffInfo.pay_type === "per_shift" && selfAttendanceMarked)
-      ? '<button onclick="toggleSelfSubstitution()" title="Замена воспитателя сегодня" style="display:flex;align-items:center;justify-content:center;' +
+    // Замена (только "за смену") и переработка (только если задана ставка
+    // overtime_rate) — обе доступны лишь когда сегодня уже отмечена (иначе
+    // нечего отмечать сверху). У человека может быть 0, 1 или обе
+    // возможности сразу — если хотя бы одна есть, показываем значок "≡",
+    // тап по нему разворачивает ровно те кружки, что применимы.
+    const canSub = staffInfo.pay_type === "per_shift" && selfAttendanceMarked;
+    const canOvertime = !!staffInfo.overtime_rate && selfAttendanceMarked;
+    let extrasBtn = "";
+    if(canSub || canOvertime) {
+      const expandBtn = '<button onclick="toggleHomeExtrasExpanded()" title="Ещё" style="display:flex;align-items:center;justify-content:center;' +
         'width:34px;height:34px;flex-shrink:0;border:none;border-radius:50%;cursor:pointer;' +
-        'background:' + (selfSubstitutionMarked ? 'var(--accent2)' : 'rgba(255,255,255,.22)') + ';' +
-        'color:' + (selfSubstitutionMarked ? '#0f1117' : '#fff') + '">' + SUBSTITUTION_ICON + '</button>'
-      : '';
+        'background:rgba(255,255,255,.22);color:#fff">' + EXPAND_ICON + '</button>';
+      const subBtn = canSub
+        ? '<button onclick="toggleSelfSubstitution()" title="Замена воспитателя сегодня" style="display:flex;align-items:center;justify-content:center;' +
+          'width:34px;height:34px;flex-shrink:0;border:none;border-radius:50%;cursor:pointer;' +
+          'background:' + (selfSubstitutionMarked ? 'var(--accent2)' : 'rgba(255,255,255,.22)') + ';' +
+          'color:' + (selfSubstitutionMarked ? '#0f1117' : '#fff') + '">' + SUBSTITUTION_ICON + '</button>'
+        : '';
+      const otBtn = canOvertime
+        ? '<button onclick="toggleSelfOvertime()" title="Переработка сегодня" style="display:flex;align-items:center;justify-content:center;' +
+          'width:34px;height:34px;flex-shrink:0;border:none;border-radius:50%;cursor:pointer;' +
+          'background:' + (selfOvertimeMarked ? 'var(--accent2)' : 'rgba(255,255,255,.22)') + ';' +
+          'color:' + (selfOvertimeMarked ? '#0f1117' : '#fff') + '">' + OVERTIME_ICON + '</button>'
+        : '';
+      extrasBtn = expandBtn + (homeExtrasExpanded ? subBtn + otBtn : '');
+    }
 
-    selfRow = '<div style="display:flex;align-items:center;gap:8px;margin-top:10px">' + attBtn + subBtn + '</div>';
+    selfRow = '<div style="display:flex;align-items:center;gap:8px;margin-top:10px">' + attBtn + extrasBtn + '</div>';
   }
 
   el.innerHTML =
@@ -1618,8 +1651,17 @@ async function initStaff(){
 // selfAttendanceMarked хранит статус между перерисовками карточки.
 let selfAttendanceMarked = null; // null=ещё не знаем, true/false=известно
 let selfSubstitutionMarked = null; // то же самое, но "сегодня замещаю воспитателя" (только per_shift)
+let selfOvertimeMarked = null; // то же самое, но "сегодня переработка" (только если задана overtime_rate)
 let selfTodayLessonCount = null; // нулёвка: сколько уроков сегодня уже внесено (для кнопки на Home)
 let selfTodayExt = false; // нулёвка: была ли сегодня продлёнка
+// Кружки замены/переработки на Home спрятаны за "≡", пока не тапнули —
+// иначе строка с двумя лишними кнопками загромождает карточку у всех, у
+// кого обе возможности сразу.
+let homeExtrasExpanded = false;
+function toggleHomeExtrasExpanded() {
+  homeExtrasExpanded = !homeExtrasExpanded;
+  renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
+}
 
 async function initSelfAttendance() {
   if(!staffInfo || !staffInfo.payroll_staff_id) return;
@@ -1636,6 +1678,7 @@ async function initSelfAttendance() {
     });
     selfAttendanceMarked = data.ok && data.days && data.days[todayDmy] === "present";
     selfSubstitutionMarked = data.ok && Array.isArray(data.substitutions) && data.substitutions.includes(todayDmy);
+    selfOvertimeMarked = data.ok && Array.isArray(data.overtimes) && data.overtimes.includes(todayDmy);
     const todayLesson = data.ok && data.lesson_details ? data.lesson_details[todayDmy] : null;
     selfTodayLessonCount = todayLesson ? (todayLesson.lessons_count ?? null) : null;
     selfTodayExt = !!(todayLesson && todayLesson.worked_extended_day);
@@ -1643,6 +1686,7 @@ async function initSelfAttendance() {
     console.error("Self attendance check:", e);
     selfAttendanceMarked = false;
     selfSubstitutionMarked = false;
+    selfOvertimeMarked = false;
     selfTodayLessonCount = null;
     selfTodayExt = false;
   }
@@ -1660,6 +1704,7 @@ function openTodayLessonModal() {
   window._currentStaffForCalendar = {
     id: staffInfo.payroll_staff_id, name: staffInfo.name, pay_type: staffInfo.pay_type,
     lesson_rate: staffInfo.lesson_rate, extended_day_rate: staffInfo.extended_day_rate,
+    overtime_rate: staffInfo.overtime_rate,
   };
   window._staffCalReadOnly = true;
   window._staffCalView = { year: now.getFullYear(), month: now.getMonth() };
@@ -1667,6 +1712,7 @@ function openTodayLessonModal() {
   window._staffCalLessonDetails = window._staffCalLessonDetails || {};
   window._staffCalLessonDetails[todayDmy] = { lessons_count: selfTodayLessonCount, worked_extended_day: selfTodayExt };
   window._staffCalSubstitutions = window._staffCalSubstitutions || new Set();
+  window._staffCalOvertimes = window._staffCalOvertimes || new Set();
   promptLessonCount(todayDmy);
 }
 
@@ -1736,6 +1782,10 @@ async function toggleSelfSubstitution() {
         date: dateToDmy(now),
         status: "present",
         is_substitution: nextSub,
+        // Апсерт перезаписывает ВСЕ поля дня разом — не передать is_overtime
+        // здесь означало бы молча стереть уже стоящую сегодня переработку
+        // (независимый флаг, у человека может быть отмечено и то, и другое).
+        is_overtime: !!selfOvertimeMarked,
       }),
     });
     const result = await resp.json();
@@ -1743,6 +1793,38 @@ async function toggleSelfSubstitution() {
       selfSubstitutionMarked = nextSub;
       renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
       showToast(nextSub ? "Отмечено как замена" : "Отметка замены снята");
+    } else {
+      showToast("Не удалось сохранить", true);
+    }
+  } catch(e) {
+    showToast("Ошибка сети", true);
+  }
+}
+
+// Переработка — тот же паттерн, что и замена (toggleSelfSubstitution), но
+// это НЕЗАВИСИМЫЙ флаг: человек может в один день и заменять воспитателя, и
+// задержаться сверх обычного, поэтому оба тумблера шлют текущее значение
+// друг друга, чтобы не затирать соседний флаг при апсерте.
+async function toggleSelfOvertime() {
+  if(!staffInfo || !staffInfo.payroll_staff_id || !selfAttendanceMarked) return;
+  const nextOt = !selfOvertimeMarked;
+  try {
+    const resp = await fetch(API_URL + "/payroll/attendance", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        staff_id: staffInfo.payroll_staff_id,
+        date: dateToDmy(now),
+        status: "present",
+        is_overtime: nextOt,
+        is_substitution: !!selfSubstitutionMarked,
+      }),
+    });
+    const result = await resp.json();
+    if(result.ok) {
+      selfOvertimeMarked = nextOt;
+      renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
+      showToast(nextOt ? "Отмечено как переработка" : "Отметка переработки снята");
     } else {
       showToast("Не удалось сохранить", true);
     }
@@ -2084,6 +2166,7 @@ function openEditStaffForm(id) {
   document.getElementById("s_monthly_rate").value = s.monthly_rate || "";
   document.getElementById("s_lesson_rate").value = s.lesson_rate || "";
   document.getElementById("s_extended_day_rate").value = s.extended_day_rate || "";
+  document.getElementById("s_overtime_rate").value = s.overtime_rate || "";
   document.getElementById("s_telegram").value = s.telegram_id || "";
   updatePayTypeLabel();
   goTo("staff-form");
@@ -2099,7 +2182,7 @@ function updatePayTypeLabel() {
 }
 
 function clearStaffForm() {
-  ["s_name","s_surname","s_position","s_phone","s_contract_end","s_monthly_rate","s_telegram","s_lesson_rate","s_extended_day_rate"].forEach(id => {
+  ["s_name","s_surname","s_position","s_phone","s_contract_end","s_monthly_rate","s_telegram","s_lesson_rate","s_extended_day_rate","s_overtime_rate"].forEach(id => {
     document.getElementById(id).value = "";
   });
   document.getElementById("s_pay_type").value = "monthly_fixed";
@@ -2165,6 +2248,7 @@ async function submitStaffForm() {
   const rateRaw = document.getElementById("s_monthly_rate").value.trim();
   const lessonRateRaw = document.getElementById("s_lesson_rate").value.trim();
   const extDayRateRaw = document.getElementById("s_extended_day_rate").value.trim();
+  const overtimeRateRaw = document.getElementById("s_overtime_rate").value.trim();
   const payload = {
     name,
     city: document.getElementById("s_city").value,
@@ -2175,6 +2259,7 @@ async function submitStaffForm() {
     monthly_rate: rateRaw ? Number(rateRaw) : null,
     lesson_rate: lessonRateRaw ? Number(lessonRateRaw) : null,
     extended_day_rate: extDayRateRaw ? Number(extDayRateRaw) : null,
+    overtime_rate: overtimeRateRaw ? Number(overtimeRateRaw) : null,
     telegram_id: document.getElementById("s_telegram").value.trim(),
   };
 
@@ -2256,6 +2341,7 @@ async function openMyAttendanceCalendar() {
   window._currentStaffForCalendar = {
     id: staffInfo.payroll_staff_id, name: staffInfo.name, position: staffInfo.role, pay_type: staffInfo.pay_type,
     lesson_rate: staffInfo.lesson_rate, extended_day_rate: staffInfo.extended_day_rate,
+    overtime_rate: staffInfo.overtime_rate,
   };
   window._staffCalReadOnly = true;
   const n = new Date();
@@ -2282,11 +2368,13 @@ async function loadStaffMonth() {
     window._staffCalDays = data.ok ? data.days : {};
     window._staffCalSubstitutions = new Set(data.ok ? (data.substitutions || []) : []);
     window._staffCalLessonDetails = data.ok ? (data.lesson_details || {}) : {};
+    window._staffCalOvertimes = new Set(data.ok ? (data.overtimes || []) : []);
   } catch(e) {
     console.error("Staff attendance:", e);
     window._staffCalDays = {};
     window._staffCalSubstitutions = new Set();
     window._staffCalLessonDetails = {};
+    window._staffCalOvertimes = new Set();
   }
   // ЗП считаем на бэкенде (payroll.calculate_salary), не дублируем формулу
   // (в т.ч. с учётом дней замены) в двух местах — риск разойтись.
@@ -2344,30 +2432,44 @@ async function toggleStaffAttDay(dateStr) {
 
   const days = window._staffCalDays;
   const subs = window._staffCalSubstitutions;
+  const ots = window._staffCalOvertimes;
   const prevStatus = days[dateStr];
   const prevSub = subs.has(dateStr);
-  let nextStatus, nextSub;
-  if(s.pay_type === "per_shift") {
-    // За смену — 3 состояния по кругу: нет/отсутствует -> пришла -> пришла+замена -> нет.
-    // Только тут (в календаре, доступ только у администратора) можно и
-    // поставить, и снять замену за ЛЮБОЙ день — сама няня так может только
-    // за сегодня, кнопкой на Home (toggleSelfSubstitution).
-    if(prevStatus !== "present") { nextStatus = "present"; nextSub = false; }
-    else if(!prevSub) { nextStatus = "present"; nextSub = true; }
-    else { nextStatus = "absent"; nextSub = false; }
+  const prevOt = ots.has(dateStr);
+
+  // Общий цикл по кругу: нет -> пришла -> (пришла+замена) -> (пришла+переработка)
+  // -> (пришла+замена+переработка) -> нет. Какие из промежуточных состояний
+  // вообще существуют — зависит от того, что применимо этому сотруднику
+  // (замена — только "за смену", переработка — только если задана ставка).
+  // Только тут (в календаре, доступ только у администратора) можно поставить
+  // и снять оба флага за ЛЮБОЙ день — сам сотрудник так может только за
+  // сегодня, кнопками на Home (toggleSelfSubstitution/toggleSelfOvertime).
+  const canSub = s.pay_type === "per_shift";
+  const canOt = !!s.overtime_rate;
+  const variants = [{ sub: false, ot: false }];
+  if(canSub) variants.push({ sub: true, ot: false });
+  if(canOt) variants.push({ sub: false, ot: true });
+  if(canSub && canOt) variants.push({ sub: true, ot: true });
+
+  let nextStatus, nextSub, nextOt;
+  if(prevStatus !== "present") {
+    nextStatus = "present"; nextSub = false; nextOt = false;
   } else {
-    nextStatus = prevStatus === "present" ? "absent" : "present";
-    nextSub = false;
+    const curIdx = variants.findIndex(v => v.sub === prevSub && v.ot === prevOt);
+    const nextVariant = variants[curIdx + 1];
+    if(nextVariant) { nextStatus = "present"; nextSub = nextVariant.sub; nextOt = nextVariant.ot; }
+    else { nextStatus = "absent"; nextSub = false; nextOt = false; }
   }
   days[dateStr] = nextStatus;
   if(nextSub) subs.add(dateStr); else subs.delete(dateStr);
+  if(nextOt) ots.add(dateStr); else ots.delete(dateStr);
   renderStaffCalendarModal();
 
   try {
     const resp = await fetch(API_URL + "/payroll/attendance", {
       method: "POST",
       headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({staff_id: s.id, date: dateStr, status: nextStatus, is_substitution: nextSub})
+      body: JSON.stringify({staff_id: s.id, date: dateStr, status: nextStatus, is_substitution: nextSub, is_overtime: nextOt})
     });
     const data = await resp.json();
     if(!data.ok) throw new Error(data.error || "save failed");
@@ -2376,6 +2478,7 @@ async function toggleStaffAttDay(dateStr) {
     console.error("toggleStaffAttDay error:", e);
     days[dateStr] = prevStatus;
     if(prevSub) subs.add(dateStr); else subs.delete(dateStr);
+    if(prevOt) ots.add(dateStr); else ots.delete(dateStr);
     renderStaffCalendarModal();
     showToast("Не удалось сохранить", true);
   } finally {
@@ -2539,6 +2642,7 @@ function renderStaffCalendarModal() {
   grid += '</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
 
   const subs = window._staffCalSubstitutions || new Set();
+  const ots = window._staffCalOvertimes || new Set();
   cells.forEach(d => {
     if(d === null) { grid += '<div></div>'; return; }
     const dateStr = fmtDMY(year, month, d);
@@ -2547,6 +2651,7 @@ function renderStaffCalendarModal() {
     const isWknd = (() => { const dow = new Date(year, month, d).getDay(); return dow === 0 || dow === 6; })();
     if(status === "present") present++;
     const isSub = status === "present" && subs.has(dateStr);
+    const isOt = status === "present" && ots.has(dateStr);
     // Замена НЕ меняет цвет клетки — остаётся обычный зелёный "пришла",
     // отличается только маленьким бейджиком в углу (см. ниже).
     // "Absent" отдельным цветом не заливаем — по просьбе пользователя: если
@@ -2605,7 +2710,18 @@ function renderStaffCalendarModal() {
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
         `font-size:9px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">Пр</span>`
       : "";
-    grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}${lessonBadge}${extBadge}</div>`;
+    // Бейдж переработки — та же позиция и стиль, что у продлёнки (право-центр),
+    // без конфликта: продлёнка бывает только у нулёвки, переработка — у
+    // обычных сотрудников (лесенка уроков/продлёнки для нулёвки не показывается
+    // одновременно с переработкой у одного и того же человека).
+    const showOtBadge = !isFuture && s.overtime_rate && isOt;
+    const otBadge = showOtBadge
+      ? `<span title="Переработка" ` +
+        `style="position:absolute;top:18px;right:-7px;z-index:2;width:20px;height:20px;border-radius:50%;` +
+        `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
+        `font-size:12px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">+</span>`
+      : "";
+    grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}${lessonBadge}${extBadge}${otBadge}</div>`;
   });
   grid += '</div>';
 
@@ -2614,7 +2730,7 @@ function renderStaffCalendarModal() {
   const sal = window._staffCalSalary;
   // Раньше проверяли только rate (обычная ставка) — у нулёвки её может не
   // быть вообще, только ставка за урок/продлёнку, но ЗП всё равно считается.
-  const hasAnyRate = rate > 0 || !!s.lesson_rate || !!s.extended_day_rate;
+  const hasAnyRate = rate > 0 || !!s.lesson_rate || !!s.extended_day_rate || !!s.overtime_rate;
   // Уроки/продлёнку за месяц считаем прямо тут из уже загруженных
   // lesson_details, а не берём из sal (расчёт ЗП) — тот грузится только в
   // админском режиме (!readOnly), из-за чего в своём календаре (read-only)
@@ -2622,6 +2738,7 @@ function renderStaffCalendarModal() {
   const lessonDetailsAll = window._staffCalLessonDetails || {};
   const lessonsTotal = Object.values(lessonDetailsAll).reduce((sum, d) => sum + (d.lessons_count || 0), 0);
   const extDaysTotal = Object.values(lessonDetailsAll).reduce((sum, d) => sum + (d.worked_extended_day ? 1 : 0), 0);
+  const overtimeDaysTotal = (window._staffCalOvertimes || new Set()).size;
 
   document.getElementById("modalContent").innerHTML =
     (readOnly ? "" : '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (s.position || "") + '</div>') +
@@ -2653,6 +2770,12 @@ function renderStaffCalendarModal() {
         BADGE_PILL("Пр", 20, 10.5) + '</span>' +
         '<b>' + extDaysTotal + '</b>' +
       '</div>' : "") +
+    (s.overtime_rate ?
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
+        '<span style="color:var(--text2);display:flex;align-items:center;gap:6px">Дней переработки' +
+        BADGE_PILL("+", 20, 12) + '</span>' +
+        '<b>' + overtimeDaysTotal + '</b>' +
+      '</div>' : "") +
     // Зарплата — только в админском (не read-only) режиме, не для просмотра себя.
     // Считается на бэкенде (payroll.calculate_salary), учитывает дни замены,
     // уроки и продлёнку.
@@ -2664,8 +2787,11 @@ function renderStaffCalendarModal() {
       hasAnyRate
         ? '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Считаем...</div>'
         : '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Ставка не задана — откройте карточку и укажите</div>')) +
-    (s.pay_type === "per_shift"
-      ? '<div style="margin-top:8px;font-size:11px;color:var(--text2)">🔄 в углу дня — отметить замену воспитателя (другая ставка)</div>'
+    (s.pay_type === "per_shift" || s.overtime_rate
+      ? '<div style="margin-top:8px;font-size:11px;color:var(--text2)">Тап по дню — переключить' +
+        (s.pay_type === "per_shift" ? ' замену' : '') +
+        (s.pay_type === "per_shift" && s.overtime_rate ? ' и' : '') +
+        (s.overtime_rate ? ' переработку' : '') + '</div>'
       : "") +
     ((s.lesson_rate || s.extended_day_rate)
       ? '<div style="margin-top:6px;font-size:11px;color:var(--text2)">Тап по ' + (readOnly ? "сегодняшнему дню" : "дню") + ' — указать' +
