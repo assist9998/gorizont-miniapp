@@ -2333,6 +2333,7 @@ async function openStaffCalendar(id) {
   if(!s) return;
   window._currentStaffForCalendar = s;
   window._staffCalReadOnly = false;
+  window._staffSalaryExpanded = false;
   const n = new Date();
   window._staffCalView = { year: n.getFullYear(), month: n.getMonth() };
   document.getElementById("modalName").textContent = s.name;
@@ -2406,11 +2407,13 @@ async function loadStaffMonth() {
 function prevStaffMonth() {
   const v = window._staffCalView;
   v.month === 0 ? (v.year--, v.month = 11) : v.month--;
+  window._staffSalaryExpanded = false;
   loadStaffMonth();
 }
 function nextStaffMonth() {
   const v = window._staffCalView;
   v.month === 11 ? (v.year++, v.month = 0) : v.month++;
+  window._staffSalaryExpanded = false;
   loadStaffMonth();
 }
 
@@ -2626,6 +2629,16 @@ async function saveLessonDay() {
   }
 }
 
+// Тап по "ЗП за месяц" разворачивает построчный расчёт (см. комментарий
+// у самой строки в renderStaffCalendarModal). Сбрасывается при листании
+// месяца/открытии другой карточки — старым breakdown после смены данных
+// доверять нельзя, renderStaffCalendarModal сам обнулит при новом рендере
+// не требуется, флаг просто переживает до следующего toggle.
+function toggleSalaryBreakdown() {
+  window._staffSalaryExpanded = !window._staffSalaryExpanded;
+  renderStaffCalendarModal();
+}
+
 function renderStaffCalendarModal() {
   const s = window._currentStaffForCalendar;
   const readOnly = !!window._staffCalReadOnly;
@@ -2786,11 +2799,31 @@ function renderStaffCalendarModal() {
       '</div>' : "") +
     // Зарплата — только в админском (не read-only) режиме, не для просмотра себя.
     // Считается на бэкенде (payroll.calculate_salary), учитывает дни замены,
-    // уроки и продлёнку.
+    // уроки, продлёнку и переработку. Тап разворачивает построчный расчёт
+    // (sal.breakdown, тоже с бэкенда — не пересчитываем формулу на фронте,
+    // чтобы не разошлось с тем, что реально начислено), см. project_gorizont_payroll:
+    // "чтобы не брать калькулятор и не проверять".
     (readOnly ? "" : (hasAnyRate && sal ?
-      '<div style="display:flex;justify-content:space-between;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:14px">' +
-        '<span style="color:var(--text2)">ЗП за месяц</span>' +
-        '<b style="color:var(--accent2)">' + sal.salary.toLocaleString('ru-RU') + ' ₫</b>' +
+      '<div onclick="toggleSalaryBreakdown()" style="cursor:pointer;margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:14px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center">' +
+          '<span style="color:var(--text2);display:flex;align-items:center;gap:6px">ЗП за месяц' +
+            '<span style="transition:transform .15s;transform:rotate(' + (window._staffSalaryExpanded ? '180deg' : '0deg') + ');color:var(--text2);font-size:11px">▾</span>' +
+          '</span>' +
+          '<b style="color:var(--accent2)">' + sal.salary.toLocaleString('ru-RU') + ' ₫</b>' +
+        '</div>' +
+        (window._staffSalaryExpanded && Array.isArray(sal.breakdown)
+          ? '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">' +
+            sal.breakdown.map(row =>
+              '<div style="display:flex;flex-direction:column;padding:4px 0' + (row.isTotal ? ';margin-top:4px;border-top:1px dashed var(--border);padding-top:8px' : '') + '">' +
+                '<div style="display:flex;justify-content:space-between;font-size:12px' + (row.isTotal ? ';font-weight:700' : '') + '">' +
+                  '<span style="color:' + (row.isTotal ? 'var(--text)' : 'var(--text2)') + '">' + row.label + '</span>' +
+                  '<span style="color:' + (row.isTotal ? 'var(--accent2)' : 'var(--text)') + '">' + row.text + '</span>' +
+                '</div>' +
+                (row.note ? '<div style="font-size:10.5px;color:var(--text2);margin-top:1px">' + row.note + '</div>' : '') +
+              '</div>'
+            ).join('') +
+            '</div>'
+          : '') +
       '</div>' :
       hasAnyRate
         ? '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Считаем...</div>'
