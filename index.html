@@ -803,13 +803,15 @@ function renderHomeGreeting(total, present) {
             '</button>');
 
     // Замена (только "за смену") и переработка (только если задана ставка
-    // overtime_rate) — обе доступны лишь когда сегодня уже отмечена (иначе
-    // нечего отмечать сверху). "≡" оправдан только когда допов реально много
-    // (больше двух — например когда сюда же добавится третий вид) и прятать
-    // есть смысл; при 1-2 допах показываем кружки сразу рядом с отметкой,
-    // без лишнего тапа через меню.
-    const canSub = staffInfo.pay_type === "per_shift" && selfAttendanceMarked;
-    const canOvertime = !!staffInfo.overtime_rate && selfAttendanceMarked;
+    // overtime_rate) — видны сразу, не только после отметки "на работе":
+    // тап по любому из этих кружков сам ставит status=present (см.
+    // toggleSelfSubstitution/toggleSelfOvertime), отдельно отмечаться сначала
+    // не обязательно. "≡" оправдан только когда допов реально много (больше
+    // двух — например когда сюда же добавится третий вид) и прятать есть
+    // смысл; при 1-2 допах показываем кружки сразу рядом с отметкой, без
+    // лишнего тапа через меню.
+    const canSub = staffInfo.pay_type === "per_shift";
+    const canOvertime = !!staffInfo.overtime_rate;
     const extrasCount = (canSub ? 1 : 0) + (canOvertime ? 1 : 0);
     const useExpand = extrasCount > 2;
     let extrasBtn = "";
@@ -1774,7 +1776,7 @@ async function unmarkSelfAttendance() {
 // только если сегодняшний день уже отмечен "пришла" — замена без присутствия
 // не имеет смысла (см. status:"present" в теле запроса, как и в календаре).
 async function toggleSelfSubstitution() {
-  if(!staffInfo || !staffInfo.payroll_staff_id || !selfAttendanceMarked) return;
+  if(!staffInfo || !staffInfo.payroll_staff_id) return;
   const nextSub = !selfSubstitutionMarked;
   try {
     const resp = await fetch(API_URL + "/payroll/attendance", {
@@ -1794,6 +1796,7 @@ async function toggleSelfSubstitution() {
     const result = await resp.json();
     if(result.ok) {
       selfSubstitutionMarked = nextSub;
+      selfAttendanceMarked = true; // POST выше всегда шлёт status:"present"
       renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
       showToast(nextSub ? "Отмечено как замена" : "Отметка замены снята");
     } else {
@@ -1809,7 +1812,7 @@ async function toggleSelfSubstitution() {
 // задержаться сверх обычного, поэтому оба тумблера шлют текущее значение
 // друг друга, чтобы не затирать соседний флаг при апсерте.
 async function toggleSelfOvertime() {
-  if(!staffInfo || !staffInfo.payroll_staff_id || !selfAttendanceMarked) return;
+  if(!staffInfo || !staffInfo.payroll_staff_id) return;
   const nextOt = !selfOvertimeMarked;
   try {
     const resp = await fetch(API_URL + "/payroll/attendance", {
@@ -1826,6 +1829,7 @@ async function toggleSelfOvertime() {
     const result = await resp.json();
     if(result.ok) {
       selfOvertimeMarked = nextOt;
+      selfAttendanceMarked = true; // POST выше всегда шлёт status:"present"
       renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
       showToast(nextOt ? "Отмечено как переработка" : "Отметка переработки снята");
     } else {
