@@ -804,29 +804,32 @@ function renderHomeGreeting(total, present) {
 
     // Замена (только "за смену") и переработка (только если задана ставка
     // overtime_rate) — обе доступны лишь когда сегодня уже отмечена (иначе
-    // нечего отмечать сверху). У человека может быть 0, 1 или обе
-    // возможности сразу — если хотя бы одна есть, показываем значок "≡",
-    // тап по нему разворачивает ровно те кружки, что применимы.
+    // нечего отмечать сверху). "≡" оправдан только когда допов реально много
+    // (больше двух — например когда сюда же добавится третий вид) и прятать
+    // есть смысл; при 1-2 допах показываем кружки сразу рядом с отметкой,
+    // без лишнего тапа через меню.
     const canSub = staffInfo.pay_type === "per_shift" && selfAttendanceMarked;
     const canOvertime = !!staffInfo.overtime_rate && selfAttendanceMarked;
+    const extrasCount = (canSub ? 1 : 0) + (canOvertime ? 1 : 0);
+    const useExpand = extrasCount > 2;
     let extrasBtn = "";
-    if(canSub || canOvertime) {
-      const expandBtn = '<button onclick="toggleHomeExtrasExpanded()" title="Ещё" style="display:flex;align-items:center;justify-content:center;' +
-        'width:34px;height:34px;flex-shrink:0;border:none;border-radius:50%;cursor:pointer;' +
-        'background:rgba(255,255,255,.22);color:#fff">' + EXPAND_ICON + '</button>';
+    if(extrasCount > 0) {
+      const expandBtn = useExpand
+        ? '<button onclick="toggleHomeExtrasExpanded()" title="Ещё" style="display:flex;align-items:center;justify-content:center;' +
+          'width:34px;height:34px;flex-shrink:0;border:none;border-radius:50%;cursor:pointer;' +
+          'background:rgba(255,255,255,.22);color:#fff">' + EXPAND_ICON + '</button>'
+        : '';
       const subBtn = canSub
         ? '<button onclick="toggleSelfSubstitution()" title="Замена воспитателя сегодня" style="display:flex;align-items:center;justify-content:center;' +
-          'width:34px;height:34px;flex-shrink:0;border:none;border-radius:50%;cursor:pointer;' +
-          'background:' + (selfSubstitutionMarked ? 'var(--accent2)' : 'rgba(255,255,255,.22)') + ';' +
-          'color:' + (selfSubstitutionMarked ? '#0f1117' : '#fff') + '">' + SUBSTITUTION_ICON + '</button>'
+          'width:34px;height:34px;flex-shrink:0;border:none;border-radius:50%;cursor:pointer;color:#fff;' +
+          'background:' + (selfSubstitutionMarked ? 'var(--accent2)' : 'rgba(255,255,255,.22)') + '">' + SUBSTITUTION_ICON + '</button>'
         : '';
       const otBtn = canOvertime
         ? '<button onclick="toggleSelfOvertime()" title="Переработка сегодня" style="display:flex;align-items:center;justify-content:center;' +
-          'width:34px;height:34px;flex-shrink:0;border:none;border-radius:50%;cursor:pointer;' +
-          'background:' + (selfOvertimeMarked ? 'var(--accent2)' : 'rgba(255,255,255,.22)') + ';' +
-          'color:' + (selfOvertimeMarked ? '#0f1117' : '#fff') + '">' + OVERTIME_ICON + '</button>'
+          'width:34px;height:34px;flex-shrink:0;border:none;border-radius:50%;cursor:pointer;color:#fff;' +
+          'background:' + (selfOvertimeMarked ? 'var(--accent2)' : 'rgba(255,255,255,.22)') + '">' + OVERTIME_ICON + '</button>'
         : '';
-      extrasBtn = expandBtn + (homeExtrasExpanded ? subBtn + otBtn : '');
+      extrasBtn = useExpand ? (expandBtn + (homeExtrasExpanded ? subBtn + otBtn : '')) : (subBtn + otBtn);
     }
 
     selfRow = '<div style="display:flex;align-items:center;gap:8px;margin-top:10px">' + attBtn + extrasBtn + '</div>';
