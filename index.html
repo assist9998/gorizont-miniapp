@@ -2710,14 +2710,15 @@ function renderStaffCalendarModal() {
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
         `font-size:9px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">Пр</span>`
       : "";
-    // Бейдж переработки — та же позиция и стиль, что у продлёнки (право-центр),
-    // без конфликта: продлёнка бывает только у нулёвки, переработка — у
-    // обычных сотрудников (лесенка уроков/продлёнки для нулёвки не показывается
-    // одновременно с переработкой у одного и того же человека).
+    // Бейдж переработки — в правом верхнем углу (как у уроков/замены), КРОМЕ
+    // случая когда у этого же человека есть и замена (per_shift) — тот угол
+    // уже занят её бейджиком, тогда переработка уходит право-центр, чтобы
+    // не накладываться. У большинства (как у Насти — без возможности
+    // замены) угол свободен, и "+" там же, где привычно у других бейджей.
     const showOtBadge = !isFuture && s.overtime_rate && isOt;
     const otBadge = showOtBadge
       ? `<span title="Переработка" ` +
-        `style="position:absolute;top:18px;right:-7px;z-index:2;width:20px;height:20px;border-radius:50%;` +
+        `style="position:absolute;${s.pay_type === "per_shift" ? "top:18px" : "top:-4px"};right:-7px;z-index:2;width:20px;height:20px;border-radius:50%;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
         `font-size:12px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">+</span>`
       : "";
