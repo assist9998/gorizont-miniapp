@@ -815,15 +815,20 @@ function renderHomeGreeting(total, present) {
               CHECKIN_ICON + '<span>Отметить, что я сегодня на работе</span>' +
             '</button>');
 
-    // Замена (только "за смену") и переработка (только если задана ставка
-    // overtime_rate) — видны сразу, не только после отметки "на работе":
+    // Замена — теперь в обе стороны: няня замещает воспитателя (per_shift,
+    // как раньше) ИЛИ воспитатель замещает няню (monthly_fixed, новое —
+    // "тот же механизм, просто меняется на няню"). Один и тот же флаг
+    // is_substitution, один и тот же значок — только подпись меняется по
+    // роли, чтобы не путать. Переработка — только если задана ставка
+    // overtime_rate. Оба видны сразу, не только после отметки "на работе":
     // тап по любому из этих кружков сам ставит status=present (см.
     // toggleSelfSubstitution/toggleSelfOvertime), отдельно отмечаться сначала
     // не обязательно. "≡" оправдан только когда допов реально много (больше
     // двух — например когда сюда же добавится третий вид) и прятать есть
     // смысл; при 1-2 допах показываем кружки сразу рядом с отметкой, без
     // лишнего тапа через меню.
-    const canSub = staffInfo.pay_type === "per_shift";
+    const canSub = staffInfo.pay_type === "per_shift" || staffInfo.pay_type === "monthly_fixed";
+    const subLabel = staffInfo.pay_type === "per_shift" ? "Замена воспитателя сегодня" : "Сегодня работаю нянeй";
     const canOvertime = !!staffInfo.overtime_rate;
     const extrasCount = (canSub ? 1 : 0) + (canOvertime ? 1 : 0);
     const useExpand = extrasCount > 2;
@@ -835,7 +840,7 @@ function renderHomeGreeting(total, present) {
           'background:rgba(255,255,255,.22);color:#fff">' + EXPAND_ICON + '</button>'
         : '';
       const subBtn = canSub
-        ? '<button onclick="toggleSelfSubstitution()" title="Замена воспитателя сегодня" style="display:flex;align-items:center;justify-content:center;' +
+        ? '<button onclick="toggleSelfSubstitution()" title="' + subLabel + '" style="display:flex;align-items:center;justify-content:center;' +
           'width:34px;height:34px;flex-shrink:0;border:none;border-radius:50%;cursor:pointer;color:#fff;' +
           'background:' + (selfSubstitutionMarked ? 'var(--accent2)' : 'rgba(255,255,255,.22)') + '">' + SUBSTITUTION_ICON + '</button>'
         : '';
@@ -2685,11 +2690,12 @@ async function toggleStaffAttDay(dateStr) {
   // Общий цикл по кругу: нет -> пришла -> (пришла+замена) -> (пришла+переработка)
   // -> (пришла+замена+переработка) -> нет. Какие из промежуточных состояний
   // вообще существуют — зависит от того, что применимо этому сотруднику
-  // (замена — только "за смену", переработка — только если задана ставка).
+  // (замена — за смену ИЛИ месячный фикс, работает в обе стороны: няня
+  // замещает воспитателя или наоборот; переработка — только если задана ставка).
   // Только тут (в календаре, доступ только у администратора) можно поставить
   // и снять оба флага за ЛЮБОЙ день — сам сотрудник так может только за
   // сегодня, кнопками на Home (toggleSelfSubstitution/toggleSelfOvertime).
-  const canSub = s.pay_type === "per_shift";
+  const canSub = s.pay_type === "per_shift" || s.pay_type === "monthly_fixed";
   const canOt = !!s.overtime_rate;
   const variants = [{ sub: false, ot: false }];
   if(canSub) variants.push({ sub: true, ot: false });
@@ -2932,14 +2938,16 @@ function renderStaffCalendarModal() {
     const onclick = !canEdit ? "" : (isNulevka
       ? `onclick="promptLessonCount('${dateStr}')"`
       : `onclick="toggleStaffAttDay('${dateStr}')"`);
-    // Бейдж замены — только у "за смену", только когда замена реально стоит.
-    // Чисто информационный, не кликабельный нигде (ни у админа, ни у няни).
-    // Как ставится/снимается: няня — только за сегодня, кнопкой на Home
-    // (toggleSelfSubstitution). Админ — тапом по самой клетке дня в этом
-    // календаре (toggleStaffAttDay, 3-позиционный цикл для per_shift).
-    const showSubBadge = !isFuture && status === "present" && s.pay_type === "per_shift" && isSub;
+    // Бейдж замены — у "за смену" (няня замещает воспитателя) И у "месячный
+    // фикс" (воспитатель замещает няню) — работает в обе стороны, тот же
+    // флаг is_substitution. Чисто информационный, не кликабельный нигде (ни
+    // у админа, ни у сотрудника). Как ставится/снимается: сам сотрудник —
+    // только за сегодня, кнопкой на Home (toggleSelfSubstitution). Админ —
+    // тапом по самой клетке дня в этом календаре (toggleStaffAttDay).
+    const hasSubCapability = s.pay_type === "per_shift" || s.pay_type === "monthly_fixed";
+    const showSubBadge = !isFuture && status === "present" && hasSubCapability && isSub;
     const subBadge = showSubBadge
-      ? `<span title="Замена воспитателя" ` +
+      ? `<span title="${s.pay_type === "per_shift" ? "Замена воспитателя" : "Работает нянeй"}" ` +
         `style="position:absolute;top:-3px;right:-3px;width:14px;height:14px;border-radius:50%;` +
         `background:var(--accent2);color:#0f1117;display:flex;align-items:center;justify-content:center;` +
         `box-shadow:0 1px 3px rgba(0,0,0,.25)">` +
@@ -2971,14 +2979,14 @@ function renderStaffCalendarModal() {
         `font-size:9px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">Пр</span>`
       : "";
     // Бейдж переработки — в правом верхнем углу (как у уроков/замены), КРОМЕ
-    // случая когда у этого же человека есть и замена (per_shift) — тот угол
-    // уже занят её бейджиком, тогда переработка уходит право-центр, чтобы
-    // не накладываться. У большинства (как у Насти — без возможности
-    // замены) угол свободен, и "+" там же, где привычно у других бейджей.
+    // случая когда у этого же человека есть и замена (hasSubCapability) —
+    // тот угол уже занят её бейджиком, тогда переработка уходит право-центр,
+    // чтобы не накладываться. У большинства угол свободен, и "+" там же, где
+    // привычно у других бейджей.
     const showOtBadge = !isFuture && s.overtime_rate && isOt;
     const otBadge = showOtBadge
       ? `<span title="Переработка" ` +
-        `style="position:absolute;${s.pay_type === "per_shift" ? "top:18px" : "top:-4px"};right:-7px;z-index:2;width:20px;height:20px;border-radius:50%;` +
+        `style="position:absolute;${hasSubCapability ? "top:18px" : "top:-4px"};right:-7px;z-index:2;width:20px;height:20px;border-radius:50%;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
         `font-size:12px;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,.25)">+</span>`
       : "";
@@ -3068,10 +3076,10 @@ function renderStaffCalendarModal() {
       hasAnyRate
         ? '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Считаем...</div>'
         : '<div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:12px;font-size:12px;color:var(--text2)">Ставка не задана — откройте карточку и укажите</div>')) +
-    (s.pay_type === "per_shift" || s.overtime_rate
+    ((s.pay_type === "per_shift" || s.pay_type === "monthly_fixed") || s.overtime_rate
       ? '<div style="margin-top:8px;font-size:11px;color:var(--text2)">Тап по дню — переключить' +
-        (s.pay_type === "per_shift" ? ' замену' : '') +
-        (s.pay_type === "per_shift" && s.overtime_rate ? ' и' : '') +
+        ((s.pay_type === "per_shift" || s.pay_type === "monthly_fixed") ? ' замену' : '') +
+        ((s.pay_type === "per_shift" || s.pay_type === "monthly_fixed") && s.overtime_rate ? ' и' : '') +
         (s.overtime_rate ? ' переработку' : '') + '</div>'
       : "") +
     ((s.lesson_rate || s.extended_day_rate)
