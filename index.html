@@ -2610,12 +2610,14 @@ async function loadStaffMonth() {
     window._staffCalSubstitutions = new Set(data.ok ? (data.substitutions || []) : []);
     window._staffCalLessonDetails = data.ok ? (data.lesson_details || {}) : {};
     window._staffCalOvertimes = new Set(data.ok ? (data.overtimes || []) : []);
+    window._staffCalScheduled = new Set(data.ok ? (data.scheduled || []) : []);
   } catch(e) {
     console.error("Staff attendance:", e);
     window._staffCalDays = {};
     window._staffCalSubstitutions = new Set();
     window._staffCalLessonDetails = {};
     window._staffCalOvertimes = new Set();
+    window._staffCalScheduled = new Set();
   }
   // ЗП считаем на бэкенде (payroll.calculate_salary), не дублируем формулу
   // (в т.ч. с учётом дней замены) в двух местах — риск разойтись.
@@ -2896,6 +2898,7 @@ function renderStaffCalendarModal() {
 
   const subs = window._staffCalSubstitutions || new Set();
   const ots = window._staffCalOvertimes || new Set();
+  const scheduled = window._staffCalScheduled || new Set();
   cells.forEach(d => {
     if(d === null) { grid += '<div></div>'; return; }
     const dateStr = fmtDMY(year, month, d);
@@ -2905,12 +2908,16 @@ function renderStaffCalendarModal() {
     if(status === "present") present++;
     const isSub = status === "present" && subs.has(dateStr);
     const isOt = status === "present" && ots.has(dateStr);
+    const isScheduled = isFuture && scheduled.has(dateStr);
     // Замена НЕ меняет цвет клетки — остаётся обычный зелёный "пришла",
     // отличается только маленьким бейджиком в углу (см. ниже).
     // "Absent" отдельным цветом не заливаем — по просьбе пользователя: если
     // человека нет, клетка выглядит так же, как день вообще без отметки
     // (var(--surface2)), красная заливка только путала.
-    const bg = isFuture ? "transparent" : status === "present" ? "rgba(56,217,169,.25)" : "var(--surface2)";
+    // Запланированный будущий день — та же зелёная логика, но сильно
+    // приглушённая (не факт, а план): без подписи, без рамки, просто
+    // мягкая заливка, по просьбе пользователя.
+    const bg = isFuture ? (isScheduled ? "rgba(56,217,169,.08)" : "transparent") : status === "present" ? "rgba(56,217,169,.25)" : "var(--surface2)";
     const color = isFuture ? "var(--text2)" : "var(--text)";
     // Нулёвка (есть ставка за урок и/или продлёнку) — тап по дню не
     // переключает пришла/нет циклом, а спрашивает число уроков и/или
