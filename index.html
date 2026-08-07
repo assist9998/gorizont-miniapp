@@ -467,7 +467,7 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     <span>Дети</span>
   </button>
-  <button class="nav-btn" id="nav-staff" onclick="goTo('staff')">
+  <button class="nav-btn" id="nav-staff" onclick="goTo('staff')" style="display:none">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
     <span>Персонал</span>
   </button>
@@ -1642,8 +1642,16 @@ function isDirectorRole(role) {
   return ["Директор", "director", "developer"].includes(role);
 }
 
+// Fail-closed: если staffInfo ещё не загрузился (или вообще не загрузится
+// из-за сетевой ошибки) — считаем НЕ админом, не наоборот. Раньше было
+// "!staffInfo || isAdminRole(...)", из-за чего при сбое запроса /staff
+// вкладка "Персонал" оставалась видна кому угодно (см. баг с Анжеликой,
+// project_gorizont_payroll) — сама кнопка теперь ещё и скрыта по умолчанию
+// в HTML (style="display:none"), эта функция её только ПОКАЗЫВАЕТ явным
+// подтверждённым админам, никогда не является единственной линией защиты
+// (см. также серверную проверку роли в api.py).
 function applyRolePermissions() {
-  const admin = !staffInfo || isAdminRole(staffInfo.role);
+  const admin = !!staffInfo && isAdminRole(staffInfo.role);
   const navStaff = document.getElementById("nav-staff");
   if(navStaff) navStaff.style.display = admin ? "" : "none";
 }
@@ -1660,11 +1668,12 @@ async function initStaff(){
     if(data.ok) {
       staffInfo = data.staff;
       console.log("Staff:", staffInfo);
-      applyRolePermissions();
       initSelfAttendance();
     }
   } catch(e) {
     console.error("Staff error:", e);
+  } finally {
+    applyRolePermissions();
   }
 }
 
