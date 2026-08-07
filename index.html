@@ -448,7 +448,7 @@
 <div class="modal-overlay" id="dayRosterModalOverlay" onclick="if(event.target===this) closeDayRoster()">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-name">Кто работал</div>
+    <div class="modal-name">Персонал по дням</div>
     <div id="dayRosterModalContent"></div>
   </div>
 </div>
@@ -2153,11 +2153,15 @@ function renderStaffList() {
 
 // ── DAY ROSTER (админ — "кто работал в этот день", обратный срез к
 // календарю одного сотрудника: там тап по имени → его дни, здесь тап по
-// дате → все, кто в этот день работал. project_gorizont_payroll) ───────
+// дате → все, кто в этот день работал. project_gorizont_payroll)
+// Будущие даты — план (payroll_schedule), а не факт (посещаемости на
+// будущее не существует): та же модалка, тап по дню → можно добавлять/
+// убирать сотрудников из плана на этот день. ───────────────────────────
 let dayRosterView = null; // {year, month}, 0-indexed month
 let dayRosterDate = null; // дд.мм.гггг выбранной даты, null пока не выбрана
 let dayRosterGroup = "kindergarten"; // kindergarten | prep | school
 let dayRosterData = [];
+let dayRosterIsFuture = false;
 
 function openDayRoster() {
   const n = new Date();
@@ -2182,14 +2186,25 @@ function setDayRosterGroup(g) {
   dayRosterGroup = g;
   renderDayRosterModal();
 }
+// Та же классификация должности, что и payroll._classify_group на бэкенде
+// (для get_day_roster/get_schedule_day) — тут нужна только для локальной
+// фильтрации "кого можно добавить в план" из уже загруженного staffList,
+// не для расчётов, поэтому дублирование не рискованно.
+function classifyGroupClient(position) {
+  const p = (position || "").toLowerCase();
+  if(p.includes("подготовительная")) return "prep";
+  if(p.includes("школ")) return "school";
+  return "kindergarten";
+}
 async function selectDayRosterDate(dmy) {
-  if(dmy > dateToDmy(now)) return; // будущее недоступно
   dayRosterDate = dmy;
   dayRosterData = [];
+  dayRosterIsFuture = dmy > dateToDmy(now);
   renderDayRosterModal(); // покажет "Загружаем..."
   try {
+    const endpoint = dayRosterIsFuture ? "/payroll/schedule" : "/payroll/day";
     const resp = await fetch(
-      API_URL + "/payroll/day?date=" + encodeURIComponent(dmy) + (activeStaffCity ? "&city=" + encodeURIComponent(activeStaffCity) : ""),
+      API_URL + endpoint + "?date=" + encodeURIComponent(dmy) + (activeStaffCity ? "&city=" + encodeURIComponent(activeStaffCity) : ""),
       { headers: authHeaders() }
     );
     const data = await resp.json();
@@ -2199,6 +2214,33 @@ async function selectDayRosterDate(dmy) {
     dayRosterData = [];
   }
   renderDayRosterModal();
+}
+async function addToSchedule(staffId) {
+  try {
+    const resp = await fetch(API_URL + "/payroll/schedule", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({staff_id: staffId, date: dayRosterDate})
+    });
+    const data = await resp.json();
+    if(data.ok) await selectDayRosterDate(dayRosterDate);
+    else showToast("Не удалось добавить", true);
+  } catch(e) {
+    showToast("Ошибка сети", true);
+  }
+}
+async function removeFromSchedule(staffId) {
+  try {
+    const resp = await fetch(
+      API_URL + "/payroll/schedule?staff_id=" + staffId + "&date=" + encodeURIComponent(dayRosterDate),
+      { method: "DELETE", headers: authHeaders() }
+    );
+    const data = await resp.json();
+    if(data.ok) await selectDayRosterDate(dayRosterDate);
+    else showToast("Не удалось убрать", true);
+  } catch(e) {
+    showToast("Ошибка сети", true);
+  }
 }
 
 function renderDayRosterModal() {
@@ -2224,10 +2266,9 @@ function renderDayRosterModal() {
     const isSelected = dmy === dayRosterDate;
     const isTodayCell = dmy === todayDmy;
     const bg = isSelected ? "var(--accent)" : "var(--surface2)";
-    const color = isFuture ? "var(--text2)" : isSelected ? "#fff" : "var(--text)";
+    const color = isSelected ? "#fff" : (isFuture ? "var(--text2)" : "var(--text)");
     const border = isTodayCell && !isSelected ? "1.5px solid var(--accent)" : "none";
-    const onclick = isFuture ? "" : `onclick="selectDayRosterDate('${dmy}')"`;
-    grid += `<div ${onclick} style="aspect-ratio:1;border-radius:8px;background:${bg};color:${color};border:${border};cursor:${isFuture?'default':'pointer'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}</div>`;
+    grid += `<div onclick="selectDayRosterDate('${dmy}')" style="aspect-ratio:1;border-radius:8px;background:${bg};color:${color};border:${border};cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}</div>`;
   });
   grid += '</div>';
 
@@ -2252,29 +2293,69 @@ function renderDayRosterModal() {
       '</div>';
 
     const filtered = dayRosterData.filter(s => s.group === dayRosterGroup);
-    let list;
-    if(!filtered.length) {
-      list = '<div style="padding:20px;text-align:center;color:var(--text2);font-size:13px">Никто не отмечен</div>';
+
+    if(!dayRosterIsFuture) {
+      // Прошедшая/сегодняшняя дата — факт из посещаемости, читай-онли.
+      let list;
+      if(!filtered.length) {
+        list = '<div style="padding:20px;text-align:center;color:var(--text2);font-size:13px">Никто не отмечен</div>';
+      } else {
+        list = filtered.map(s => {
+          const badges = [];
+          if(s.is_substitution) badges.push(
+            '<span title="Замена" style="width:20px;height:20px;border-radius:50%;background:var(--accent2);color:#0f1117;display:flex;align-items:center;justify-content:center">' +
+            SUBSTITUTION_ICON.replace('width="18" height="18"', 'width="11" height="11"') + '</span>'
+          );
+          if(s.lessons_count) badges.push(BADGE_PILL(s.lessons_count + "у", 20, 10.5));
+          if(s.worked_extended_day) badges.push(BADGE_PILL("Пр", 20, 10.5));
+          if(s.is_overtime) badges.push(BADGE_PILL("+", 20, 12));
+          return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--border)">' +
+            '<div style="min-width:0">' +
+              '<div style="font-weight:600;font-size:14px">' + s.name + '</div>' +
+              '<div style="font-size:12px;color:var(--text2)">' + (s.position || '') + '</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:6px;flex-shrink:0">' + badges.join('') + '</div>' +
+          '</div>';
+        }).join('');
+      }
+      below = tabs + list;
     } else {
-      list = filtered.map(s => {
-        const badges = [];
-        if(s.is_substitution) badges.push(
-          '<span title="Замена" style="width:20px;height:20px;border-radius:50%;background:var(--accent2);color:#0f1117;display:flex;align-items:center;justify-content:center">' +
-          SUBSTITUTION_ICON.replace('width="18" height="18"', 'width="11" height="11"') + '</span>'
-        );
-        if(s.lessons_count) badges.push(BADGE_PILL(s.lessons_count + "у", 20, 10.5));
-        if(s.worked_extended_day) badges.push(BADGE_PILL("Пр", 20, 10.5));
-        if(s.is_overtime) badges.push(BADGE_PILL("+", 20, 12));
-        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--border)">' +
-          '<div style="min-width:0">' +
-            '<div style="font-weight:600;font-size:14px">' + s.name + '</div>' +
-            '<div style="font-size:12px;color:var(--text2)">' + (s.position || '') + '</div>' +
-          '</div>' +
-          '<div style="display:flex;gap:6px;flex-shrink:0">' + badges.join('') + '</div>' +
-        '</div>';
-      }).join('');
+      // Будущая дата — план (payroll_schedule): можно добавлять/убирать
+      // сотрудников. Кандидаты на добавление — весь staffList (уже
+      // загружен для вкладки "Персонал"), кроме тех, кто уже в плане.
+      const plannedIds = new Set(dayRosterData.map(s => s.id));
+      const plannedList = filtered.length
+        ? filtered.map(s =>
+            '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--border)">' +
+              '<div style="min-width:0">' +
+                '<div style="font-weight:600;font-size:14px">' + s.name + '</div>' +
+                '<div style="font-size:12px;color:var(--text2)">' + (s.position || '') + '</div>' +
+              '</div>' +
+              '<button onclick="removeFromSchedule(' + s.id + ')" title="Убрать из плана" ' +
+                'style="border:none;background:none;color:var(--danger);font-size:20px;line-height:1;cursor:pointer;padding:4px 8px;flex-shrink:0">×</button>' +
+            '</div>'
+          ).join('')
+        : '<div style="padding:14px 4px;color:var(--text2);font-size:13px">Никто не запланирован</div>';
+
+      const candidates = (staffList || []).filter(s =>
+        !plannedIds.has(s.id) &&
+        (!activeStaffCity || s.city === activeStaffCity) &&
+        classifyGroupClient(s.position) === dayRosterGroup
+      );
+      const addList = candidates.length
+        ? candidates.map(s =>
+            '<button onclick="addToSchedule(' + s.id + ')" style="display:inline-flex;align-items:center;gap:4px;' +
+              'padding:7px 12px;border-radius:20px;border:1.5px dashed var(--border);background:transparent;' +
+              'color:var(--text);font-family:inherit;font-size:13px;cursor:pointer;margin:0 6px 6px 0">+ ' + s.name + '</button>'
+          ).join('')
+        : '<div style="color:var(--text2);font-size:13px;padding:4px 0">Некого добавлять</div>';
+
+      below = tabs +
+        '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:4px">Запланировано</div>' +
+        plannedList +
+        '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin:14px 0 6px">Добавить в план</div>' +
+        '<div style="display:flex;flex-wrap:wrap">' + addList + '</div>';
     }
-    below = tabs + list;
   }
 
   document.getElementById("dayRosterModalContent").innerHTML = header + grid + below;
