@@ -2678,6 +2678,42 @@ function weekdaysInMonth(year, month) {
   return count;
 }
 
+// Будущая дата в календаре ОДНОГО сотрудника — админ добавляет/убирает его
+// из плана на этот день тапом (тот же payroll_schedule, что и в "Персонал
+// по дням", просто заполнять удобнее по человеку, не по одной дате за раз).
+async function toggleFutureSchedule(dateStr) {
+  const s = window._currentStaffForCalendar;
+  if(!s) return;
+  const lockKey = s.id + "|sched|" + dateStr;
+  if(window._staffAttPending.has(lockKey)) return;
+  window._staffAttPending.add(lockKey);
+
+  const scheduled = window._staffCalScheduled || (window._staffCalScheduled = new Set());
+  const wasScheduled = scheduled.has(dateStr);
+  if(wasScheduled) scheduled.delete(dateStr); else scheduled.add(dateStr);
+  renderStaffCalendarModal();
+
+  try {
+    const resp = wasScheduled
+      ? await fetch(API_URL + "/payroll/schedule?staff_id=" + s.id + "&date=" + encodeURIComponent(dateStr), {
+          method: "DELETE", headers: authHeaders()
+        })
+      : await fetch(API_URL + "/payroll/schedule", {
+          method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+          body: JSON.stringify({staff_id: s.id, date: dateStr})
+        });
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.error || "save failed");
+  } catch(e) {
+    console.error("toggleFutureSchedule error:", e);
+    if(wasScheduled) scheduled.add(dateStr); else scheduled.delete(dateStr);
+    renderStaffCalendarModal();
+    showToast("Не удалось сохранить", true);
+  } finally {
+    window._staffAttPending.delete(lockKey);
+  }
+}
+
 async function toggleStaffAttDay(dateStr) {
   const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
   if(dateStr > todayDMY) return; // будущее не редактируем
@@ -2942,11 +2978,19 @@ function renderStaffCalendarModal() {
     // этот учёт вносить некому (в отличие от обычных сотрудников, у которых
     // для этого есть отдельная кнопка на Home, см. toggleSelfAttendance).
     const isNulevka = !!(s.lesson_rate || s.extended_day_rate);
-    const canEdit = !isFuture && (!readOnly || (isNulevka && dateStr === todayDMY));
+    // Будущие даты — план, не факт. Админ (не readOnly) может тапом по дню
+    // добавить/убрать сотрудника из плана на этот день — тот же план, что и
+    // в "Персонал по дням", просто заполнять его удобнее через карточку
+    // конкретного человека (отметить сразу всю его неделю), чем по одной
+    // дате за раз (project_gorizont_payroll).
+    const canEditFuture = isFuture && !readOnly;
+    const canEdit = canEditFuture || (!isFuture && (!readOnly || (isNulevka && dateStr === todayDMY)));
     const cursor = canEdit ? "pointer" : "default";
-    const onclick = !canEdit ? "" : (isNulevka
-      ? `onclick="promptLessonCount('${dateStr}')"`
-      : `onclick="toggleStaffAttDay('${dateStr}')"`);
+    const onclick = !canEdit ? "" : (canEditFuture
+      ? `onclick="toggleFutureSchedule('${dateStr}')"`
+      : (isNulevka
+        ? `onclick="promptLessonCount('${dateStr}')"`
+        : `onclick="toggleStaffAttDay('${dateStr}')"`));
     // Бейдж замены — у "за смену" (няня замещает воспитателя) И у "месячный
     // фикс" (воспитатель замещает няню) — работает в обе стороны, тот же
     // флаг is_substitution. Чисто информационный, не кликабельный нигде (ни
@@ -3095,6 +3139,9 @@ function renderStaffCalendarModal() {
       ? '<div style="margin-top:6px;font-size:11px;color:var(--text2)">Тап по ' + (readOnly ? "сегодняшнему дню" : "дню") + ' — указать' +
         (s.lesson_rate ? ' число уроков' : '') + (s.lesson_rate && s.extended_day_rate ? ' и' : '') +
         (s.extended_day_rate ? ' продлёнку' : '') + '</div>'
+      : "") +
+    (!readOnly
+      ? '<div style="margin-top:6px;font-size:11px;color:var(--text2)">Тап по будущей дате — добавить/убрать из плана на этот день</div>'
       : "");
 }
 
