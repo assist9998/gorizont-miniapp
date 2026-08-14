@@ -223,6 +223,59 @@
   <div id="staffListEl"></div>
 </div>
 
+<!-- SCREEN: JOURNAL (электронный журнал / расписание и предметы, Этап 1) -->
+<div class="screen" id="screen-journal">
+  <div class="city-filter" id="journalCityFilter" style="margin-bottom:12px"></div>
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <input id="journalNewClassInput" type="text" placeholder="Класс, например 5А"
+      style="flex:1;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    <button onclick="openNewJournalClass()" style="flex-shrink:0;padding:0 16px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Открыть</button>
+  </div>
+  <div class="section-title">Классы</div>
+  <div id="journalClassList"></div>
+</div>
+
+<!-- SCREEN: JOURNAL CLASS (предметы + расписание одного класса) -->
+<div class="screen" id="screen-journal-class">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <button onclick="goTo('journal')" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
+    <div style="font-size:16px;font-weight:600;flex:1" id="journalClassTitle">Класс</div>
+  </div>
+
+  <div class="section-title">Предметы</div>
+  <div id="journalSubjectList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+  <div style="display:flex;gap:8px;margin-bottom:20px">
+    <input id="journalNewSubjectInput" type="text" placeholder="Новый предмет"
+      style="flex:1;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    <button onclick="addJournalSubject()" style="flex-shrink:0;padding:0 16px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">+</button>
+  </div>
+
+  <div class="section-title">Расписание</div>
+  <div id="journalScheduleList" style="margin-bottom:16px"></div>
+  <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:14px;margin-bottom:80px">
+    <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:10px">Добавить урок</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <select id="js_weekday" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+        <option value="1">Понедельник</option>
+        <option value="2">Вторник</option>
+        <option value="3">Среда</option>
+        <option value="4">Четверг</option>
+        <option value="5">Пятница</option>
+        <option value="6">Суббота</option>
+        <option value="7">Воскресенье</option>
+      </select>
+      <select id="js_subject" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <input id="js_time_start" type="text" placeholder="Начало, 12:00" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+      <input id="js_time_end" type="text" placeholder="Конец, 12:40" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
+    <input id="js_teacher" type="text" placeholder="Учитель" style="width:100%;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    <button onclick="addJournalScheduleEntry()" class="btn-primary" style="width:100%">Добавить урок</button>
+  </div>
+</div>
+
 <!-- SCREEN: NOTIFICATIONS -->
 <div class="screen" id="screen-notifications">
   <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
@@ -471,6 +524,10 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
     <span>Персонал</span>
   </button>
+  <button class="nav-btn" id="nav-journal" onclick="goTo('journal')" style="display:none">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+    <span>Журнал</span>
+  </button>
   <button class="nav-btn" id="nav-notifications" onclick="goTo('notifications')" style="position:relative">
     <div style="position:relative;display:inline-flex">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -664,6 +721,7 @@ function goTo(screen) {
   if(screen === "children") renderChildList();
   if(screen === "notifications") renderNotifications();
   if(screen === "staff") loadStaff();
+  if(screen === "journal") loadJournalClasses();
   if(screen === "form") {
     document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("nav-children")?.classList.add("active");
@@ -671,6 +729,10 @@ function goTo(screen) {
   if(screen === "staff-form") {
     document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("nav-staff")?.classList.add("active");
+  }
+  if(screen === "journal-class") {
+    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById("nav-journal")?.classList.add("active");
   }
 }
 
@@ -1654,6 +1716,8 @@ function applyRolePermissions() {
   const admin = !!staffInfo && isAdminRole(staffInfo.role);
   const navStaff = document.getElementById("nav-staff");
   if(navStaff) navStaff.style.display = admin ? "" : "none";
+  const navJournal = document.getElementById("nav-journal");
+  if(navJournal) navJournal.style.display = admin ? "" : "none";
 }
 
 async function initStaff(){
@@ -2163,6 +2227,204 @@ function renderStaffList() {
   });
   if(!filtered.length) html = '<div class="empty">Нет сотрудников</div>';
   document.getElementById("staffListEl").innerHTML = html;
+}
+
+// ── ЭЛЕКТРОННЫЙ ЖУРНАЛ, Этап 1 (расписание и предметы) ──────────────
+// class_name — свободный текст, не отдельная таблица (см. journal.py):
+// "класс" как сущность существует только пока у него есть хотя бы один
+// предмет или урок в расписании — список классов на экране получается
+// объединением class_name из /journal/subjects и /journal/schedule.
+const JOURNAL_WEEKDAYS = {1:"Понедельник",2:"Вторник",3:"Среда",4:"Четверг",5:"Пятница",6:"Суббота",7:"Воскресенье"};
+let activeJournalCity = null;
+let journalClassNames = [];
+let activeJournalClass = null;
+let journalSubjects = [];
+let journalSchedule = [];
+
+function journalCities() {
+  return (staffInfo && staffInfo.city) ? [staffInfo.city] : ["Дананг", "Нячанг"];
+}
+
+async function loadJournalClasses() {
+  const cities = journalCities();
+  if(!activeJournalCity || !cities.includes(activeJournalCity)) activeJournalCity = cities[0];
+  try {
+    const [subjData, schedData] = await withRetry(() => Promise.all([
+      fetch(API_URL + "/journal/subjects?city=" + encodeURIComponent(activeJournalCity), {headers: authHeaders()}).then(r => r.json()),
+      fetch(API_URL + "/journal/schedule?city=" + encodeURIComponent(activeJournalCity), {headers: authHeaders()}).then(r => r.json()),
+    ]));
+    const names = new Set();
+    (subjData.subjects || []).forEach(s => names.add(s.class_name));
+    (schedData.schedule || []).forEach(s => names.add(s.class_name));
+    journalClassNames = [...names].sort();
+  } catch(e) {
+    console.error("loadJournalClasses error:", e);
+    journalClassNames = [];
+  }
+  renderJournalClasses();
+}
+
+function renderJournalClasses() {
+  const cities = journalCities();
+  const cf = document.getElementById("journalCityFilter");
+  cf.innerHTML = "";
+  cities.forEach(city => {
+    const btn = document.createElement("button");
+    btn.className = "filter-btn" + (city === activeJournalCity ? " active" : "");
+    btn.textContent = city;
+    btn.onclick = () => { activeJournalCity = city; loadJournalClasses(); };
+    cf.appendChild(btn);
+  });
+
+  let html = "";
+  journalClassNames.forEach(name => {
+    html += `<div class="child-list-item" onclick="openJournalClass('${name.replace(/'/g, "\\'")}')">
+      <div class="child-detail">
+        <div class="child-detail-name">${name}</div>
+      </div>
+      <span class="child-arrow">›</span>
+    </div>`;
+  });
+  if(!journalClassNames.length) html = '<div class="empty">Нет классов — впишите название выше и нажмите «Открыть»</div>';
+  document.getElementById("journalClassList").innerHTML = html;
+}
+
+function openNewJournalClass() {
+  const name = document.getElementById("journalNewClassInput").value.trim();
+  if(!name) return;
+  document.getElementById("journalNewClassInput").value = "";
+  openJournalClass(name);
+}
+
+async function openJournalClass(name) {
+  activeJournalClass = name;
+  document.getElementById("journalClassTitle").textContent = name;
+  goTo("journal-class");
+  await loadJournalClassData();
+}
+
+async function loadJournalClassData() {
+  try {
+    const data = await withRetry(() => Promise.all([
+      fetch(API_URL + "/journal/subjects?city=" + encodeURIComponent(activeJournalCity) + "&class=" + encodeURIComponent(activeJournalClass), {headers: authHeaders()}).then(r => r.json()),
+      fetch(API_URL + "/journal/schedule?city=" + encodeURIComponent(activeJournalCity) + "&class=" + encodeURIComponent(activeJournalClass), {headers: authHeaders()}).then(r => r.json()),
+    ]));
+    journalSubjects = data[0].subjects || [];
+    journalSchedule = data[1].schedule || [];
+  } catch(e) {
+    console.error("loadJournalClassData error:", e);
+    journalSubjects = [];
+    journalSchedule = [];
+  }
+  renderJournalSubjects();
+  renderJournalSchedule();
+}
+
+function renderJournalSubjects() {
+  let html = "";
+  journalSubjects.forEach(s => {
+    html += `<div style="display:flex;align-items:center;gap:6px;padding:6px 6px 6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px">
+      <span>${s.name}</span>
+      <button onclick="deleteJournalSubject(${s.id})" style="border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px">×</button>
+    </div>`;
+  });
+  if(!journalSubjects.length) html = '<div class="empty" style="padding:14px 0">Пока нет предметов</div>';
+  document.getElementById("journalSubjectList").innerHTML = html;
+
+  const sel = document.getElementById("js_subject");
+  sel.innerHTML = '<option value="">Без предмета</option>' +
+    journalSubjects.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+}
+
+function renderJournalSchedule() {
+  let html = "";
+  for(let wd = 1; wd <= 7; wd++) {
+    const entries = journalSchedule.filter(e => e.weekday === wd);
+    if(!entries.length) continue;
+    html += `<div class="section-title" style="margin:14px 0 8px">${JOURNAL_WEEKDAYS[wd]}</div>`;
+    entries.forEach(e => {
+      const time = [e.time_start, e.time_end].filter(Boolean).join("–");
+      const meta = [e.subject_name, e.teacher_name].filter(Boolean).join(" · ");
+      html += `<div class="child-list-item" style="cursor:default">
+        <div class="child-detail">
+          <div class="child-detail-name">${time || "Время не указано"}</div>
+          <div class="child-detail-meta">${meta || "—"}</div>
+        </div>
+        <button onclick="deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>
+      </div>`;
+    });
+  }
+  if(!journalSchedule.length) html = '<div class="empty">Пока нет уроков в расписании</div>';
+  document.getElementById("journalScheduleList").innerHTML = html;
+}
+
+async function addJournalSubject() {
+  const input = document.getElementById("journalNewSubjectInput");
+  const name = input.value.trim();
+  if(!name) return;
+  try {
+    const resp = await fetch(API_URL + "/journal/subjects", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({city: activeJournalCity, class_name: activeJournalClass, name}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    input.value = "";
+    await loadJournalClassData();
+  } catch(e) {
+    showToast("Не удалось добавить предмет", true);
+  }
+}
+
+async function deleteJournalSubject(id) {
+  try {
+    const resp = await fetch(API_URL + "/journal/subjects?id=" + id, {method: "DELETE", headers: authHeaders()});
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    await loadJournalClassData();
+  } catch(e) {
+    showToast("Не удалось удалить предмет", true);
+  }
+}
+
+async function addJournalScheduleEntry() {
+  const weekday = parseInt(document.getElementById("js_weekday").value, 10);
+  const subjectId = document.getElementById("js_subject").value;
+  const timeStart = document.getElementById("js_time_start").value.trim();
+  const timeEnd = document.getElementById("js_time_end").value.trim();
+  const teacher = document.getElementById("js_teacher").value.trim();
+  try {
+    const resp = await fetch(API_URL + "/journal/schedule", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        city: activeJournalCity, class_name: activeJournalClass, weekday,
+        time_start: timeStart, time_end: timeEnd,
+        subject_id: subjectId ? parseInt(subjectId, 10) : null, teacher_name: teacher,
+      }),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    document.getElementById("js_time_start").value = "";
+    document.getElementById("js_time_end").value = "";
+    document.getElementById("js_teacher").value = "";
+    await loadJournalClassData();
+    showToast("Урок добавлен");
+  } catch(e) {
+    showToast("Не удалось добавить урок", true);
+  }
+}
+
+async function deleteJournalScheduleEntry(id) {
+  try {
+    const resp = await fetch(API_URL + "/journal/schedule?id=" + id, {method: "DELETE", headers: authHeaders()});
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    await loadJournalClassData();
+  } catch(e) {
+    showToast("Не удалось удалить урок", true);
+  }
 }
 
 // ── DAY ROSTER (админ — "кто работал в этот день", обратный срез к
