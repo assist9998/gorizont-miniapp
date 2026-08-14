@@ -240,6 +240,14 @@
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
     <button onclick="goTo('journal')" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
     <div style="font-size:16px;font-weight:600;flex:1" id="journalClassTitle">Класс</div>
+    <button onclick="startJournalClassRename()" id="journalRenameBtn" title="Переименовать класс" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+    </button>
+  </div>
+  <div id="journalRenameRow" style="display:none;gap:8px;margin-bottom:16px">
+    <input id="journalRenameInput" type="text" style="flex:1;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    <button onclick="saveJournalClassRename()" style="flex-shrink:0;padding:0 16px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Сохранить</button>
+    <button onclick="cancelJournalClassRename()" style="flex-shrink:0;padding:0 16px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">Отмена</button>
   </div>
 
   <div class="section-title">Предметы</div>
@@ -253,7 +261,7 @@
   <div class="section-title">Расписание</div>
   <div id="journalScheduleList" style="margin-bottom:16px"></div>
   <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:14px;margin-bottom:80px">
-    <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:10px">Добавить урок</div>
+    <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:10px" id="journalScheduleFormTitle">Добавить урок</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       <select id="js_weekday" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
         <option value="1">Понедельник</option>
@@ -272,7 +280,10 @@
       <input id="js_time_end" type="text" placeholder="Конец, 12:40" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
     </div>
     <input id="js_teacher" type="text" placeholder="Учитель" style="width:100%;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
-    <button onclick="addJournalScheduleEntry()" class="btn-primary" style="width:100%">Добавить урок</button>
+    <div style="display:flex;gap:8px">
+      <button onclick="submitJournalScheduleForm()" class="btn-primary" style="flex:1" id="journalScheduleSubmitBtn">Добавить урок</button>
+      <button onclick="cancelJournalScheduleEdit()" id="journalScheduleCancelBtn" style="display:none;flex-shrink:0;padding:0 16px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;cursor:pointer">Отмена</button>
+    </div>
   </div>
 </div>
 
@@ -2299,6 +2310,9 @@ function openNewJournalClass() {
 async function openJournalClass(name) {
   activeJournalClass = name;
   document.getElementById("journalClassTitle").textContent = name;
+  editingJournalSubjectId = null;
+  cancelJournalScheduleEdit();
+  cancelJournalClassRename();
   goTo("journal-class");
   await loadJournalClassData();
 }
@@ -2320,21 +2334,69 @@ async function loadJournalClassData() {
   renderJournalSchedule();
 }
 
+// editingJournalSubjectId — id предмета, чья пилюля сейчас в режиме
+// переименования (null — ни одна). Только один одновременно, как и с
+// расписанием (editingJournalScheduleId) — проще, чем множественный inline-edit.
+let editingJournalSubjectId = null;
+
 function renderJournalSubjects() {
   let html = "";
   journalSubjects.forEach(s => {
-    html += `<div style="display:flex;align-items:center;gap:6px;padding:6px 6px 6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px">
-      <span>${s.name}</span>
-      <button onclick="deleteJournalSubject(${s.id})" style="border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px">×</button>
-    </div>`;
+    if(s.id === editingJournalSubjectId) {
+      html += `<div style="display:flex;align-items:center;gap:4px;padding:4px;border-radius:20px;border:1.5px solid var(--accent);background:var(--surface2)">
+        <input id="journalSubjectEditInput_${s.id}" type="text" value="${s.name.replace(/"/g, "&quot;")}" style="width:90px;padding:4px 8px;border-radius:14px;border:none;background:transparent;color:var(--text);font-family:inherit;font-size:13px;outline:none">
+        <button onclick="saveJournalSubjectEdit(${s.id})" style="border:none;background:transparent;color:var(--accent);cursor:pointer;font-size:14px;padding:2px 4px">✓</button>
+        <button onclick="cancelJournalSubjectEdit()" style="border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:14px;padding:2px 4px">✕</button>
+      </div>`;
+    } else {
+      html += `<div style="display:flex;align-items:center;gap:6px;padding:6px 6px 6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px">
+        <span onclick="startJournalSubjectEdit(${s.id})" style="cursor:pointer">${s.name}</span>
+        <button onclick="deleteJournalSubject(${s.id})" style="border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px">×</button>
+      </div>`;
+    }
   });
   if(!journalSubjects.length) html = '<div class="empty" style="padding:14px 0">Пока нет предметов</div>';
   document.getElementById("journalSubjectList").innerHTML = html;
 
   const sel = document.getElementById("js_subject");
+  const prev = sel.value;
   sel.innerHTML = '<option value="">Без предмета</option>' +
     journalSubjects.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+  sel.value = prev;
 }
+
+function startJournalSubjectEdit(id) {
+  editingJournalSubjectId = id;
+  renderJournalSubjects();
+  document.getElementById("journalSubjectEditInput_" + id)?.focus();
+}
+
+function cancelJournalSubjectEdit() {
+  editingJournalSubjectId = null;
+  renderJournalSubjects();
+}
+
+async function saveJournalSubjectEdit(id) {
+  const name = document.getElementById("journalSubjectEditInput_" + id).value.trim();
+  if(!name) return;
+  try {
+    const resp = await fetch(API_URL + "/journal/subjects/" + id, {
+      method: "PUT",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({name}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    editingJournalSubjectId = null;
+    await loadJournalClassData();
+  } catch(e) {
+    showToast("Не удалось сохранить предмет", true);
+  }
+}
+
+// editingJournalScheduleId — id урока, который сейчас редактируется через
+// нижнюю форму (null — форма в режиме добавления нового урока).
+let editingJournalScheduleId = null;
 
 function renderJournalSchedule() {
   let html = "";
@@ -2345,12 +2407,12 @@ function renderJournalSchedule() {
     entries.forEach(e => {
       const time = [e.time_start, e.time_end].filter(Boolean).join("–");
       const meta = [e.subject_name, e.teacher_name].filter(Boolean).join(" · ");
-      html += `<div class="child-list-item" style="cursor:default">
+      html += `<div class="child-list-item" onclick="startJournalScheduleEdit(${e.id})">
         <div class="child-detail">
           <div class="child-detail-name">${time || "Время не указано"}</div>
           <div class="child-detail-meta">${meta || "—"}</div>
         </div>
-        <button onclick="deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>
+        <button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>
       </div>`;
     });
   }
@@ -2388,31 +2450,64 @@ async function deleteJournalSubject(id) {
   }
 }
 
-async function addJournalScheduleEntry() {
+function startJournalScheduleEdit(id) {
+  const e = journalSchedule.find(x => x.id === id);
+  if(!e) return;
+  editingJournalScheduleId = id;
+  document.getElementById("js_weekday").value = e.weekday;
+  document.getElementById("js_subject").value = e.subject_id || "";
+  document.getElementById("js_time_start").value = e.time_start || "";
+  document.getElementById("js_time_end").value = e.time_end || "";
+  document.getElementById("js_teacher").value = e.teacher_name || "";
+  document.getElementById("journalScheduleFormTitle").textContent = "Изменить урок";
+  document.getElementById("journalScheduleSubmitBtn").textContent = "Сохранить";
+  document.getElementById("journalScheduleCancelBtn").style.display = "";
+  document.getElementById("journalScheduleSubmitBtn").scrollIntoView({behavior: "smooth", block: "center"});
+}
+
+function cancelJournalScheduleEdit() {
+  editingJournalScheduleId = null;
+  document.getElementById("js_time_start").value = "";
+  document.getElementById("js_time_end").value = "";
+  document.getElementById("js_teacher").value = "";
+  document.getElementById("journalScheduleFormTitle").textContent = "Добавить урок";
+  document.getElementById("journalScheduleSubmitBtn").textContent = "Добавить урок";
+  document.getElementById("journalScheduleCancelBtn").style.display = "none";
+}
+
+async function submitJournalScheduleForm() {
   const weekday = parseInt(document.getElementById("js_weekday").value, 10);
   const subjectId = document.getElementById("js_subject").value;
   const timeStart = document.getElementById("js_time_start").value.trim();
   const timeEnd = document.getElementById("js_time_end").value.trim();
   const teacher = document.getElementById("js_teacher").value.trim();
+  const payload = {
+    weekday, time_start: timeStart, time_end: timeEnd,
+    subject_id: subjectId ? parseInt(subjectId, 10) : null, teacher_name: teacher,
+  };
   try {
-    const resp = await fetch(API_URL + "/journal/schedule", {
-      method: "POST",
-      headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({
-        city: activeJournalCity, class_name: activeJournalClass, weekday,
-        time_start: timeStart, time_end: timeEnd,
-        subject_id: subjectId ? parseInt(subjectId, 10) : null, teacher_name: teacher,
-      }),
-    });
+    let resp;
+    if(editingJournalScheduleId) {
+      resp = await fetch(API_URL + "/journal/schedule/" + editingJournalScheduleId, {
+        method: "PUT",
+        headers: authHeaders({"Content-Type": "application/json"}),
+        body: JSON.stringify(payload),
+      });
+    } else {
+      resp = await fetch(API_URL + "/journal/schedule", {
+        method: "POST",
+        headers: authHeaders({"Content-Type": "application/json"}),
+        body: JSON.stringify(Object.assign({city: activeJournalCity, class_name: activeJournalClass}, payload)),
+      });
+    }
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
-    document.getElementById("js_time_start").value = "";
-    document.getElementById("js_time_end").value = "";
-    document.getElementById("js_teacher").value = "";
+    const wasEdit = !!editingJournalScheduleId;
+    cancelJournalScheduleEdit();
     await loadJournalClassData();
-    showToast("Урок добавлен");
+    showToast(wasEdit ? "Урок сохранён" : "Урок добавлен");
   } catch(e) {
-    showToast("Не удалось добавить урок", true);
+    showToast("Не удалось сохранить урок", true);
   }
 }
 
@@ -2421,9 +2516,47 @@ async function deleteJournalScheduleEntry(id) {
     const resp = await fetch(API_URL + "/journal/schedule?id=" + id, {method: "DELETE", headers: authHeaders()});
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
+    if(editingJournalScheduleId === id) cancelJournalScheduleEdit();
     await loadJournalClassData();
   } catch(e) {
     showToast("Не удалось удалить урок", true);
+  }
+}
+
+// ── Переименование класса — class_name не хранится отдельной строкой,
+// поэтому "переименовать класс" = переписать class_name во всех его
+// предметах и уроках расписания (несколько PUT-запросов подряд).
+function startJournalClassRename() {
+  document.getElementById("journalRenameInput").value = activeJournalClass;
+  document.getElementById("journalRenameRow").style.display = "flex";
+  document.getElementById("journalRenameInput").focus();
+}
+
+function cancelJournalClassRename() {
+  document.getElementById("journalRenameRow").style.display = "none";
+}
+
+async function saveJournalClassRename() {
+  const newName = document.getElementById("journalRenameInput").value.trim();
+  if(!newName || newName === activeJournalClass) { cancelJournalClassRename(); return; }
+  try {
+    await Promise.all([
+      ...journalSubjects.map(s => fetch(API_URL + "/journal/subjects/" + s.id, {
+        method: "PUT", headers: authHeaders({"Content-Type": "application/json"}),
+        body: JSON.stringify({class_name: newName}),
+      })),
+      ...journalSchedule.map(e => fetch(API_URL + "/journal/schedule/" + e.id, {
+        method: "PUT", headers: authHeaders({"Content-Type": "application/json"}),
+        body: JSON.stringify({class_name: newName}),
+      })),
+    ]);
+    activeJournalClass = newName;
+    document.getElementById("journalClassTitle").textContent = newName;
+    cancelJournalClassRename();
+    await loadJournalClassData();
+    showToast("Класс переименован");
+  } catch(e) {
+    showToast("Не удалось переименовать класс", true);
   }
 }
 
