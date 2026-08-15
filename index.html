@@ -279,7 +279,8 @@
       <input id="js_time_start" type="text" placeholder="Начало, 12:00" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
       <input id="js_time_end" type="text" placeholder="Конец, 12:40" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
     </div>
-    <input id="js_teacher" type="text" placeholder="Учитель" style="width:100%;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    <select id="js_teacher" style="width:100%;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+    </select>
     <div style="display:flex;gap:8px">
       <button onclick="submitJournalScheduleForm()" class="btn-primary" style="flex:1" id="journalScheduleSubmitBtn">Добавить урок</button>
       <button onclick="cancelJournalScheduleEdit()" id="journalScheduleCancelBtn" style="display:none;flex-shrink:0;padding:0 16px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;cursor:pointer">Отмена</button>
@@ -429,6 +430,7 @@
       <option value="Воспитатель">Воспитатель</option>
       <option value="Воспитатель (подготовительная группа)">Воспитатель (подготовительная группа)</option>
       <option value="Няня">Няня</option>
+      <option value="Учитель">Учитель</option>
       <option value="Администратор">Администратор</option>
       <option value="Директор">Директор</option>
     </select>
@@ -2317,19 +2319,30 @@ async function openJournalClass(name) {
   await loadJournalClassData();
 }
 
+// Учитель — не текст, а ссылка на карточку в "Персонале" (решение
+// пользователя: свободный текст давал бы разнобой в написании одного и
+// того же имени). Список подтягиваем из того же /payroll/staff, что и
+// вкладка "Персонал" — все активные сотрудники города, без фильтра по
+// должности (учитель может быть заведён как угодно, не только "Учитель").
+let journalTeachers = [];
+
 async function loadJournalClassData() {
   try {
     const data = await withRetry(() => Promise.all([
       fetch(API_URL + "/journal/subjects?city=" + encodeURIComponent(activeJournalCity) + "&class=" + encodeURIComponent(activeJournalClass), {headers: authHeaders()}).then(r => r.json()),
       fetch(API_URL + "/journal/schedule?city=" + encodeURIComponent(activeJournalCity) + "&class=" + encodeURIComponent(activeJournalClass), {headers: authHeaders()}).then(r => r.json()),
+      fetch(API_URL + "/payroll/staff?city=" + encodeURIComponent(activeJournalCity), {headers: authHeaders()}).then(r => r.json()),
     ]));
     journalSubjects = data[0].subjects || [];
     journalSchedule = data[1].schedule || [];
+    journalTeachers = data[2].staff || [];
   } catch(e) {
     console.error("loadJournalClassData error:", e);
     journalSubjects = [];
     journalSchedule = [];
+    journalTeachers = [];
   }
+  renderJournalTeacherSelect();
   renderJournalSubjects();
   renderJournalSchedule();
 }
@@ -2338,6 +2351,14 @@ async function loadJournalClassData() {
 // переименования (null — ни одна). Только один одновременно, как и с
 // расписанием (editingJournalScheduleId) — проще, чем множественный inline-edit.
 let editingJournalSubjectId = null;
+
+function renderJournalTeacherSelect() {
+  const sel = document.getElementById("js_teacher");
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">Без учителя</option>' +
+    journalTeachers.map(t => `<option value="${t.id}">${t.name}${t.position ? " (" + t.position + ")" : ""}</option>`).join("");
+  sel.value = prev;
+}
 
 function renderJournalSubjects() {
   let html = "";
@@ -2458,7 +2479,7 @@ function startJournalScheduleEdit(id) {
   document.getElementById("js_subject").value = e.subject_id || "";
   document.getElementById("js_time_start").value = e.time_start || "";
   document.getElementById("js_time_end").value = e.time_end || "";
-  document.getElementById("js_teacher").value = e.teacher_name || "";
+  document.getElementById("js_teacher").value = e.teacher_staff_id || "";
   document.getElementById("journalScheduleFormTitle").textContent = "Изменить урок";
   document.getElementById("journalScheduleSubmitBtn").textContent = "Сохранить";
   document.getElementById("journalScheduleCancelBtn").style.display = "";
@@ -2470,6 +2491,7 @@ function cancelJournalScheduleEdit() {
   document.getElementById("js_time_start").value = "";
   document.getElementById("js_time_end").value = "";
   document.getElementById("js_teacher").value = "";
+  document.getElementById("js_subject").value = "";
   document.getElementById("journalScheduleFormTitle").textContent = "Добавить урок";
   document.getElementById("journalScheduleSubmitBtn").textContent = "Добавить урок";
   document.getElementById("journalScheduleCancelBtn").style.display = "none";
@@ -2480,10 +2502,11 @@ async function submitJournalScheduleForm() {
   const subjectId = document.getElementById("js_subject").value;
   const timeStart = document.getElementById("js_time_start").value.trim();
   const timeEnd = document.getElementById("js_time_end").value.trim();
-  const teacher = document.getElementById("js_teacher").value.trim();
+  const teacherId = document.getElementById("js_teacher").value;
   const payload = {
     weekday, time_start: timeStart, time_end: timeEnd,
-    subject_id: subjectId ? parseInt(subjectId, 10) : null, teacher_name: teacher,
+    subject_id: subjectId ? parseInt(subjectId, 10) : null,
+    teacher_staff_id: teacherId ? parseInt(teacherId, 10) : null,
   };
   try {
     let resp;
