@@ -781,6 +781,11 @@ async function loadChildren() {
     renderHome();
     renderAttFilters();
     renderChildList();
+    // Бейдж на колокольчике должен быть виден СРАЗУ при заходе в приложение,
+    // а не только после того, как сам откроешь вкладку "Уведомления" — иначе
+    // это не уведомление, а просто список, который никто не увидит без повода
+    // туда зайти (баг, о котором сообщил пользователь).
+    renderNotifications();
   } catch(e) {
     console.error("API error:", e);
     document.getElementById("attList").innerHTML = '<div class="empty">Не удалось загрузить данные</div>';
