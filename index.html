@@ -276,8 +276,8 @@
       </select>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-      <input id="js_time_start" type="text" placeholder="Начало, 12:00" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
-      <input id="js_time_end" type="text" placeholder="Конец, 12:40" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+      <select id="js_time_start" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px"></select>
+      <select id="js_time_end" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px"></select>
     </div>
     <select id="js_teacher" style="width:100%;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
     </select>
@@ -2253,6 +2253,30 @@ function renderStaffList() {
 // предмет или урок в расписании — список классов на экране получается
 // объединением class_name из /journal/subjects и /journal/schedule.
 const JOURNAL_WEEKDAYS = {1:"Понедельник",2:"Вторник",3:"Среда",4:"Четверг",5:"Пятница",6:"Суббота",7:"Воскресенье"};
+
+// Выпадающий список времени вместо свободного текста — во-первых, не надо
+// печатать вручную, во-вторых (главное) гарантирует единый формат "ЧЧ:ММ" с
+// ведущим нулём: сортировка расписания текстовая (и на бэкенде ORDER BY, и
+// здесь порядок из ответа сохраняется), а "9:00" > "12:00" как строка —
+// из-за этого урок в 9:00 уезжал вниз списка ниже урока в 10:00 (нашли на
+// реальных данных класса "5 класс" в Дананге, поправили руками при фиксе).
+const JOURNAL_TIME_OPTIONS = (() => {
+  const opts = [];
+  for(let h = 6; h <= 21; h++) {
+    for(let m = 0; m < 60; m += 5) {
+      if(h === 21 && m > 0) break;
+      opts.push(String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0"));
+    }
+  }
+  return opts;
+})();
+
+function populateJournalTimeSelects() {
+  const optsHtml = '<option value=""></option>' + JOURNAL_TIME_OPTIONS.map(t => `<option value="${t}">${t}</option>`).join("");
+  document.getElementById("js_time_start").innerHTML = optsHtml;
+  document.getElementById("js_time_end").innerHTML = optsHtml;
+}
+populateJournalTimeSelects();
 let activeJournalCity = null;
 let journalClassNames = [];
 let activeJournalClass = null;
