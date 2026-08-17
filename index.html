@@ -245,14 +245,23 @@
     </button>
   </div>
 
-  <div class="section-title">Предметы</div>
-  <div id="journalViewSubjects" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px"></div>
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <button class="filter-btn active" id="journalViewTab-subjects" onclick="switchJournalViewTab('subjects')">Предметы</button>
+    <button class="filter-btn" id="journalViewTab-schedule" onclick="switchJournalViewTab('schedule')">Расписание</button>
+    <button class="filter-btn" id="journalViewTab-students" onclick="switchJournalViewTab('students')">Дети</button>
+  </div>
 
-  <div class="section-title">Расписание</div>
-  <div id="journalViewSchedule" style="margin-bottom:20px"></div>
+  <div id="journalViewPanel-subjects">
+    <div id="journalViewSubjects" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px"></div>
+  </div>
 
-  <div class="section-title">Ученики</div>
-  <div id="journalViewStudents" style="margin-bottom:80px"></div>
+  <div id="journalViewPanel-schedule" style="display:none">
+    <div id="journalViewSchedule" style="margin-bottom:20px"></div>
+  </div>
+
+  <div id="journalViewPanel-students" style="display:none">
+    <div id="journalViewStudents" style="margin-bottom:80px"></div>
+  </div>
 </div>
 
 <!-- SCREEN: JOURNAL CLASS (редактирование — предметы/расписание/дети одного класса) -->
@@ -2418,6 +2427,7 @@ async function openJournalClass(name) {
   editingJournalSubjectId = null;
   cancelJournalScheduleEdit();
   cancelJournalClassRename();
+  switchJournalViewTab("subjects");
   goTo("journal-view");
   await loadJournalClassData();
 }
@@ -2436,6 +2446,15 @@ function switchJournalEditTab(tab) {
   ["subjects", "schedule", "students"].forEach(t => {
     const tabBtn = document.getElementById("journalTab-" + t);
     const panel = document.getElementById("journalPanel-" + t);
+    if(tabBtn) tabBtn.className = "filter-btn" + (t === tab ? " active" : "");
+    if(panel) panel.style.display = t === tab ? "" : "none";
+  });
+}
+
+function switchJournalViewTab(tab) {
+  ["subjects", "schedule", "students"].forEach(t => {
+    const tabBtn = document.getElementById("journalViewTab-" + t);
+    const panel = document.getElementById("journalViewPanel-" + t);
     if(tabBtn) tabBtn.className = "filter-btn" + (t === tab ? " active" : "");
     if(panel) panel.style.display = t === tab ? "" : "none";
   });
