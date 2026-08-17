@@ -235,10 +235,30 @@
   <div id="journalClassList"></div>
 </div>
 
-<!-- SCREEN: JOURNAL CLASS (предметы + расписание одного класса) -->
-<div class="screen" id="screen-journal-class">
+<!-- SCREEN: JOURNAL VIEW (обзор класса — только просмотр, без редактирования) -->
+<div class="screen" id="screen-journal-view">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
     <button onclick="goTo('journal')" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
+    <div style="font-size:16px;font-weight:600;flex:1" id="journalViewTitle">Класс</div>
+    <button onclick="openJournalClassEdit()" title="Редактировать" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+    </button>
+  </div>
+
+  <div class="section-title">Предметы</div>
+  <div id="journalViewSubjects" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px"></div>
+
+  <div class="section-title">Расписание</div>
+  <div id="journalViewSchedule" style="margin-bottom:20px"></div>
+
+  <div class="section-title">Ученики</div>
+  <div id="journalViewStudents" style="margin-bottom:80px"></div>
+</div>
+
+<!-- SCREEN: JOURNAL CLASS (редактирование — предметы/расписание/дети одного класса) -->
+<div class="screen" id="screen-journal-class">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <button onclick="goTo('journal-view')" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
     <div style="font-size:16px;font-weight:600;flex:1" id="journalClassTitle">Класс</div>
     <button onclick="startJournalClassRename()" id="journalRenameBtn" title="Переименовать класс" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
@@ -250,40 +270,60 @@
     <button onclick="cancelJournalClassRename()" style="flex-shrink:0;padding:0 16px;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">Отмена</button>
   </div>
 
-  <div class="section-title">Предметы</div>
-  <div id="journalSubjectList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
-  <div style="display:flex;gap:8px;margin-bottom:20px">
-    <input id="journalNewSubjectInput" type="text" placeholder="Новый предмет"
-      style="flex:1;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
-    <button onclick="addJournalSubject()" style="flex-shrink:0;padding:0 16px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">+</button>
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <button class="filter-btn active" id="journalTab-subjects" onclick="switchJournalEditTab('subjects')">Предметы</button>
+    <button class="filter-btn" id="journalTab-schedule" onclick="switchJournalEditTab('schedule')">Расписание</button>
+    <button class="filter-btn" id="journalTab-students" onclick="switchJournalEditTab('students')">Дети</button>
   </div>
 
-  <div class="section-title">Расписание</div>
-  <div id="journalScheduleList" style="margin-bottom:16px"></div>
-  <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:14px;margin-bottom:80px">
-    <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:10px" id="journalScheduleFormTitle">Добавить урок</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-      <select id="js_weekday" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
-        <option value="1">Понедельник</option>
-        <option value="2">Вторник</option>
-        <option value="3">Среда</option>
-        <option value="4">Четверг</option>
-        <option value="5">Пятница</option>
-        <option value="6">Суббота</option>
-        <option value="7">Воскресенье</option>
-      </select>
-      <select id="js_subject" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
-      </select>
+  <div id="journalPanel-subjects">
+    <div id="journalSubjectList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:20px">
+      <input id="journalNewSubjectInput" type="text" placeholder="Новый предмет"
+        style="flex:1;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+      <button onclick="addJournalSubject()" style="flex-shrink:0;padding:0 16px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">+</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-      <select id="js_time_start" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px"></select>
-      <select id="js_time_end" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px"></select>
+  </div>
+
+  <div id="journalPanel-schedule" style="display:none">
+    <div id="journalScheduleList" style="margin-bottom:16px"></div>
+    <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:14px;margin-bottom:80px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:10px" id="journalScheduleFormTitle">Добавить урок</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <select id="js_weekday" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+          <option value="1">Понедельник</option>
+          <option value="2">Вторник</option>
+          <option value="3">Среда</option>
+          <option value="4">Четверг</option>
+          <option value="5">Пятница</option>
+          <option value="6">Суббота</option>
+          <option value="7">Воскресенье</option>
+        </select>
+        <select id="js_subject" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <select id="js_time_start" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px"></select>
+        <select id="js_time_end" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px"></select>
+      </div>
+      <select id="js_teacher" style="width:100%;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+      </select>
+      <div style="display:flex;gap:8px">
+        <button onclick="submitJournalScheduleForm()" class="btn-primary" style="flex:1" id="journalScheduleSubmitBtn">Добавить урок</button>
+        <button onclick="cancelJournalScheduleEdit()" id="journalScheduleCancelBtn" style="display:none;flex-shrink:0;padding:0 16px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;cursor:pointer">Отмена</button>
+      </div>
     </div>
-    <select id="js_teacher" style="width:100%;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
-    </select>
-    <div style="display:flex;gap:8px">
-      <button onclick="submitJournalScheduleForm()" class="btn-primary" style="flex:1" id="journalScheduleSubmitBtn">Добавить урок</button>
-      <button onclick="cancelJournalScheduleEdit()" id="journalScheduleCancelBtn" style="display:none;flex-shrink:0;padding:0 16px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;cursor:pointer">Отмена</button>
+  </div>
+
+  <div id="journalPanel-students" style="display:none">
+    <div id="journalStudentList" style="margin-bottom:16px"></div>
+    <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:14px;margin-bottom:80px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:10px">Добавить ученика</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <select id="journalAssignSelect" style="flex:1;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px"></select>
+        <button onclick="assignExistingChildToClass()" style="flex-shrink:0;padding:0 16px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Добавить</button>
+      </div>
+      <button onclick="openAddChildForClass()" class="btn-secondary" style="width:100%">+ Новый ученик</button>
     </div>
   </div>
 </div>
@@ -302,7 +342,7 @@
 <!-- SCREEN: ADD/EDIT CHILD -->
 <div class="screen" id="screen-form">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-    <button onclick="goTo('children')" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
+    <button onclick="cancelForm()" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
     <div style="font-size:16px;font-weight:600;flex:1" id="formTitle">Новый ребёнок</div>
     <button onclick="openArchive()" id="archiveBtn" style="display:none;border:none;background:var(--surface2);color:var(--text2);font-family:inherit;font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;cursor:pointer;white-space:nowrap">Архив (0)</button>
   </div>
@@ -742,6 +782,11 @@ function goTo(screen) {
   if(screen === "staff-form") {
     document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("nav-staff")?.classList.add("active");
+  }
+  if(screen === "journal-view") {
+    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById("nav-journal")?.classList.add("active");
+    renderJournalView();
   }
   if(screen === "journal-class") {
     document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
@@ -1952,9 +1997,13 @@ async function toggleSelfOvertime() {
 // ── FORM ─────────────────────────────────────────────────────────
 let formMode = "add";
 let editChildId = null;
+// Экран куда вернуться после сохранения/отмены, если форма открыта не из
+// обычного списка "Дети", а откуда-то ещё (сейчас — вкладка "Дети" в
+// Журнале, см. openAddChildForClass). null = обычное поведение (goTo("children")).
+let formReturnTo = null;
 
 function openAddForm() {
-  formMode = "add"; editChildId = null;
+  formMode = "add"; editChildId = null; formReturnTo = null;
   if(!document.getElementById("formTitle")) { console.error("formTitle not found"); return; }
   document.getElementById("formTitle").textContent = "Новый ребёнок";
   document.getElementById("formTabs").style.display = "flex";
@@ -1965,6 +2014,17 @@ function openAddForm() {
   if(staffInfo && staffInfo.city) document.getElementById("f_city").value = staffInfo.city;
   refreshArchiveBadge();
   goTo("form");
+}
+
+function cancelForm() {
+  const returnTo = formReturnTo;
+  formReturnTo = null;
+  if(returnTo === "journal-class") {
+    goTo("journal-class");
+    switchJournalEditTab("students");
+  } else {
+    goTo("children");
+  }
 }
 
 // ── ARCHIVE (архивные дети — как в Balu Kids: archive/restore через тот же update_child) ──
@@ -2027,7 +2087,7 @@ function splitFullName(fullName) {
 function openEditForm(id) {
   const c = children.find(x => x.id == id);
   if(!c) return;
-  formMode = "edit"; editChildId = id;
+  formMode = "edit"; editChildId = id; formReturnTo = null;
   document.getElementById("formTitle").textContent = "Редактировать";
   document.getElementById("formTabs").style.display = "none";
   document.getElementById("trialSelector").style.display = "none";
@@ -2151,8 +2211,21 @@ async function submitForm() {
     const result = await resp.json();
     if(result.ok) {
       showToast(formMode === "add" ? "Ребёнок добавлен!" : "Данные сохранены!");
-      goTo("children");
-      loadChildren();
+      const returnTo = formReturnTo;
+      formReturnTo = null;
+      if(returnTo === "journal-class") {
+        // Ждём загрузки (не fire-and-forget, как в обычном флоу) — иначе
+        // вкладка "Дети" в Журнале откроется раньше, чем новый ребёнок
+        // появится в глобальном children, и список будет пустым.
+        await loadChildren();
+        computeJournalClassStudents();
+        renderJournalStudents();
+        goTo("journal-class");
+        switchJournalEditTab("students");
+      } else {
+        goTo("children");
+        loadChildren();
+      }
     } else {
       showToast("Ошибка сохранения: " + result.error, true);
     }
@@ -2340,12 +2413,32 @@ function openNewJournalClass() {
 
 async function openJournalClass(name) {
   activeJournalClass = name;
+  document.getElementById("journalViewTitle").textContent = name;
   document.getElementById("journalClassTitle").textContent = name;
   editingJournalSubjectId = null;
   cancelJournalScheduleEdit();
   cancelJournalClassRename();
-  goTo("journal-class");
+  goTo("journal-view");
   await loadJournalClassData();
+}
+
+// Карандаш на экране-обзоре — переход в редактирование той же, уже
+// загруженной карты класса (не перезапрашиваем с сервера).
+function openJournalClassEdit() {
+  editingJournalSubjectId = null;
+  cancelJournalScheduleEdit();
+  cancelJournalClassRename();
+  switchJournalEditTab("subjects");
+  goTo("journal-class");
+}
+
+function switchJournalEditTab(tab) {
+  ["subjects", "schedule", "students"].forEach(t => {
+    const tabBtn = document.getElementById("journalTab-" + t);
+    const panel = document.getElementById("journalPanel-" + t);
+    if(tabBtn) tabBtn.className = "filter-btn" + (t === tab ? " active" : "");
+    if(panel) panel.style.display = t === tab ? "" : "none";
+  });
 }
 
 // Учитель — не текст, а ссылка на карточку в "Персонале" (решение
@@ -2371,9 +2464,25 @@ async function loadJournalClassData() {
     journalSchedule = [];
     journalTeachers = [];
   }
+  computeJournalClassStudents();
   renderJournalTeacherSelect();
   renderJournalSubjects();
   renderJournalSchedule();
+  renderJournalStudents();
+  renderJournalView();
+}
+
+// Ученики класса — не отдельная таблица, а фильтр по уже загруженному
+// глобальному children (department="Школа", group=имя класса). group у
+// школьников выбирается из фиксированного списка "N класс" (см. GROUPS) —
+// поэтому имя класса в Журнале стоит называть так же, иначе привязка не
+// сработает (совпадение строк должно быть точным).
+let journalClassStudents = [];
+
+function computeJournalClassStudents() {
+  journalClassStudents = children.filter(c =>
+    c.city === activeJournalCity && c.dept === "Школа" && c.group === activeJournalClass
+  );
 }
 
 // editingJournalSubjectId — id предмета, чья пилюля сейчас в режиме
@@ -2601,15 +2710,157 @@ async function saveJournalClassRename() {
         method: "PUT", headers: authHeaders({"Content-Type": "application/json"}),
         body: JSON.stringify({class_name: newName}),
       })),
+      // Ученики привязаны по children.group (см. computeJournalClassStudents) —
+      // без этого переименование класса "отвязало" бы их (group остался бы
+      // со старым именем, а activeJournalClass уже новый — совпадение сломается).
+      ...journalClassStudents.map(c => fetch(API_URL + "/children/" + c.id, {
+        method: "PUT", headers: authHeaders({"Content-Type": "application/json"}),
+        body: JSON.stringify({group: newName}),
+      })),
     ]);
+    journalClassStudents.forEach(c => { c.group = newName; });
     activeJournalClass = newName;
     document.getElementById("journalClassTitle").textContent = newName;
+    document.getElementById("journalViewTitle").textContent = newName;
     cancelJournalClassRename();
     await loadJournalClassData();
     showToast("Класс переименован");
   } catch(e) {
     showToast("Не удалось переименовать класс", true);
   }
+}
+
+// ── Дети класса (вкладка "Дети" на экране редактирования) ──────────────
+function renderJournalStudents() {
+  let html = "";
+  journalClassStudents.forEach(c => {
+    const initials = c.name.split(" ").map(w => w[0]).join("").slice(0,2);
+    html += `<div class="child-list-item" style="cursor:default">
+      <div class="avatar">${initials}</div>
+      <div class="child-detail">
+        <div class="child-detail-name">${c.name}</div>
+        <div class="child-detail-meta">${c.dob ? calcAge(c.dob) : ""}</div>
+      </div>
+      <button onclick="removeChildFromClass('${c.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">убрать</button>
+    </div>`;
+  });
+  if(!journalClassStudents.length) html = '<div class="empty">Пока нет учеников в этом классе</div>';
+  document.getElementById("journalStudentList").innerHTML = html;
+  renderJournalAssignSelect();
+}
+
+function renderJournalAssignSelect() {
+  const sel = document.getElementById("journalAssignSelect");
+  if(!sel) return;
+  const candidates = children.filter(c =>
+    c.city === activeJournalCity && c.dept === "Школа" && c.group !== activeJournalClass
+  );
+  sel.innerHTML = candidates.length
+    ? candidates.map(c => `<option value="${c.id}">${c.name}${c.group ? " (" + c.group + ")" : " (без класса)"}</option>`).join("")
+    : '<option value="">Нет доступных учеников</option>';
+}
+
+async function assignExistingChildToClass() {
+  const id = document.getElementById("journalAssignSelect").value;
+  if(!id) return;
+  try {
+    const resp = await fetch(API_URL + "/children/" + id, {
+      method: "PUT",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({group: activeJournalClass}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    const child = children.find(c => c.id == id);
+    if(child) child.group = activeJournalClass;
+    computeJournalClassStudents();
+    renderJournalStudents();
+    renderJournalView();
+    showToast("Ученик добавлен в класс");
+  } catch(e) {
+    showToast("Не удалось добавить ученика", true);
+  }
+}
+
+async function removeChildFromClass(id) {
+  const c = children.find(x => x.id == id);
+  if(!confirm("Убрать " + (c ? c.name : "ученика") + " из класса «" + activeJournalClass + "»?")) return;
+  try {
+    const resp = await fetch(API_URL + "/children/" + id, {
+      method: "PUT",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({group: ""}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    if(c) c.group = "";
+    computeJournalClassStudents();
+    renderJournalStudents();
+    renderJournalView();
+    showToast("Ученик убран из класса");
+  } catch(e) {
+    showToast("Не удалось убрать ученика", true);
+  }
+}
+
+// "+ Новый ученик" из вкладки "Дети" — переиспользуем обычную форму
+// добавления ребёнка (screen-form), только предзаполняем город/направление/
+// класс и запоминаем, что после сохранения нужно вернуться сюда, а не на
+// общий список "Дети" (formReturnTo, см. submitForm/cancelForm).
+function openAddChildForClass() {
+  openAddForm();
+  formReturnTo = "journal-class";
+  document.getElementById("f_city").value = activeJournalCity;
+  document.getElementById("f_dept").value = "Школа";
+  updateGroupOptions(activeJournalClass);
+  document.getElementById("formTitle").textContent = "Новый ученик — " + activeJournalClass;
+  // Поле "Группа/Класс" у ребёнка — фиксированный список ("1 класс".."9 класс"),
+  // а имя класса в Журнале — свободный текст. Если оно не совпадает буквально
+  // ни с одним пунктом списка, автовыбор класса в форме не сработает (встанет
+  // первый пункт по умолчанию) — предупреждаем, чтобы не привязать ребёнка
+  // молча не туда.
+  const validGroups = (GROUPS[activeJournalCity] && GROUPS[activeJournalCity]["Школа"]) || [];
+  if(!validGroups.includes(activeJournalClass)) {
+    showToast("Класс «" + activeJournalClass + "» не из стандартного списка — проверьте поле «Группа/Класс» в форме вручную", true);
+  }
+}
+
+// ── Экран-обзор (только просмотр, без кнопок редактирования) ───────────
+function renderJournalView() {
+  const subjHtml = journalSubjects.map(s =>
+    `<div style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px">${s.name}</div>`
+  ).join("");
+  document.getElementById("journalViewSubjects").innerHTML = subjHtml || '<div class="empty" style="padding:14px 0">Пока нет предметов</div>';
+
+  let schedHtml = "";
+  for(let wd = 1; wd <= 7; wd++) {
+    const entries = journalSchedule.filter(e => e.weekday === wd);
+    if(!entries.length) continue;
+    schedHtml += `<div class="section-title" style="margin:14px 0 8px">${JOURNAL_WEEKDAYS[wd]}</div>`;
+    entries.forEach(e => {
+      const time = [e.time_start, e.time_end].filter(Boolean).join("–");
+      const meta = [e.subject_name, e.teacher_name].filter(Boolean).join(" · ");
+      schedHtml += `<div class="child-list-item" style="cursor:default">
+        <div class="child-detail">
+          <div class="child-detail-name">${time || "Время не указано"}</div>
+          <div class="child-detail-meta">${meta || "—"}</div>
+        </div>
+      </div>`;
+    });
+  }
+  document.getElementById("journalViewSchedule").innerHTML = schedHtml || '<div class="empty">Пока нет уроков в расписании</div>';
+
+  const stuHtml = journalClassStudents.map(c => {
+    const initials = c.name.split(" ").map(w => w[0]).join("").slice(0,2);
+    return `<div class="child-list-item" style="cursor:default">
+      <div class="avatar">${initials}</div>
+      <div class="child-detail">
+        <div class="child-detail-name">${c.name}</div>
+        <div class="child-detail-meta">${c.dob ? calcAge(c.dob) : ""}</div>
+      </div>
+    </div>`;
+  }).join("");
+  document.getElementById("journalViewStudents").innerHTML = stuHtml || '<div class="empty">Пока нет учеников в этом классе</div>';
 }
 
 // ── DAY ROSTER (админ — "кто работал в этот день", обратный срез к
