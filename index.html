@@ -143,6 +143,20 @@
 </head>
 <body>
 
+<!-- Гейт прибытия: полноэкранный, показан по умолчанию с самого первого
+     рендера (не JS-переключателем) — чтобы под ним не успевали мелькнуть
+     реальные данные (дети, имя), пока не решили, пускать ли дальше. Прячем
+     только когда точно можно (админ / уже отметился / гео подтвердило "на
+     месте"). Один и тот же экран для трёх состояний — "проверяем",
+     "не на месте", "нужна геолокация" — меняем только текст и кнопку.
+     project_gorizont_payroll. -->
+<div id="appGate" style="position:fixed;inset:0;z-index:500;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px">
+  <div style="max-width:320px;text-align:center">
+    <div id="appGateText" style="font-size:15px;line-height:1.5;color:var(--text);margin-bottom:18px">Проверяем местоположение…</div>
+    <button class="btn-primary" id="appGateRetryBtn" style="width:100%;display:none" onclick="retryAppGate()">Проверить снова</button>
+  </div>
+</div>
+
 <!-- Полоска "доступно обновление" — как в Balu Kids: не применяется сама
      по себе, только по тапу пользователя, поэтому ничего не выдёргивает
      из-под рук посреди заполнения формы. -->
@@ -618,19 +632,9 @@
 
 <div class="toast" id="toast"></div>
 
-<!-- Жёсткая заглушка: гео определилось, но сотрудник не на территории
-     садика/школы — не закрывается тапом мимо, только по повторной проверке
-     (retryGeoGate), project_gorizont_payroll -->
-<div class="modal-overlay" id="geoBlockOverlay" style="z-index:400;align-items:center">
-  <div class="modal" style="border-radius:24px;text-align:center">
-    <div style="font-size:15px;line-height:1.5;margin-bottom:18px" id="geoBlockText">Пока не видим вас рядом с садиком/школой — откройте приложение, когда будете на месте.</div>
-    <button class="btn-primary" style="width:100%" onclick="retryGeoGate()">Проверить снова</button>
-  </div>
-</div>
-
-<!-- Мягкое напоминание: гео подтвердило, что на месте (или геолокацию не
-     удалось определить) — приложением пользоваться можно, просто напоминаем
-     отметиться самому и отметить детей. Закрывается тапом мимо/кнопкой. -->
+<!-- Мягкое напоминание: гео подтвердило, что сотрудник на месте — гейт уже
+     пропустил, приложением пользоваться можно, просто напоминаем отметиться
+     самому и отметить детей. Закрывается тапом мимо/кнопкой. -->
 <div class="modal-overlay" id="arrivalReminderOverlay" onclick="if(event.target===this) closeArrivalReminder()">
   <div class="modal" style="border-radius:24px">
     <div class="modal-handle"></div>
@@ -1826,7 +1830,10 @@ function applyRolePermissions() {
 async function initStaff(){
   try {
     const tgId = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : "";
-    if(!tgId) return;
+    // Без tgId/при сбое запроса гейт не сможет разрешиться (initSelfAttendance
+    // никогда не вызовется) — прячем сразу, иначе завис бы навсегда "Проверяем…"
+    // из-за проблемы, не связанной с геолокацией вообще.
+    if(!tgId) { hideAppGate(); return; }
     const data = await withRetry(async () => {
       const resp = await fetch(API_URL + "/staff?tg_id=" + tgId, { headers: authHeaders() });
       if(!resp.ok) throw new Error("HTTP " + resp.status);
@@ -1835,10 +1842,14 @@ async function initStaff(){
     if(data.ok) {
       staffInfo = data.staff;
       console.log("Staff:", staffInfo);
+      if(isAdminRole(staffInfo.role) || !staffInfo.payroll_staff_id) hideAppGate();
       initSelfAttendance();
+    } else {
+      hideAppGate();
     }
   } catch(e) {
     console.error("Staff error:", e);
+    hideAppGate();
   } finally {
     applyRolePermissions();
   }
@@ -1893,23 +1904,37 @@ async function initSelfAttendance() {
   runArrivalGeoGate();
 }
 
-// ── ARRIVAL GEO GATE (project_gorizont_payroll, $10) ────────────────────
-// Один раз в день, пока сотрудник ещё не отметился: тихо проверяем гео.
-// Точно НЕ на территории → жёсткая заглушка (geoBlockOverlay), приложением
-// пользоваться нельзя, пока не окажется рядом. На территории — или гео не
-// удалось определить (отказали в разрешении/ошибка — тогда мы просто не
-// знаем, где человек, и НЕ блокируем) — мягкое напоминание отметиться самому
-// и отметить детей (arrivalReminderOverlay), приложение открыто как обычно.
-// Админы/директор освобождены — как и от самой гео-проверки на кнопке.
+// ── ARRIVAL GATE (project_gorizont_payroll, $10) ─────────────────────────
+// appGate закрывает экран с самого первого рендера (см. HTML — виден по
+// умолчанию, ещё до JS, чтобы под ним не мелькали реальные данные). Прячем
+// (hideAppGate) только когда точно можно: админ / нет карточки в payroll /
+// уже отметился сегодня / гео подтвердило "на месте". Во всех остальных
+// случаях гейт остаётся — меняется только текст: "не на месте" (гео
+// определилось, но далеко) или "нужна геолокация" (отказали в доступе/
+// ошибка — раньше в этом случае пускали дальше молча, теперь тоже
+// блокируем — правка пользователя после живого теста).
+function hideAppGate() {
+  document.getElementById("appGate").style.display = "none";
+}
+
+function showAppGateMessage(text, showRetry) {
+  document.getElementById("appGateText").textContent = text;
+  document.getElementById("appGateRetryBtn").style.display = showRetry ? "" : "none";
+}
+
 async function runArrivalGeoGate() {
-  if(!staffInfo || !staffInfo.payroll_staff_id) return;
-  if(isAdminRole(staffInfo.role)) return;
-  if(selfAttendanceMarked !== false) return; // true — уже отметился; null — ещё не знаем
+  if(!staffInfo || !staffInfo.payroll_staff_id || isAdminRole(staffInfo.role)) { hideAppGate(); return; }
+  if(selfAttendanceMarked === null) return; // ещё не знаем — вызовется повторно, когда узнаем
+  if(selfAttendanceMarked === true) { hideAppGate(); return; }
+  showAppGateMessage("Проверяем местоположение…", false);
   let coords;
   try {
     coords = await getGeoPosition();
   } catch(e) {
-    showArrivalReminder();
+    showAppGateMessage(
+      "Нужна геолокация, чтобы продолжить — разрешите доступ к местоположению в настройках и нажмите ещё раз.",
+      true,
+    );
     return;
   }
   try {
@@ -1920,17 +1945,17 @@ async function runArrivalGeoGate() {
     );
     const data = await resp.json();
     if(data.ok && data.in_range === false) {
-      document.getElementById("geoBlockOverlay").classList.add("show");
+      showAppGateMessage("Пока не видим вас рядом с садиком/школой — откройте приложение, когда будете на месте.", true);
     } else {
+      hideAppGate();
       showArrivalReminder();
     }
   } catch(e) {
-    showArrivalReminder();
+    showAppGateMessage("Не удалось проверить местоположение — попробуйте снова.", true);
   }
 }
 
-function retryGeoGate() {
-  document.getElementById("geoBlockOverlay").classList.remove("show");
+function retryAppGate() {
   runArrivalGeoGate();
 }
 
