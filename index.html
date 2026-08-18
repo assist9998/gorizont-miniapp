@@ -2335,6 +2335,7 @@ function renderStaffList() {
 // предмет или урок в расписании — список классов на экране получается
 // объединением class_name из /journal/subjects и /journal/schedule.
 const JOURNAL_WEEKDAYS = {1:"Понедельник",2:"Вторник",3:"Среда",4:"Четверг",5:"Пятница",6:"Суббота",7:"Воскресенье"};
+const JOURNAL_WEEKDAYS_SHORT = {1:"Пн",2:"Вт",3:"Ср",4:"Чт",5:"Пт",6:"Сб",7:"Вс"};
 
 // Выпадающий список времени вместо свободного текста — во-первых, не надо
 // печатать вручную, во-вторых (главное) гарантирует единый формат "ЧЧ:ММ" с
@@ -2364,6 +2365,14 @@ let journalClassNames = [];
 let activeJournalClass = null;
 let journalSubjects = [];
 let journalSchedule = [];
+// Как в школьном дневнике — расписание смотрим по одному дню, а не
+// списком "все дни один под другим". null = ещё не выбран (выберется
+// сам при загрузке класса: сегодняшний день, если в нём есть уроки,
+// иначе первый день недели с уроками). Отдельные значения для экрана
+// просмотра и экрана редактирования — пользователь может листать дни
+// в одном, не сбивая позицию в другом.
+let journalScheduleDayView = null;
+let journalScheduleDayEdit = null;
 
 function journalCities() {
   return (staffInfo && staffInfo.city) ? [staffInfo.city] : ["Дананг", "Нячанг"];
@@ -2428,6 +2437,8 @@ async function openJournalClass(name) {
   cancelJournalScheduleEdit();
   cancelJournalClassRename();
   switchJournalViewTab("subjects");
+  journalScheduleDayView = null;
+  journalScheduleDayEdit = null;
   goTo("journal-view");
   await loadJournalClassData();
 }
@@ -2483,6 +2494,8 @@ async function loadJournalClassData() {
     journalSchedule = [];
     journalTeachers = [];
   }
+  if(journalScheduleDayEdit === null) journalScheduleDayEdit = pickDefaultScheduleDay(journalSchedule);
+  if(journalScheduleDayView === null) journalScheduleDayView = journalScheduleDayEdit;
   computeJournalClassStudents();
   renderJournalTeacherSelect();
   renderJournalSubjects();
@@ -2576,26 +2589,69 @@ async function saveJournalSubjectEdit(id) {
 // нижнюю форму (null — форма в режиме добавления нового урока).
 let editingJournalScheduleId = null;
 
-function renderJournalSchedule() {
-  let html = "";
+// Сегодняшний день, если в нём есть уроки, иначе первый день недели
+// (Пн..Вс), в котором они есть. new Date().getDay() отдаёт 0=Вс..6=Сб —
+// переводим в 1=Пн..7=Вс (как isoweekday() и weekday в БД).
+function pickDefaultScheduleDay(schedule) {
+  const jsDay = new Date().getDay();
+  const isoToday = jsDay === 0 ? 7 : jsDay;
+  if(schedule.some(e => e.weekday === isoToday)) return isoToday;
   for(let wd = 1; wd <= 7; wd++) {
-    const entries = journalSchedule.filter(e => e.weekday === wd);
-    if(!entries.length) continue;
-    html += `<div class="section-title" style="margin:14px 0 8px">${JOURNAL_WEEKDAYS[wd]}</div>`;
-    entries.forEach(e => {
-      const time = [e.time_start, e.time_end].filter(Boolean).join("–");
-      const meta = [e.subject_name, e.teacher_name].filter(Boolean).join(" · ");
-      html += `<div class="child-list-item" onclick="startJournalScheduleEdit(${e.id})">
-        <div class="child-detail">
-          <div class="child-detail-name">${time || "Время не указано"}</div>
-          <div class="child-detail-meta">${meta || "—"}</div>
-        </div>
-        <button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>
-      </div>`;
-    });
+    if(schedule.some(e => e.weekday === wd)) return wd;
   }
-  if(!journalSchedule.length) html = '<div class="empty">Пока нет уроков в расписании</div>';
-  document.getElementById("journalScheduleList").innerHTML = html;
+  return isoToday;
+}
+
+// Пилюли-дни недели (как переключатель дат в школьном дневнике). Дни без
+// уроков остаются кликабельными, но приглушены — на них тоже можно
+// переключиться, чтобы добавить туда первый урок.
+function journalDayPillsHtml(schedule, selectedDay, onClickFn) {
+  let html = '<div class="filters">';
+  for(let wd = 1; wd <= 7; wd++) {
+    const has = schedule.some(e => e.weekday === wd);
+    const active = wd === selectedDay;
+    html += `<button class="filter-btn${active ? " active" : ""}" style="${has || active ? "" : "opacity:.5"}" onclick="${onClickFn}(${wd})">${JOURNAL_WEEKDAYS_SHORT[wd]}</button>`;
+  }
+  html += "</div>";
+  return html;
+}
+
+// Пронумерованные карточки уроков одного дня, отсортированные по времени
+// начала (номер урока = порядок, как "1-й урок, 2-й урок" в дневнике).
+function journalLessonCardsHtml(schedule, selectedDay, editable) {
+  const entries = schedule
+    .filter(e => e.weekday === selectedDay)
+    .slice()
+    .sort((a, b) => (a.time_start || "").localeCompare(b.time_start || ""));
+  if(!entries.length) {
+    return `<div class="empty" style="padding:14px 0">Уроков нет — ${JOURNAL_WEEKDAYS[selectedDay].toLowerCase()}</div>`;
+  }
+  return entries.map((e, i) => {
+    const time = [e.time_start, e.time_end].filter(Boolean).join("–");
+    const meta = [time, e.teacher_name].filter(Boolean).join(" · ");
+    const clickAttr = editable ? ` onclick="startJournalScheduleEdit(${e.id})"` : ' style="cursor:default"';
+    const delBtn = editable ? `<button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>` : "";
+    return `<div class="child-list-item"${clickAttr}>
+        <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${i + 1}</div>
+        <div class="child-detail">
+          <div class="child-detail-name">${e.subject_name || "Предмет не указан"}</div>
+          <div class="child-detail-meta">${meta || "Время не указано"}</div>
+        </div>
+        ${delBtn}
+      </div>`;
+  }).join("");
+}
+
+function switchJournalScheduleDay(wd) {
+  journalScheduleDayEdit = wd;
+  renderJournalSchedule();
+}
+
+function renderJournalSchedule() {
+  if(journalScheduleDayEdit === null) journalScheduleDayEdit = pickDefaultScheduleDay(journalSchedule);
+  const pills = journalDayPillsHtml(journalSchedule, journalScheduleDayEdit, "switchJournalScheduleDay");
+  const cards = journalLessonCardsHtml(journalSchedule, journalScheduleDayEdit, true);
+  document.getElementById("journalScheduleList").innerHTML = pills + cards;
 }
 
 async function addJournalSubject() {
@@ -2845,29 +2901,25 @@ function openAddChildForClass() {
 }
 
 // ── Экран-обзор (только просмотр, без кнопок редактирования) ───────────
+function switchJournalViewScheduleDay(wd) {
+  journalScheduleDayView = wd;
+  renderJournalViewSchedule();
+}
+
+function renderJournalViewSchedule() {
+  if(journalScheduleDayView === null) journalScheduleDayView = pickDefaultScheduleDay(journalSchedule);
+  const pills = journalDayPillsHtml(journalSchedule, journalScheduleDayView, "switchJournalViewScheduleDay");
+  const cards = journalLessonCardsHtml(journalSchedule, journalScheduleDayView, false);
+  document.getElementById("journalViewSchedule").innerHTML = pills + cards;
+}
+
 function renderJournalView() {
   const subjHtml = journalSubjects.map(s =>
     `<div style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px">${s.name}</div>`
   ).join("");
   document.getElementById("journalViewSubjects").innerHTML = subjHtml || '<div class="empty" style="padding:14px 0">Пока нет предметов</div>';
 
-  let schedHtml = "";
-  for(let wd = 1; wd <= 7; wd++) {
-    const entries = journalSchedule.filter(e => e.weekday === wd);
-    if(!entries.length) continue;
-    schedHtml += `<div class="section-title" style="margin:14px 0 8px">${JOURNAL_WEEKDAYS[wd]}</div>`;
-    entries.forEach(e => {
-      const time = [e.time_start, e.time_end].filter(Boolean).join("–");
-      const meta = [e.subject_name, e.teacher_name].filter(Boolean).join(" · ");
-      schedHtml += `<div class="child-list-item" style="cursor:default">
-        <div class="child-detail">
-          <div class="child-detail-name">${time || "Время не указано"}</div>
-          <div class="child-detail-meta">${meta || "—"}</div>
-        </div>
-      </div>`;
-    });
-  }
-  document.getElementById("journalViewSchedule").innerHTML = schedHtml || '<div class="empty">Пока нет уроков в расписании</div>';
+  renderJournalViewSchedule();
 
   const stuHtml = journalClassStudents.map(c => {
     const initials = c.name.split(" ").map(w => w[0]).join("").slice(0,2);
