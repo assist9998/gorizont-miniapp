@@ -514,6 +514,16 @@
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Ставка за урок (₫)</div>
     <input id="s_lesson_rate" type="number" inputmode="numeric" placeholder="150000" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
   </div>
+  <div style="margin-bottom:20px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Начало смены</div>
+      <input id="s_work_start" type="time" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Конец смены</div>
+      <input id="s_work_end" type="time" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+    </div>
+  </div>
   <div style="margin-bottom:20px">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Ставка за продлёнку (₫/день)</div>
     <input id="s_extended_day_rate" type="number" inputmode="numeric" placeholder="200000" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
@@ -3180,6 +3190,8 @@ function openEditStaffForm(id) {
   document.getElementById("s_lesson_rate").value = s.lesson_rate || "";
   document.getElementById("s_extended_day_rate").value = s.extended_day_rate || "";
   document.getElementById("s_overtime_rate").value = s.overtime_rate || "";
+  document.getElementById("s_work_start").value = s.work_start || "";
+  document.getElementById("s_work_end").value = s.work_end || "";
   document.getElementById("s_telegram").value = s.telegram_id || "";
   updatePayTypeLabel();
   goTo("staff-form");
@@ -3201,7 +3213,7 @@ function updatePayTypeLabel() {
 }
 
 function clearStaffForm() {
-  ["s_name","s_surname","s_position","s_phone","s_contract_end","s_monthly_rate","s_telegram","s_lesson_rate","s_extended_day_rate","s_overtime_rate"].forEach(id => {
+  ["s_name","s_surname","s_position","s_phone","s_contract_end","s_monthly_rate","s_telegram","s_lesson_rate","s_extended_day_rate","s_overtime_rate","s_work_start","s_work_end"].forEach(id => {
     document.getElementById(id).value = "";
   });
   document.getElementById("s_pay_type").value = "monthly_fixed";
@@ -3283,6 +3295,8 @@ async function submitStaffForm() {
     lesson_rate: payType === "per_lesson" ? (lessonRateRaw ? Number(lessonRateRaw) : null) : null,
     extended_day_rate: extDayRateRaw ? Number(extDayRateRaw) : null,
     overtime_rate: overtimeRateRaw ? Number(overtimeRateRaw) : null,
+    work_start: document.getElementById("s_work_start").value.trim(),
+    work_end: document.getElementById("s_work_end").value.trim(),
     telegram_id: document.getElementById("s_telegram").value.trim(),
   };
 
