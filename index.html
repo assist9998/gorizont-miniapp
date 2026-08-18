@@ -1892,8 +1892,30 @@ function openTodayLessonModal() {
   promptLessonCount(todayDmy);
 }
 
+// Геолокация — только здесь, на самой кнопке отметки (не на переключателях
+// замены/переработки — те не меняют факт "я на месте", уже подтверждённый
+// этой отметкой). Без координат/не в радиусе — бэкенд не даст отметиться,
+// см. is_self_checkin в handle_post_payroll_attendance (project_gorizont_payroll).
+function getGeoPosition() {
+  return new Promise((resolve, reject) => {
+    if(!navigator.geolocation) { reject(new Error("no_geolocation")); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({lat: pos.coords.latitude, lng: pos.coords.longitude}),
+      err => reject(err),
+      {enableHighAccuracy: true, timeout: 15000},
+    );
+  });
+}
+
 async function markSelfAttendance() {
   if(!staffInfo || !staffInfo.payroll_staff_id) return;
+  let coords;
+  try {
+    coords = await getGeoPosition();
+  } catch(e) {
+    showToast("Нужна геолокация, чтобы отметиться — разрешите доступ к местоположению", true);
+    return;
+  }
   try {
     const resp = await fetch(API_URL + "/payroll/attendance", {
       method: "POST",
@@ -1902,6 +1924,8 @@ async function markSelfAttendance() {
         staff_id: staffInfo.payroll_staff_id,
         date: dateToDmy(now),
         status: "present",
+        lat: coords.lat,
+        lng: coords.lng,
       }),
     });
     const result = await resp.json();
@@ -1909,6 +1933,11 @@ async function markSelfAttendance() {
       selfAttendanceMarked = true;
       renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
       showToast("Отмечено!");
+    } else if(result.error === "too_far") {
+      const distText = result.distance_m != null ? " (до места " + result.distance_m + " м)" : "";
+      showToast("Вы не на месте" + distText + " — отметиться можно только рядом с садиком/школой", true);
+    } else if(result.error === "geolocation_required") {
+      showToast("Не удалось определить местоположение, попробуйте ещё раз", true);
     } else {
       showToast("Не удалось отметить, попробуйте ещё раз", true);
     }
