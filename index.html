@@ -618,6 +618,29 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Жёсткая заглушка: гео определилось, но сотрудник не на территории
+     садика/школы — не закрывается тапом мимо, только по повторной проверке
+     (retryGeoGate), project_gorizont_payroll -->
+<div class="modal-overlay" id="geoBlockOverlay" style="z-index:400;align-items:center">
+  <div class="modal" style="border-radius:24px;text-align:center">
+    <div style="font-size:15px;line-height:1.5;margin-bottom:18px" id="geoBlockText">Пока не видим вас рядом с садиком/школой — откройте приложение, когда будете на месте.</div>
+    <button class="btn-primary" style="width:100%" onclick="retryGeoGate()">Проверить снова</button>
+  </div>
+</div>
+
+<!-- Мягкое напоминание: гео подтвердило, что на месте (или геолокацию не
+     удалось определить) — приложением пользоваться можно, просто напоминаем
+     отметиться самому и отметить детей. Закрывается тапом мимо/кнопкой. -->
+<div class="modal-overlay" id="arrivalReminderOverlay" onclick="if(event.target===this) closeArrivalReminder()">
+  <div class="modal" style="border-radius:24px">
+    <div class="modal-handle"></div>
+    <div style="font-size:15px;line-height:1.5;margin-bottom:18px">Не забудьте отметиться и отметить детей.</div>
+    <button class="btn-primary" style="width:100%;margin-bottom:10px" onclick="closeArrivalReminder();markSelfAttendance()">Отметиться</button>
+    <button style="width:100%;padding:13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;cursor:pointer;margin-bottom:8px" onclick="closeArrivalReminder();goTo('attendance')">Отметить детей</button>
+    <button style="width:100%;padding:8px;border:none;background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer" onclick="closeArrivalReminder()">Позже</button>
+  </div>
+</div>
+
 <script>
 // Переключатель темы — меняет только фон/поверхности/текст/границы (см. CSS
 // [data-theme="light"]), акцентные цвета остаются теми же. Сохраняется в
@@ -1867,6 +1890,56 @@ async function initSelfAttendance() {
     selfTodayExt = false;
   }
   renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
+  runArrivalGeoGate();
+}
+
+// ── ARRIVAL GEO GATE (project_gorizont_payroll, $10) ────────────────────
+// Один раз в день, пока сотрудник ещё не отметился: тихо проверяем гео.
+// Точно НЕ на территории → жёсткая заглушка (geoBlockOverlay), приложением
+// пользоваться нельзя, пока не окажется рядом. На территории — или гео не
+// удалось определить (отказали в разрешении/ошибка — тогда мы просто не
+// знаем, где человек, и НЕ блокируем) — мягкое напоминание отметиться самому
+// и отметить детей (arrivalReminderOverlay), приложение открыто как обычно.
+// Админы/директор освобождены — как и от самой гео-проверки на кнопке.
+async function runArrivalGeoGate() {
+  if(!staffInfo || !staffInfo.payroll_staff_id) return;
+  if(isAdminRole(staffInfo.role)) return;
+  if(selfAttendanceMarked !== false) return; // true — уже отметился; null — ещё не знаем
+  let coords;
+  try {
+    coords = await getGeoPosition();
+  } catch(e) {
+    showArrivalReminder();
+    return;
+  }
+  try {
+    const resp = await fetch(
+      API_URL + "/payroll/geofence-check?city=" + encodeURIComponent(staffInfo.city || "") +
+      "&lat=" + coords.lat + "&lng=" + coords.lng,
+      { headers: authHeaders() }
+    );
+    const data = await resp.json();
+    if(data.ok && data.in_range === false) {
+      document.getElementById("geoBlockOverlay").classList.add("show");
+    } else {
+      showArrivalReminder();
+    }
+  } catch(e) {
+    showArrivalReminder();
+  }
+}
+
+function retryGeoGate() {
+  document.getElementById("geoBlockOverlay").classList.remove("show");
+  runArrivalGeoGate();
+}
+
+function showArrivalReminder() {
+  document.getElementById("arrivalReminderOverlay").classList.add("show");
+}
+
+function closeArrivalReminder() {
+  document.getElementById("arrivalReminderOverlay").classList.remove("show");
 }
 
 // Нулёвка (есть ставка за урок и/или продлёнку) — отметка "я сегодня на
@@ -1909,24 +1982,27 @@ function getGeoPosition() {
 
 async function markSelfAttendance() {
   if(!staffInfo || !staffInfo.payroll_staff_id) return;
-  let coords;
-  try {
-    coords = await getGeoPosition();
-  } catch(e) {
-    showToast("Нужна геолокация, чтобы отметиться — разрешите доступ к местоположению", true);
-    return;
+  // Админы/директор освобождены от гео-проверки (решение пользователя) —
+  // бэкенд её для них и не требует, см. is_self_checkin в
+  // handle_post_payroll_attendance. Не спрашиваем геопозицию зря.
+  const needsGeo = !isAdminRole(staffInfo.role);
+  let coords = null;
+  if(needsGeo) {
+    try {
+      coords = await getGeoPosition();
+    } catch(e) {
+      showToast("Нужна геолокация, чтобы отметиться — разрешите доступ к местоположению", true);
+      return;
+    }
   }
   try {
     const resp = await fetch(API_URL + "/payroll/attendance", {
       method: "POST",
       headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({
-        staff_id: staffInfo.payroll_staff_id,
-        date: dateToDmy(now),
-        status: "present",
-        lat: coords.lat,
-        lng: coords.lng,
-      }),
+      body: JSON.stringify(Object.assign(
+        {staff_id: staffInfo.payroll_staff_id, date: dateToDmy(now), status: "present"},
+        coords ? {lat: coords.lat, lng: coords.lng} : {},
+      )),
     });
     const result = await resp.json();
     if(result.ok) {
