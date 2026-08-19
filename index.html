@@ -3182,10 +3182,17 @@ function renderJournalView() {
 }
 
 // ── Оценки (вкладка "Оценки" на экране-обзоре) ──────────────────────────
-// Российская 5-балльная шкала с модификаторами — так же, как в Дневник.ру/
-// ЭЛЖУР, тип оценки (grade_type) пока не выбирается из UI, всегда "Урок":
-// смотрим, как реально пользуются, прежде чем городить лишний выбор.
-const JOURNAL_GRADE_VALUES = ["2", "3", "4", "5", "5+", "4-", "н"];
+// Российская 5-балльная шкала с модификаторами рядом со своей базовой
+// оценкой (не отдельным блоком в конце — так и была жалоба пользователя на
+// первом прогоне). Тема урока обязательна ДО выставления оценок (одна на
+// класс+предмет+дату, не на ребёнка) — пока не заполнена, кнопки оценок
+// скрыты. У каждой оценки — комментарий (за что), его увидят родители в
+// будущем экране "Доступ родителей" — тап по уже стоящей оценке открывает
+// редактор комментария вместо мгновенного удаления.
+const JOURNAL_GRADE_VALUES = ["2", "3-", "3", "3+", "4-", "4", "4+", "5-", "5", "5+", "н"];
+
+let journalLessonTopic = null; // {id, topic} | null — тема текущего урока (дата+предмет)
+let journalGradesEditingId = null; // id оценки, чей комментарий сейчас открыт для правки
 
 function journalGradesToday() {
   return dateToDmy(now);
@@ -3198,11 +3205,13 @@ function shiftJournalGradesDate(delta) {
   const dmy = dateToDmy(d);
   if(dmy > journalGradesToday()) return;
   journalGradesDate = dmy;
+  journalGradesEditingId = null;
   loadJournalGrades();
 }
 
 function switchJournalGradesSubject(id) {
   journalGradesSubjectId = id ? parseInt(id, 10) : null;
+  journalGradesEditingId = null;
   loadJournalGrades();
 }
 
@@ -3222,21 +3231,51 @@ async function loadJournalGrades() {
   if(journalGradesDate === null) journalGradesDate = journalGradesToday();
   const options = journalGradesSubjectOptions();
   if(journalGradesSubjectId === null && options.length) journalGradesSubjectId = options[0].id;
-  if(!journalGradesSubjectId) { journalGrades = []; renderJournalGrades(); return; }
+  if(!journalGradesSubjectId) { journalGrades = []; journalLessonTopic = null; renderJournalGrades(); return; }
   try {
-    const resp = await fetch(
-      API_URL + "/journal/grades?city=" + encodeURIComponent(activeJournalCity) +
-      "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
-      "&date_from=" + encodeURIComponent(journalGradesDate) + "&date_to=" + encodeURIComponent(journalGradesDate),
-      {headers: authHeaders()},
-    );
-    const d = await resp.json();
-    journalGrades = d.ok ? d.grades : [];
+    const [gradesData, topicData] = await Promise.all([
+      fetch(
+        API_URL + "/journal/grades?city=" + encodeURIComponent(activeJournalCity) +
+        "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
+        "&date_from=" + encodeURIComponent(journalGradesDate) + "&date_to=" + encodeURIComponent(journalGradesDate),
+        {headers: authHeaders()},
+      ).then(r => r.json()),
+      fetch(
+        API_URL + "/journal/lesson-topic?city=" + encodeURIComponent(activeJournalCity) +
+        "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
+        "&date=" + encodeURIComponent(journalGradesDate),
+        {headers: authHeaders()},
+      ).then(r => r.json()),
+    ]);
+    journalGrades = gradesData.ok ? gradesData.grades : [];
+    journalLessonTopic = topicData.ok ? topicData.topic : null;
   } catch(e) {
     console.error("loadJournalGrades error:", e);
     journalGrades = [];
+    journalLessonTopic = null;
   }
   renderJournalGrades();
+}
+
+async function saveJournalLessonTopic() {
+  const el = document.getElementById("journalLessonTopicInput");
+  const topic = el ? el.value.trim() : "";
+  if(!topic) { showToast("Введите тему урока", true); return; }
+  try {
+    const resp = await fetch(API_URL + "/journal/lesson-topic", {
+      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        city: activeJournalCity, class_name: activeJournalClass,
+        subject_id: journalGradesSubjectId, date: journalGradesDate, topic,
+      }),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    await loadJournalGrades();
+    showToast("Тема урока сохранена");
+  } catch(e) {
+    showToast("Не удалось сохранить тему урока", true);
+  }
 }
 
 function renderJournalGrades() {
@@ -3254,6 +3293,8 @@ function renderJournalGrades() {
   const subjOptions = options.map(s =>
     `<option value="${s.id}"${s.id === journalGradesSubjectId ? " selected" : ""}>${s.name}</option>`
   ).join("");
+  const hasTopic = !!(journalLessonTopic && journalLessonTopic.topic);
+  const topicValue = (journalLessonTopic && journalLessonTopic.topic) || "";
 
   let html = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
@@ -3264,7 +3305,15 @@ function renderJournalGrades() {
     <select id="journalGradesSubjectSelect" onchange="switchJournalGradesSubject(this.value)"
       style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px">
       ${subjOptions}
-    </select>`;
+    </select>
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тема урока${hasTopic ? "" : " — обязательно"}</div>
+      <div style="display:flex;gap:8px">
+        <input id="journalLessonTopicInput" type="text" value="${topicValue.replace(/"/g, "&quot;")}" placeholder="Например: Дроби — сложение и вычитание"
+          style="flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
+        <button onclick="saveJournalLessonTopic()" style="flex-shrink:0;padding:0 14px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Сохранить</button>
+      </div>
+    </div>`;
 
   if(!journalClassStudents.length) {
     html += '<div class="empty">Пока нет учеников в этом классе</div>';
@@ -3273,24 +3322,65 @@ function renderJournalGrades() {
   }
 
   html += journalClassStudents.map(c => {
-    const grades = journalGrades.filter(g => g.child_id === c.id);
-    const chips = grades.map(g =>
-      `<span onclick="deleteJournalGrade(${g.id})" title="Нажмите, чтобы удалить"
-        style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 6px;border-radius:12px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;margin:0 4px 4px 0">${g.value}</span>`
-    ).join("");
-    const quickBtns = JOURNAL_GRADE_VALUES.map(v =>
-      `<button onclick="addJournalGradeQuick(${c.id},'${v}')" style="padding:6px 11px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;cursor:pointer">${v}</button>`
-    ).join("");
+    // == не === — id ребёнка приходит строкой из /children, child_id оценки числом из Postgres.
+    const grades = journalGrades.filter(g => g.child_id == c.id);
+    const gradeRows = grades.map(g => {
+      const badge = `<span style="display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;flex-shrink:0">${g.value}</span>`;
+      if(journalGradesEditingId === g.id) {
+        return `<div style="display:flex;flex-direction:column;gap:6px;padding:8px;margin-bottom:6px;border-radius:10px;background:var(--surface2)">
+          <div style="display:flex;align-items:center;gap:8px">${badge}<span style="font-size:11px;color:var(--text2)">${g.grade_type || ""}</span></div>
+          <textarea id="journalGradeCommentInput_${g.id}" placeholder="За что оценка — увидят родители"
+            style="width:100%;min-height:50px;padding:8px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box">${g.comment || ""}</textarea>
+          <div style="display:flex;gap:8px">
+            <button onclick="saveJournalGradeComment(${g.id})" style="flex:1;padding:6px;border-radius:8px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:12px;cursor:pointer">Сохранить</button>
+            <button onclick="deleteJournalGrade(${g.id})" style="flex:1;padding:6px;border-radius:8px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:inherit;font-size:12px;cursor:pointer">Удалить</button>
+            <button onclick="toggleJournalGradeEdit(${g.id})" style="flex:1;padding:6px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:12px;cursor:pointer">Закрыть</button>
+          </div>
+        </div>`;
+      }
+      return `<div onclick="toggleJournalGradeEdit(${g.id})" style="display:flex;align-items:center;gap:8px;padding:5px 2px;cursor:pointer">
+        ${badge}
+        <span style="font-size:12px;color:var(--text2);flex:1;min-width:0">${g.comment ? g.comment : "без комментария — нажмите, чтобы добавить"}</span>
+      </div>`;
+    }).join("");
+    const quickBtns = hasTopic
+      ? JOURNAL_GRADE_VALUES.map(v =>
+          `<button onclick="addJournalGradeQuick(${c.id},'${v}')" style="padding:6px 11px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;cursor:pointer">${v}</button>`
+        ).join("")
+      : '<div style="font-size:12px;color:var(--text2);font-style:italic">Сначала укажите тему урока выше</div>';
     return `<div class="child-list-item" style="flex-wrap:wrap;cursor:default">
-      <div class="child-detail" style="flex-basis:100%;margin-bottom:${chips ? "6" : "8"}px">
+      <div class="child-detail" style="flex-basis:100%;margin-bottom:${gradeRows ? "4" : "8"}px">
         <div class="child-detail-name">${c.name}</div>
       </div>
-      ${chips ? `<div style="display:flex;flex-wrap:wrap;width:100%">${chips}</div>` : ""}
-      <div style="display:flex;flex-wrap:wrap;gap:6px;width:100%">${quickBtns}</div>
+      ${gradeRows ? `<div style="width:100%">${gradeRows}</div>` : ""}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;width:100%;margin-top:${gradeRows ? "6" : "0"}px">${quickBtns}</div>
     </div>`;
   }).join("");
 
   container.innerHTML = html;
+}
+
+function toggleJournalGradeEdit(id) {
+  journalGradesEditingId = journalGradesEditingId === id ? null : id;
+  renderJournalGrades();
+}
+
+async function saveJournalGradeComment(id) {
+  const el = document.getElementById("journalGradeCommentInput_" + id);
+  const comment = el ? el.value.trim() : "";
+  try {
+    const resp = await fetch(API_URL + "/journal/grades/" + id, {
+      method: "PUT", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({comment}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    journalGradesEditingId = null;
+    await loadJournalGrades();
+    showToast("Комментарий сохранён");
+  } catch(e) {
+    showToast("Не удалось сохранить комментарий", true);
+  }
 }
 
 async function addJournalGradeQuick(childId, value) {
@@ -3307,6 +3397,7 @@ async function addJournalGradeQuick(childId, value) {
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
     await loadJournalGrades();
+    showToast("Оценка поставлена");
   } catch(e) {
     showToast("Не удалось поставить оценку", true);
   }
@@ -3317,6 +3408,7 @@ async function deleteJournalGrade(id) {
     const resp = await fetch(API_URL + "/journal/grades?id=" + id, {method: "DELETE", headers: authHeaders()});
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
+    if(journalGradesEditingId === id) journalGradesEditingId = null;
     await loadJournalGrades();
   } catch(e) {
     showToast("Не удалось удалить оценку", true);
