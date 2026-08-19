@@ -3321,14 +3321,12 @@ function shiftJournalGradesDate(delta) {
   if(dmy > journalGradesToday()) return;
   journalGradesDate = dmy;
   journalGradesEditingId = null;
-  journalHomeworkOpen = false;
   loadJournalGrades();
 }
 
 function switchJournalGradesSubject(id) {
   journalGradesSubjectId = id ? parseInt(id, 10) : null;
   journalGradesEditingId = null;
-  journalHomeworkOpen = false;
   loadJournalGrades();
 }
 
@@ -3403,18 +3401,6 @@ async function saveJournalLessonTopic() {
   }
 }
 
-// Необязательное поле, в отличие от темы урока — свёрнуто за кнопкой
-// "+ Домашнее задание", пока не задано или пока учитель сам не откроет
-// (см. project_gorizont, запрос пользователя).
-let journalHomeworkOpen = false;
-
-function openJournalHomeworkInput() {
-  journalHomeworkOpen = true;
-  renderJournalGrades();
-  const el = document.getElementById("journalHomeworkInput");
-  if(el) el.focus();
-}
-
 async function saveJournalHomework() {
   const el = document.getElementById("journalHomeworkInput");
   const text = el ? el.value.trim() : "";
@@ -3459,7 +3445,6 @@ function renderJournalGrades() {
   ).join("");
   const hasTopic = !!(journalLessonTopic && journalLessonTopic.topic);
   const topicValue = (journalLessonTopic && journalLessonTopic.topic) || "";
-  const hasHomework = !!(journalHomework && journalHomework.text);
   const homeworkValue = (journalHomework && journalHomework.text) || "";
 
   let html = `
@@ -3481,11 +3466,9 @@ function renderJournalGrades() {
       </div>
     </div>`;
 
-  // Необязательное, поэтому свёрнуто за кнопкой, пока не задано или пока
-  // учитель сам не откроет — в отличие от темы урока, которая всегда на виду
-  // (обязательна перед выставлением оценок).
-  if(hasHomework || journalHomeworkOpen) {
-    html += `
+  // Тот же вид, что у темы урока, только без пометки "обязательно" —
+  // домашнее задание необязательно.
+  html += `
     <div style="margin-bottom:16px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Домашнее задание</div>
       <div style="display:flex;gap:8px">
@@ -3494,10 +3477,6 @@ function renderJournalGrades() {
         <button onclick="saveJournalHomework()" style="flex-shrink:0;padding:0 14px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Сохранить</button>
       </div>
     </div>`;
-  } else {
-    html += `
-    <button onclick="openJournalHomeworkInput()" style="margin-bottom:16px;padding:8px 14px;border-radius:10px;border:1.5px dashed var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">+ Домашнее задание</button>`;
-  }
 
   if(!journalClassStudents.length) {
     html += '<div class="empty">Пока нет учеников в этом классе</div>';
