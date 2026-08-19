@@ -3405,15 +3405,21 @@ function renderJournalGradeModal() {
     </div>`;
   }).join("");
 
+  // Круглые кнопки-пилюли — тот же визуальный стиль, что у выбора числа
+  // уроков в карточке нулёвки (LESSON_COUNT_OPTIONS/renderLessonModal), по
+  // просьбе пользователя ("такой же дизайн как при выборе количества уроков").
   const quickBtns = hasTopic
-    ? JOURNAL_GRADE_VALUES.map(v =>
-        `<button onclick="addJournalGradeQuick(${c.id},'${v}')" style="padding:6px 11px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;cursor:pointer">${v}</button>`
-      ).join("")
+    ? '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Поставить оценку</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px">' +
+      JOURNAL_GRADE_VALUES.map(v =>
+        `<button onclick="addJournalGradeQuick(${c.id},'${v}')" style="width:42px;height:42px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0">${v}</button>`
+      ).join("") +
+      '</div>'
     : '<div style="font-size:12px;color:var(--text2);font-style:italic">Сначала укажите тему урока</div>';
 
   document.getElementById("journalGradeModalContent").innerHTML = `
-    ${gradeRows ? `<div style="margin-bottom:10px">${gradeRows}</div>` : ""}
-    <div style="display:flex;flex-wrap:wrap;gap:6px">${quickBtns}</div>`;
+    ${gradeRows ? `<div style="margin-bottom:14px">${gradeRows}</div>` : ""}
+    ${quickBtns}`;
 }
 
 function toggleJournalGradeEdit(id) {
@@ -3439,6 +3445,10 @@ async function saveJournalGradeComment(id) {
   }
 }
 
+// Сразу после простановки открываем редактор комментария этой же оценки
+// (а не ждём отдельного тапа по бейджу) — родителям важно видеть, за что
+// оценка, так что комментарий должен предлагаться сразу, по просьбе
+// пользователя ("комментарий сразу предлагать писать, а не тапом по оценке").
 async function addJournalGradeQuick(childId, value) {
   try {
     const resp = await fetch(API_URL + "/journal/grades", {
@@ -3452,8 +3462,11 @@ async function addJournalGradeQuick(childId, value) {
     });
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
+    journalGradesEditingId = d.id;
     await loadJournalGrades();
     showToast("Оценка поставлена");
+    const ta = document.getElementById("journalGradeCommentInput_" + d.id);
+    if(ta) ta.focus();
   } catch(e) {
     showToast("Не удалось поставить оценку", true);
   }
