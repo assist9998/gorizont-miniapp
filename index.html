@@ -602,6 +602,16 @@
   </div>
 </div>
 
+<!-- MODAL: ОЦЕНКА ученика — открывается тапом по плашке в списке класса
+     (вкладка "Оценки"), та же плашка что и в посещаемости (child-card) -->
+<div class="modal-overlay" id="journalGradeModalOverlay" onclick="if(event.target===this) closeJournalGradeModal()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-name" id="journalGradeModalName">Ученик</div>
+    <div id="journalGradeModalContent"></div>
+  </div>
+</div>
+
 <!-- NAV -->
 <nav class="nav">
   <button class="nav-btn active" id="nav-home" onclick="goTo('home')">
@@ -2647,6 +2657,7 @@ async function openJournalTeacherSubject(className, subjectId) {
   journalGradesDate = null;
   journalGradesSubjectId = subjectId;
   journalGrades = [];
+  journalGradeModalChildId = null;
   document.getElementById("journalViewTitle").textContent = className;
   document.getElementById("journalViewEditBtn").style.display = "none";
   document.getElementById("journalViewTabBar").style.display = "none";
@@ -2683,6 +2694,7 @@ async function openJournalClass(name) {
   journalGradesDate = null;
   journalGradesSubjectId = null;
   journalGrades = [];
+  journalGradeModalChildId = null;
   goTo("journal-view");
   await loadJournalClassData();
 }
@@ -3193,6 +3205,7 @@ const JOURNAL_GRADE_VALUES = ["2", "3-", "3", "3+", "4-", "4", "4+", "5-", "5", 
 
 let journalLessonTopic = null; // {id, topic} | null — тема текущего урока (дата+предмет)
 let journalGradesEditingId = null; // id оценки, чей комментарий сейчас открыт для правки
+let journalGradeModalChildId = null; // id ребёнка, чья модалка оценки сейчас открыта (null — закрыта)
 
 function journalGradesToday() {
   return dateToDmy(now);
@@ -3278,6 +3291,12 @@ async function saveJournalLessonTopic() {
   }
 }
 
+// Список класса — те же плашки (child-card), что и в посещаемости, только
+// вместо галочки "пришёл" в meta-строке показываются бейджи с оценками за
+// выбранный день. Тап по плашке открывает модалку (journalGradeModalOverlay)
+// с самим выставлением/комментариями — раньше это всё разворачивалось прямо
+// в списке и получалось слишком громоздко (жалоба пользователя на первом
+// прогоне: "система проставления оценок выглядит некрасиво, слишком большая").
 function renderJournalGrades() {
   const container = document.getElementById("journalViewGrades");
   const options = journalGradesSubjectOptions();
@@ -3324,45 +3343,82 @@ function renderJournalGrades() {
   html += journalClassStudents.map(c => {
     // == не === — id ребёнка приходит строкой из /children, child_id оценки числом из Postgres.
     const grades = journalGrades.filter(g => g.child_id == c.id);
-    const gradeRows = grades.map(g => {
-      const badge = `<span style="display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;flex-shrink:0">${g.value}</span>`;
-      if(journalGradesEditingId === g.id) {
-        return `<div style="display:flex;flex-direction:column;gap:6px;padding:8px;margin-bottom:6px;border-radius:10px;background:var(--surface2)">
-          <div style="display:flex;align-items:center;gap:8px">${badge}<span style="font-size:11px;color:var(--text2)">${g.grade_type || ""}</span></div>
-          <textarea id="journalGradeCommentInput_${g.id}" placeholder="За что оценка — увидят родители"
-            style="width:100%;min-height:50px;padding:8px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box">${g.comment || ""}</textarea>
-          <div style="display:flex;gap:8px">
-            <button onclick="saveJournalGradeComment(${g.id})" style="flex:1;padding:6px;border-radius:8px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:12px;cursor:pointer">Сохранить</button>
-            <button onclick="deleteJournalGrade(${g.id})" style="flex:1;padding:6px;border-radius:8px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:inherit;font-size:12px;cursor:pointer">Удалить</button>
-            <button onclick="toggleJournalGradeEdit(${g.id})" style="flex:1;padding:6px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:12px;cursor:pointer">Закрыть</button>
+    const initials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2);
+    const badges = grades.map(g =>
+      `<span class="time-badge" style="background:var(--accent);color:#fff;font-weight:700">${g.value}</span>`
+    ).join("");
+    return `<div class="child-card-wrap">
+      <div class="child-card" onclick="openJournalGradeModal(${c.id})" style="cursor:pointer">
+        <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">
+          <div class="avatar">${initials}</div>
+          <div class="child-info">
+            <div class="child-name">${c.name}</div>
+            <div class="child-meta">${badges || '<span>нет оценок</span>'}</div>
           </div>
-        </div>`;
-      }
-      return `<div onclick="toggleJournalGradeEdit(${g.id})" style="display:flex;align-items:center;gap:8px;padding:5px 2px;cursor:pointer">
-        ${badge}
-        <span style="font-size:12px;color:var(--text2);flex:1;min-width:0">${g.comment ? g.comment : "без комментария — нажмите, чтобы добавить"}</span>
-      </div>`;
-    }).join("");
-    const quickBtns = hasTopic
-      ? JOURNAL_GRADE_VALUES.map(v =>
-          `<button onclick="addJournalGradeQuick(${c.id},'${v}')" style="padding:6px 11px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;cursor:pointer">${v}</button>`
-        ).join("")
-      : '<div style="font-size:12px;color:var(--text2);font-style:italic">Сначала укажите тему урока выше</div>';
-    return `<div class="child-list-item" style="flex-wrap:wrap;cursor:default">
-      <div class="child-detail" style="flex-basis:100%;margin-bottom:${gradeRows ? "4" : "8"}px">
-        <div class="child-detail-name">${c.name}</div>
+        </div>
+        <span class="child-arrow">›</span>
       </div>
-      ${gradeRows ? `<div style="width:100%">${gradeRows}</div>` : ""}
-      <div style="display:flex;flex-wrap:wrap;gap:6px;width:100%;margin-top:${gradeRows ? "6" : "0"}px">${quickBtns}</div>
     </div>`;
   }).join("");
 
   container.innerHTML = html;
+  if(journalGradeModalChildId !== null) renderJournalGradeModal();
+}
+
+function openJournalGradeModal(childId) {
+  journalGradeModalChildId = childId;
+  journalGradesEditingId = null;
+  renderJournalGradeModal();
+  document.getElementById("journalGradeModalOverlay").classList.add("show");
+}
+
+function closeJournalGradeModal() {
+  document.getElementById("journalGradeModalOverlay").classList.remove("show");
+  journalGradeModalChildId = null;
+  journalGradesEditingId = null;
+}
+
+function renderJournalGradeModal() {
+  const c = journalClassStudents.find(x => x.id == journalGradeModalChildId);
+  if(!c) { closeJournalGradeModal(); return; }
+  document.getElementById("journalGradeModalName").textContent = c.name;
+
+  const hasTopic = !!(journalLessonTopic && journalLessonTopic.topic);
+  const grades = journalGrades.filter(g => g.child_id == c.id);
+  const gradeRows = grades.map(g => {
+    const badge = `<span style="display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;flex-shrink:0">${g.value}</span>`;
+    if(journalGradesEditingId === g.id) {
+      return `<div style="display:flex;flex-direction:column;gap:6px;padding:8px;margin-bottom:6px;border-radius:10px;background:var(--surface2)">
+        <div style="display:flex;align-items:center;gap:8px">${badge}<span style="font-size:11px;color:var(--text2)">${g.grade_type || ""}</span></div>
+        <textarea id="journalGradeCommentInput_${g.id}" placeholder="За что оценка — увидят родители"
+          style="width:100%;min-height:50px;padding:8px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box">${g.comment || ""}</textarea>
+        <div style="display:flex;gap:8px">
+          <button onclick="saveJournalGradeComment(${g.id})" style="flex:1;padding:6px;border-radius:8px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:12px;cursor:pointer">Сохранить</button>
+          <button onclick="deleteJournalGrade(${g.id})" style="flex:1;padding:6px;border-radius:8px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:inherit;font-size:12px;cursor:pointer">Удалить</button>
+          <button onclick="toggleJournalGradeEdit(${g.id})" style="flex:1;padding:6px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:12px;cursor:pointer">Закрыть</button>
+        </div>
+      </div>`;
+    }
+    return `<div onclick="toggleJournalGradeEdit(${g.id})" style="display:flex;align-items:center;gap:8px;padding:5px 2px;cursor:pointer">
+      ${badge}
+      <span style="font-size:12px;color:var(--text2);flex:1;min-width:0">${g.comment ? g.comment : "без комментария — нажмите, чтобы добавить"}</span>
+    </div>`;
+  }).join("");
+
+  const quickBtns = hasTopic
+    ? JOURNAL_GRADE_VALUES.map(v =>
+        `<button onclick="addJournalGradeQuick(${c.id},'${v}')" style="padding:6px 11px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;cursor:pointer">${v}</button>`
+      ).join("")
+    : '<div style="font-size:12px;color:var(--text2);font-style:italic">Сначала укажите тему урока</div>';
+
+  document.getElementById("journalGradeModalContent").innerHTML = `
+    ${gradeRows ? `<div style="margin-bottom:10px">${gradeRows}</div>` : ""}
+    <div style="display:flex;flex-wrap:wrap;gap:6px">${quickBtns}</div>`;
 }
 
 function toggleJournalGradeEdit(id) {
   journalGradesEditingId = journalGradesEditingId === id ? null : id;
-  renderJournalGrades();
+  renderJournalGradeModal();
 }
 
 async function saveJournalGradeComment(id) {
