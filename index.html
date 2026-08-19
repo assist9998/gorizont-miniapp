@@ -3302,6 +3302,7 @@ function renderJournalView() {
 const JOURNAL_GRADE_VALUES = ["2", "3", "4", "5"];
 
 let journalLessonTopic = null; // {id, topic} | null — тема текущего урока (дата+предмет)
+let journalHomework = null; // {id, text} | null — домашнее задание к этому уроку (дата+предмет), необязательно
 let journalGradesEditingId = null; // id оценки, чей комментарий сейчас открыт для правки
 let journalGradeModalChildId = null; // id ребёнка, чья модалка оценки сейчас открыта (null — закрыта)
 let journalGradePendingBase = null; // выбранная цифра (2-5), ещё не сохранённая (до тапа "Сохранить")
@@ -3320,12 +3321,14 @@ function shiftJournalGradesDate(delta) {
   if(dmy > journalGradesToday()) return;
   journalGradesDate = dmy;
   journalGradesEditingId = null;
+  journalHomeworkOpen = false;
   loadJournalGrades();
 }
 
 function switchJournalGradesSubject(id) {
   journalGradesSubjectId = id ? parseInt(id, 10) : null;
   journalGradesEditingId = null;
+  journalHomeworkOpen = false;
   loadJournalGrades();
 }
 
@@ -3345,9 +3348,9 @@ async function loadJournalGrades() {
   if(journalGradesDate === null) journalGradesDate = journalGradesToday();
   const options = journalGradesSubjectOptions();
   if(journalGradesSubjectId === null && options.length) journalGradesSubjectId = options[0].id;
-  if(!journalGradesSubjectId) { journalGrades = []; journalLessonTopic = null; renderJournalGrades(); return; }
+  if(!journalGradesSubjectId) { journalGrades = []; journalLessonTopic = null; journalHomework = null; renderJournalGrades(); return; }
   try {
-    const [gradesData, topicData] = await Promise.all([
+    const [gradesData, topicData, homeworkData] = await Promise.all([
       fetch(
         API_URL + "/journal/grades?city=" + encodeURIComponent(activeJournalCity) +
         "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
@@ -3360,13 +3363,21 @@ async function loadJournalGrades() {
         "&date=" + encodeURIComponent(journalGradesDate),
         {headers: authHeaders()},
       ).then(r => r.json()),
+      fetch(
+        API_URL + "/journal/homework?city=" + encodeURIComponent(activeJournalCity) +
+        "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
+        "&date=" + encodeURIComponent(journalGradesDate),
+        {headers: authHeaders()},
+      ).then(r => r.json()),
     ]);
     journalGrades = gradesData.ok ? gradesData.grades : [];
     journalLessonTopic = topicData.ok ? topicData.topic : null;
+    journalHomework = homeworkData.ok ? homeworkData.homework : null;
   } catch(e) {
     console.error("loadJournalGrades error:", e);
     journalGrades = [];
     journalLessonTopic = null;
+    journalHomework = null;
   }
   renderJournalGrades();
 }
@@ -3389,6 +3400,39 @@ async function saveJournalLessonTopic() {
     showToast("Тема урока сохранена");
   } catch(e) {
     showToast("Не удалось сохранить тему урока", true);
+  }
+}
+
+// Необязательное поле, в отличие от темы урока — свёрнуто за кнопкой
+// "+ Домашнее задание", пока не задано или пока учитель сам не откроет
+// (см. project_gorizont, запрос пользователя).
+let journalHomeworkOpen = false;
+
+function openJournalHomeworkInput() {
+  journalHomeworkOpen = true;
+  renderJournalGrades();
+  const el = document.getElementById("journalHomeworkInput");
+  if(el) el.focus();
+}
+
+async function saveJournalHomework() {
+  const el = document.getElementById("journalHomeworkInput");
+  const text = el ? el.value.trim() : "";
+  if(!text) { showToast("Введите домашнее задание", true); return; }
+  try {
+    const resp = await fetch(API_URL + "/journal/homework", {
+      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        city: activeJournalCity, class_name: activeJournalClass,
+        subject_id: journalGradesSubjectId, date: journalGradesDate, text,
+      }),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    await loadJournalGrades();
+    showToast("Домашнее задание сохранено");
+  } catch(e) {
+    showToast("Не удалось сохранить домашнее задание", true);
   }
 }
 
@@ -3415,6 +3459,8 @@ function renderJournalGrades() {
   ).join("");
   const hasTopic = !!(journalLessonTopic && journalLessonTopic.topic);
   const topicValue = (journalLessonTopic && journalLessonTopic.topic) || "";
+  const hasHomework = !!(journalHomework && journalHomework.text);
+  const homeworkValue = (journalHomework && journalHomework.text) || "";
 
   let html = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
@@ -3434,6 +3480,24 @@ function renderJournalGrades() {
         <button onclick="saveJournalLessonTopic()" style="flex-shrink:0;padding:0 14px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Сохранить</button>
       </div>
     </div>`;
+
+  // Необязательное, поэтому свёрнуто за кнопкой, пока не задано или пока
+  // учитель сам не откроет — в отличие от темы урока, которая всегда на виду
+  // (обязательна перед выставлением оценок).
+  if(hasHomework || journalHomeworkOpen) {
+    html += `
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Домашнее задание</div>
+      <div style="display:flex;gap:8px">
+        <input id="journalHomeworkInput" type="text" value="${homeworkValue.replace(/"/g, "&quot;")}" placeholder="Например: §12, упр. 3-5"
+          style="flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
+        <button onclick="saveJournalHomework()" style="flex-shrink:0;padding:0 14px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Сохранить</button>
+      </div>
+    </div>`;
+  } else {
+    html += `
+    <button onclick="openJournalHomeworkInput()" style="margin-bottom:16px;padding:8px 14px;border-radius:10px;border:1.5px dashed var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">+ Домашнее задание</button>`;
+  }
 
   if(!journalClassStudents.length) {
     html += '<div class="empty">Пока нет учеников в этом классе</div>';
