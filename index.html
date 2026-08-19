@@ -623,6 +623,17 @@
   </div>
 </div>
 
+<!-- MODAL: ИТОГОВЫЕ ОЦЕНКИ за период (четверть/год) по классу+предмету —
+     одна оценка на ребёнка за период (upsert), не среднее из текущих —
+     учитель ставит сам, тап по цифре сразу сохраняет (project_gorizont) -->
+<div class="modal-overlay" id="journalPeriodModalOverlay" onclick="if(event.target===this) closeJournalPeriodGrades()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-name">Итоговые оценки</div>
+    <div id="journalPeriodModalContent"></div>
+  </div>
+</div>
+
 <!-- NAV -->
 <nav class="nav">
   <button class="nav-btn active" id="nav-home" onclick="goTo('home')">
@@ -3484,6 +3495,99 @@ function jumpToJournalHistoryDate(date) {
   loadJournalGrades();
 }
 
+// ── ИТОГОВЫЕ ОЦЕНКИ за период (четверть/год) — одна оценка на ребёнка на
+// предмет+период (upsert в journal_period_grades), НЕ среднее из текущих
+// оценок, учитель ставит сам. Проще, чем ежедневные оценки — без
+// модификаторов +/- и без комментария, тап по цифре сразу сохраняет
+// (запрос пользователя: "сначала итоговые оценки").
+const JOURNAL_PERIODS = ["1 четверть", "2 четверть", "3 четверть", "4 четверть", "Год"];
+let journalPeriod = JOURNAL_PERIODS[0];
+let journalPeriodGrades = [];
+
+async function openJournalPeriodGrades() {
+  document.getElementById("journalPeriodModalContent").innerHTML =
+    '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем...</div>';
+  document.getElementById("journalPeriodModalOverlay").classList.add("show");
+  await loadJournalPeriodGrades();
+}
+
+function closeJournalPeriodGrades() {
+  document.getElementById("journalPeriodModalOverlay").classList.remove("show");
+}
+
+async function switchJournalPeriod(period) {
+  journalPeriod = period;
+  await loadJournalPeriodGrades();
+}
+
+async function loadJournalPeriodGrades() {
+  try {
+    const resp = await fetch(
+      API_URL + "/journal/period-grades?city=" + encodeURIComponent(activeJournalCity) +
+      "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
+      "&period=" + encodeURIComponent(journalPeriod),
+      {headers: authHeaders()},
+    );
+    const d = await resp.json();
+    journalPeriodGrades = d.ok ? d.grades : [];
+  } catch(e) {
+    console.error("loadJournalPeriodGrades error:", e);
+    journalPeriodGrades = [];
+  }
+  renderJournalPeriodModal();
+}
+
+function renderJournalPeriodModal() {
+  const periodOptions = JOURNAL_PERIODS.map(p =>
+    `<option value="${p}"${p === journalPeriod ? " selected" : ""}>${p}</option>`
+  ).join("");
+  const periodSelect = `<select onchange="switchJournalPeriod(this.value)" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px">${periodOptions}</select>`;
+
+  if(!journalClassStudents.length) {
+    document.getElementById("journalPeriodModalContent").innerHTML = periodSelect + '<div class="empty">Пока нет учеников в этом классе</div>';
+    return;
+  }
+
+  const rows = journalClassStudents.map(c => {
+    // == не === — id ребёнка приходит строкой из /children, child_id оценки числом из Postgres.
+    const g = journalPeriodGrades.find(pg => pg.child_id == c.id);
+    const initials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2);
+    const btns = JOURNAL_GRADE_VALUES.map(v =>
+      `<button onclick="setJournalPeriodGrade(${c.id},'${v}')" style="width:32px;height:32px;border-radius:50%;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;` +
+      (g && g.value === v
+        ? 'border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff'
+        : 'border:1.5px solid var(--border);background:var(--surface2);color:var(--text)') +
+      `">${v}</button>`
+    ).join("");
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid var(--border)">
+      <div class="avatar" style="flex-shrink:0">${initials}</div>
+      <div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
+      <div style="display:flex;gap:6px;flex-shrink:0">${btns}</div>
+    </div>`;
+  }).join("");
+
+  document.getElementById("journalPeriodModalContent").innerHTML = periodSelect + rows;
+}
+
+async function setJournalPeriodGrade(childId, value) {
+  try {
+    const resp = await fetch(API_URL + "/journal/period-grades", {
+      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        city: activeJournalCity, class_name: activeJournalClass,
+        child_id: childId, subject_id: journalGradesSubjectId,
+        period: journalPeriod, value,
+      }),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    await loadJournalPeriodGrades();
+    showToast("Итоговая оценка сохранена");
+  } catch(e) {
+    showToast("Не удалось сохранить оценку", true);
+  }
+}
+
 // Список класса — те же плашки (child-card), что и в посещаемости, только
 // вместо галочки "пришёл" в meta-строке показываются бейджи с оценками за
 // выбранный день. Тап по плашке открывает модалку (journalGradeModalOverlay)
@@ -3519,7 +3623,8 @@ function renderJournalGrades() {
       style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px">
       ${subjOptions}
     </select>
-    <div style="text-align:right;margin-top:-8px;margin-bottom:14px">
+    <div style="display:flex;justify-content:flex-end;gap:14px;margin-top:-8px;margin-bottom:14px">
+      <span onclick="openJournalPeriodGrades()" style="font-size:12px;color:var(--accent);cursor:pointer;font-weight:500">Итоговые оценки ›</span>
       <span onclick="openJournalHistory()" style="font-size:12px;color:var(--accent);cursor:pointer;font-weight:500">История уроков ›</span>
     </div>
     <div style="margin-bottom:16px">
