@@ -249,17 +249,24 @@
   <div id="journalClassList"></div>
 </div>
 
+<!-- SCREEN: JOURNAL TEACHER (учительский вход — сразу список своих предметов,
+     без выбора города/класса — см. project_gorizont, роль "Учитель") -->
+<div class="screen" id="screen-journal-teacher">
+  <div class="section-title">Мои предметы</div>
+  <div id="journalMySubjectsList"></div>
+</div>
+
 <!-- SCREEN: JOURNAL VIEW (обзор класса — только просмотр, без редактирования) -->
 <div class="screen" id="screen-journal-view">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-    <button onclick="goTo('journal')" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
+    <button onclick="goTo(journalViewTeacherMode ? 'journal-teacher' : 'journal')" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
     <div style="font-size:16px;font-weight:600;flex:1" id="journalViewTitle">Класс</div>
-    <button onclick="openJournalClassEdit()" title="Редактировать" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">
+    <button onclick="openJournalClassEdit()" id="journalViewEditBtn" title="Редактировать" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
     </button>
   </div>
 
-  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="journalViewTabBar">
     <button class="filter-btn active" id="journalViewTab-subjects" onclick="switchJournalViewTab('subjects')">Предметы</button>
     <button class="filter-btn" id="journalViewTab-schedule" onclick="switchJournalViewTab('schedule')">Расписание</button>
     <button class="filter-btn" id="journalViewTab-grades" onclick="switchJournalViewTab('grades')">Оценки</button>
@@ -500,7 +507,7 @@
       <option value="Администратор">Администратор</option>
       <option value="Директор">Директор</option>
     </select>
-    <div style="font-size:11px;color:var(--text2);margin-top:5px">От должности зависит доступ: Воспитатель видит только отметку посещаемости</div>
+    <div style="font-size:11px;color:var(--text2);margin-top:5px">От должности зависит доступ: Воспитатель видит только отметку посещаемости, Учитель — только оценки по своим урокам (назначаются в Журнале → Расписание)</div>
   </div>
   <div style="margin-bottom:12px">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Telegram ID</div>
@@ -613,7 +620,7 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
     <span>Персонал</span>
   </button>
-  <button class="nav-btn" id="nav-journal" onclick="goTo('journal')" style="display:none">
+  <button class="nav-btn" id="nav-journal" onclick="openJournalEntry()" style="display:none">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
     <span>Журнал</span>
   </button>
@@ -824,6 +831,10 @@ function goTo(screen) {
   if(screen === "notifications") renderNotifications();
   if(screen === "staff") loadStaff();
   if(screen === "journal") loadJournalClasses();
+  if(screen === "journal-teacher") {
+    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById("nav-journal")?.classList.add("active");
+  }
   if(screen === "form") {
     document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("nav-children")?.classList.add("active");
@@ -1815,6 +1826,13 @@ function isAdminRole(role) {
 function isDirectorRole(role) {
   return ["Директор", "director", "developer"].includes(role);
 }
+// Учитель — по подстроке в должности (staffInfo.role — свободный текст из
+// payroll_staff.position), та же классификация, что и на бэкенде
+// (_is_teacher_staff в api.py). Видит только вкладку "Журнал", и в ней —
+// только свои предметы (см. openJournalEntry/loadJournalMySubjects).
+function isTeacherRole(role) {
+  return (role || "").toLowerCase().includes("учител");
+}
 
 // Fail-closed: если staffInfo ещё не загрузился (или вообще не загрузится
 // из-за сетевой ошибки) — считаем НЕ админом, не наоборот. Раньше было
@@ -1826,10 +1844,24 @@ function isDirectorRole(role) {
 // (см. также серверную проверку роли в api.py).
 function applyRolePermissions() {
   const admin = !!staffInfo && isAdminRole(staffInfo.role);
+  const teacher = !!staffInfo && isTeacherRole(staffInfo.role);
   const navStaff = document.getElementById("nav-staff");
   if(navStaff) navStaff.style.display = admin ? "" : "none";
   const navJournal = document.getElementById("nav-journal");
-  if(navJournal) navJournal.style.display = admin ? "" : "none";
+  if(navJournal) navJournal.style.display = (admin || teacher) ? "" : "none";
+}
+
+// Вход в "Журнал" из нижней навигации — у админа/директора свой путь (список
+// классов города, полное редактирование), у учителя свой (сразу список
+// своих предметов, только оценки). Роли не пересекаются на практике (role —
+// одно значение), но на всякий случай админ имеет приоритет.
+function openJournalEntry() {
+  if(staffInfo && isAdminRole(staffInfo.role)) {
+    goTo("journal");
+  } else {
+    goTo("journal-teacher");
+    loadJournalMySubjects();
+  }
 }
 
 async function initStaff(){
@@ -2524,6 +2556,15 @@ let journalGradesDate = null;
 let journalGradesSubjectId = null;
 let journalGrades = [];
 
+// Учительский вход в screen-journal-view — экран открыт из "Мои предметы"
+// (openJournalTeacherSubject), а не из админского списка классов: скрываем
+// вкладки Предметы/Расписание/Дети и карандаш редактирования, "Назад" ведёт
+// на "Мои предметы", а не на список классов города. journalMySubjects —
+// свои предметы учителя (см. loadJournalMySubjects), для сужения выпадающего
+// списка предметов в renderJournalGrades до тех, что он реально ведёт.
+let journalViewTeacherMode = false;
+let journalMySubjects = [];
+
 function journalCities() {
   return (staffInfo && staffInfo.city) ? [staffInfo.city] : ["Дананг", "Нячанг"];
 }
@@ -2572,6 +2613,53 @@ function renderJournalClasses() {
   document.getElementById("journalClassList").innerHTML = html;
 }
 
+// ── Учительский вход ("Мои предметы") ───────────────────────────────────
+async function loadJournalMySubjects() {
+  try {
+    const resp = await fetch(API_URL + "/journal/my-subjects", {headers: authHeaders()});
+    const d = await resp.json();
+    journalMySubjects = d.ok ? d.subjects : [];
+  } catch(e) {
+    console.error("loadJournalMySubjects error:", e);
+    journalMySubjects = [];
+  }
+  renderJournalMySubjects();
+}
+
+function renderJournalMySubjects() {
+  const html = journalMySubjects.map(s =>
+    `<div class="child-list-item" onclick="openJournalTeacherSubject('${s.class_name.replace(/'/g, "\\'")}',${s.subject_id})">
+      <div class="child-detail">
+        <div class="child-detail-name">${s.subject_name || "Предмет без названия"}</div>
+        <div class="child-detail-meta">${s.class_name}</div>
+      </div>
+      <span class="child-arrow">›</span>
+    </div>`
+  ).join("");
+  document.getElementById("journalMySubjectsList").innerHTML =
+    html || '<div class="empty">Вы пока не назначены учителем ни на один урок — обратитесь к администратору</div>';
+}
+
+async function openJournalTeacherSubject(className, subjectId) {
+  journalViewTeacherMode = true;
+  activeJournalCity = staffInfo.city;
+  activeJournalClass = className;
+  journalGradesDate = null;
+  journalGradesSubjectId = subjectId;
+  journalGrades = [];
+  document.getElementById("journalViewTitle").textContent = className;
+  document.getElementById("journalViewEditBtn").style.display = "none";
+  document.getElementById("journalViewTabBar").style.display = "none";
+  ["subjects", "schedule", "students"].forEach(t => {
+    const panel = document.getElementById("journalViewPanel-" + t);
+    if(panel) panel.style.display = "none";
+  });
+  document.getElementById("journalViewPanel-grades").style.display = "";
+  computeJournalClassStudents();
+  goTo("journal-view");
+  await loadJournalGrades();
+}
+
 function openNewJournalClass() {
   const name = document.getElementById("journalNewClassInput").value.trim();
   if(!name) return;
@@ -2580,6 +2668,9 @@ function openNewJournalClass() {
 }
 
 async function openJournalClass(name) {
+  journalViewTeacherMode = false;
+  document.getElementById("journalViewEditBtn").style.display = "";
+  document.getElementById("journalViewTabBar").style.display = "";
   activeJournalClass = name;
   document.getElementById("journalViewTitle").textContent = name;
   document.getElementById("journalClassTitle").textContent = name;
@@ -3115,9 +3206,22 @@ function switchJournalGradesSubject(id) {
   loadJournalGrades();
 }
 
+// Список предметов для выпадающего списка на вкладке "Оценки" — у админа
+// все предметы класса, у учителя только те, где он сам teacher_staff_id
+// в расписании (journalMySubjects, см. loadJournalMySubjects).
+function journalGradesSubjectOptions() {
+  if(journalViewTeacherMode) {
+    return journalMySubjects
+      .filter(s => s.class_name === activeJournalClass)
+      .map(s => ({id: s.subject_id, name: s.subject_name}));
+  }
+  return journalSubjects.map(s => ({id: s.id, name: s.name}));
+}
+
 async function loadJournalGrades() {
   if(journalGradesDate === null) journalGradesDate = journalGradesToday();
-  if(journalGradesSubjectId === null && journalSubjects.length) journalGradesSubjectId = journalSubjects[0].id;
+  const options = journalGradesSubjectOptions();
+  if(journalGradesSubjectId === null && options.length) journalGradesSubjectId = options[0].id;
   if(!journalGradesSubjectId) { journalGrades = []; renderJournalGrades(); return; }
   try {
     const resp = await fetch(
@@ -3137,14 +3241,17 @@ async function loadJournalGrades() {
 
 function renderJournalGrades() {
   const container = document.getElementById("journalViewGrades");
-  if(!journalSubjects.length) {
-    container.innerHTML = '<div class="empty" style="padding:14px 0">Сначала добавьте предмет во вкладке «Предметы»</div>';
+  const options = journalGradesSubjectOptions();
+  if(!options.length) {
+    container.innerHTML = journalViewTeacherMode
+      ? '<div class="empty" style="padding:14px 0">У вас нет уроков в этом классе</div>'
+      : '<div class="empty" style="padding:14px 0">Сначала добавьте предмет во вкладке «Предметы»</div>';
     return;
   }
 
   const dateLabel = journalGradesDate === journalGradesToday() ? "Сегодня" : formatShortDate(journalGradesDate);
   const nextDisabled = journalGradesDate === journalGradesToday();
-  const subjOptions = journalSubjects.map(s =>
+  const subjOptions = options.map(s =>
     `<option value="${s.id}"${s.id === journalGradesSubjectId ? " selected" : ""}>${s.name}</option>`
   ).join("");
 
