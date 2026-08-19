@@ -259,9 +259,10 @@
     </button>
   </div>
 
-  <div style="display:flex;gap:8px;margin-bottom:16px">
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
     <button class="filter-btn active" id="journalViewTab-subjects" onclick="switchJournalViewTab('subjects')">Предметы</button>
     <button class="filter-btn" id="journalViewTab-schedule" onclick="switchJournalViewTab('schedule')">Расписание</button>
+    <button class="filter-btn" id="journalViewTab-grades" onclick="switchJournalViewTab('grades')">Оценки</button>
     <button class="filter-btn" id="journalViewTab-students" onclick="switchJournalViewTab('students')">Дети</button>
   </div>
 
@@ -271,6 +272,10 @@
 
   <div id="journalViewPanel-schedule" style="display:none">
     <div id="journalViewSchedule" style="margin-bottom:20px"></div>
+  </div>
+
+  <div id="journalViewPanel-grades" style="display:none">
+    <div id="journalViewGrades" style="margin-bottom:80px"></div>
   </div>
 
   <div id="journalViewPanel-students" style="display:none">
@@ -2512,6 +2517,13 @@ let journalSchedule = [];
 let journalScheduleDayView = null;
 let journalScheduleDayEdit = null;
 
+// Оценки — своя дата (не день недели расписания, а конкретный календарный
+// день) и свой выбранный предмет. null = ещё не выбраны, подставятся при
+// первом открытии вкладки "Оценки" (loadJournalGrades).
+let journalGradesDate = null;
+let journalGradesSubjectId = null;
+let journalGrades = [];
+
 function journalCities() {
   return (staffInfo && staffInfo.city) ? [staffInfo.city] : ["Дананг", "Нячанг"];
 }
@@ -2577,6 +2589,9 @@ async function openJournalClass(name) {
   switchJournalViewTab("subjects");
   journalScheduleDayView = null;
   journalScheduleDayEdit = null;
+  journalGradesDate = null;
+  journalGradesSubjectId = null;
+  journalGrades = [];
   goTo("journal-view");
   await loadJournalClassData();
 }
@@ -2601,12 +2616,13 @@ function switchJournalEditTab(tab) {
 }
 
 function switchJournalViewTab(tab) {
-  ["subjects", "schedule", "students"].forEach(t => {
+  ["subjects", "schedule", "grades", "students"].forEach(t => {
     const tabBtn = document.getElementById("journalViewTab-" + t);
     const panel = document.getElementById("journalViewPanel-" + t);
     if(tabBtn) tabBtn.className = "filter-btn" + (t === tab ? " active" : "");
     if(panel) panel.style.display = t === tab ? "" : "none";
   });
+  if(tab === "grades") loadJournalGrades();
 }
 
 // Учитель — не текст, а ссылка на карточку в "Персонале" (решение
@@ -3072,6 +3088,132 @@ function renderJournalView() {
     </div>`;
   }).join("");
   document.getElementById("journalViewStudents").innerHTML = stuHtml || '<div class="empty">Пока нет учеников в этом классе</div>';
+}
+
+// ── Оценки (вкладка "Оценки" на экране-обзоре) ──────────────────────────
+// Российская 5-балльная шкала с модификаторами — так же, как в Дневник.ру/
+// ЭЛЖУР, тип оценки (grade_type) пока не выбирается из UI, всегда "Урок":
+// смотрим, как реально пользуются, прежде чем городить лишний выбор.
+const JOURNAL_GRADE_VALUES = ["2", "3", "4", "5", "5+", "4-", "н"];
+
+function journalGradesToday() {
+  return dateToDmy(now);
+}
+
+function shiftJournalGradesDate(delta) {
+  if(journalGradesDate === null) journalGradesDate = journalGradesToday();
+  const d = dmyToDate(journalGradesDate);
+  d.setDate(d.getDate() + delta);
+  const dmy = dateToDmy(d);
+  if(dmy > journalGradesToday()) return;
+  journalGradesDate = dmy;
+  loadJournalGrades();
+}
+
+function switchJournalGradesSubject(id) {
+  journalGradesSubjectId = id ? parseInt(id, 10) : null;
+  loadJournalGrades();
+}
+
+async function loadJournalGrades() {
+  if(journalGradesDate === null) journalGradesDate = journalGradesToday();
+  if(journalGradesSubjectId === null && journalSubjects.length) journalGradesSubjectId = journalSubjects[0].id;
+  if(!journalGradesSubjectId) { journalGrades = []; renderJournalGrades(); return; }
+  try {
+    const resp = await fetch(
+      API_URL + "/journal/grades?city=" + encodeURIComponent(activeJournalCity) +
+      "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
+      "&date_from=" + encodeURIComponent(journalGradesDate) + "&date_to=" + encodeURIComponent(journalGradesDate),
+      {headers: authHeaders()},
+    );
+    const d = await resp.json();
+    journalGrades = d.ok ? d.grades : [];
+  } catch(e) {
+    console.error("loadJournalGrades error:", e);
+    journalGrades = [];
+  }
+  renderJournalGrades();
+}
+
+function renderJournalGrades() {
+  const container = document.getElementById("journalViewGrades");
+  if(!journalSubjects.length) {
+    container.innerHTML = '<div class="empty" style="padding:14px 0">Сначала добавьте предмет во вкладке «Предметы»</div>';
+    return;
+  }
+
+  const dateLabel = journalGradesDate === journalGradesToday() ? "Сегодня" : formatShortDate(journalGradesDate);
+  const nextDisabled = journalGradesDate === journalGradesToday();
+  const subjOptions = journalSubjects.map(s =>
+    `<option value="${s.id}"${s.id === journalGradesSubjectId ? " selected" : ""}>${s.name}</option>`
+  ).join("");
+
+  let html = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <button onclick="shiftJournalGradesDate(-1)" style="border:none;background:var(--surface2);border-radius:10px;width:30px;height:30px;cursor:pointer;color:var(--text);flex-shrink:0">&lsaquo;</button>
+      <div style="flex:1;text-align:center;font-weight:600;font-size:14px">${dateLabel}</div>
+      <button onclick="shiftJournalGradesDate(1)" ${nextDisabled ? "disabled" : ""} style="border:none;background:var(--surface2);border-radius:10px;width:30px;height:30px;color:var(--text);flex-shrink:0${nextDisabled ? ";opacity:.35" : ";cursor:pointer"}">&rsaquo;</button>
+    </div>
+    <select id="journalGradesSubjectSelect" onchange="switchJournalGradesSubject(this.value)"
+      style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px">
+      ${subjOptions}
+    </select>`;
+
+  if(!journalClassStudents.length) {
+    html += '<div class="empty">Пока нет учеников в этом классе</div>';
+    container.innerHTML = html;
+    return;
+  }
+
+  html += journalClassStudents.map(c => {
+    const grades = journalGrades.filter(g => g.child_id === c.id);
+    const chips = grades.map(g =>
+      `<span onclick="deleteJournalGrade(${g.id})" title="Нажмите, чтобы удалить"
+        style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 6px;border-radius:12px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;margin:0 4px 4px 0">${g.value}</span>`
+    ).join("");
+    const quickBtns = JOURNAL_GRADE_VALUES.map(v =>
+      `<button onclick="addJournalGradeQuick(${c.id},'${v}')" style="padding:6px 11px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;cursor:pointer">${v}</button>`
+    ).join("");
+    return `<div class="child-list-item" style="flex-wrap:wrap;cursor:default">
+      <div class="child-detail" style="flex-basis:100%;margin-bottom:${chips ? "6" : "8"}px">
+        <div class="child-detail-name">${c.name}</div>
+      </div>
+      ${chips ? `<div style="display:flex;flex-wrap:wrap;width:100%">${chips}</div>` : ""}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;width:100%">${quickBtns}</div>
+    </div>`;
+  }).join("");
+
+  container.innerHTML = html;
+}
+
+async function addJournalGradeQuick(childId, value) {
+  try {
+    const resp = await fetch(API_URL + "/journal/grades", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        city: activeJournalCity, class_name: activeJournalClass,
+        child_id: childId, subject_id: journalGradesSubjectId,
+        date: journalGradesDate, value, grade_type: "Урок",
+      }),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    await loadJournalGrades();
+  } catch(e) {
+    showToast("Не удалось поставить оценку", true);
+  }
+}
+
+async function deleteJournalGrade(id) {
+  try {
+    const resp = await fetch(API_URL + "/journal/grades?id=" + id, {method: "DELETE", headers: authHeaders()});
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    await loadJournalGrades();
+  } catch(e) {
+    showToast("Не удалось удалить оценку", true);
+  }
 }
 
 // ── DAY ROSTER (админ — "кто работал в этот день", обратный срез к
