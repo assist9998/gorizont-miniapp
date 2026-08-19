@@ -613,6 +613,16 @@
   </div>
 </div>
 
+<!-- MODAL: ИСТОРИЯ УРОКОВ по классу+предмету — сводка тема/ДЗ/кол-во оценок
+     по датам, тап по строке переносит на этот день в основном экране -->
+<div class="modal-overlay" id="journalHistoryModalOverlay" onclick="if(event.target===this) closeJournalHistory()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-name">История уроков</div>
+    <div id="journalHistoryModalContent"></div>
+  </div>
+</div>
+
 <!-- NAV -->
 <nav class="nav">
   <button class="nav-btn active" id="nav-home" onclick="goTo('home')">
@@ -3422,6 +3432,56 @@ async function saveJournalHomework() {
   }
 }
 
+// ── ИСТОРИЯ УРОКОВ по классу+предмету — сводка вместо разворачивания
+// каждого дня заново (запрос пользователя: "сводку по предмету иметь надо").
+async function openJournalHistory() {
+  document.getElementById("journalHistoryModalContent").innerHTML =
+    '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем...</div>';
+  document.getElementById("journalHistoryModalOverlay").classList.add("show");
+  let history = [];
+  try {
+    const resp = await fetch(
+      API_URL + "/journal/subject-history?city=" + encodeURIComponent(activeJournalCity) +
+      "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId,
+      {headers: authHeaders()},
+    );
+    const d = await resp.json();
+    history = d.ok ? d.history : [];
+  } catch(e) {
+    console.error("openJournalHistory error:", e);
+  }
+  renderJournalHistoryModal(history);
+}
+
+function closeJournalHistory() {
+  document.getElementById("journalHistoryModalOverlay").classList.remove("show");
+}
+
+function renderJournalHistoryModal(history) {
+  if(!history.length) {
+    document.getElementById("journalHistoryModalContent").innerHTML =
+      '<div class="empty" style="padding:20px 0">Пока нет уроков по этому предмету</div>';
+    return;
+  }
+  document.getElementById("journalHistoryModalContent").innerHTML = history.map(h => `
+    <div class="child-list-item" onclick="jumpToJournalHistoryDate('${h.date}')">
+      <div class="child-detail">
+        <div class="child-detail-name">${formatShortDate(h.date)}</div>
+        <div class="child-detail-meta">${h.topic ? h.topic : "без темы"}${h.homework ? " · ДЗ: " + h.homework : ""}</div>
+      </div>
+      ${h.grade_count ? `<span class="time-badge" style="background:var(--accent);color:#fff;font-weight:700;flex-shrink:0">${h.grade_count}</span>` : ""}
+      <span class="child-arrow">›</span>
+    </div>`
+  ).join("");
+}
+
+function jumpToJournalHistoryDate(date) {
+  closeJournalHistory();
+  journalGradesDate = date;
+  journalGradesEditingId = null;
+  loadJournalGrades();
+}
+
 // Список класса — те же плашки (child-card), что и в посещаемости, только
 // вместо галочки "пришёл" в meta-строке показываются бейджи с оценками за
 // выбранный день. Тап по плашке открывает модалку (journalGradeModalOverlay)
@@ -3457,6 +3517,9 @@ function renderJournalGrades() {
       style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px">
       ${subjOptions}
     </select>
+    <div style="text-align:right;margin-top:-8px;margin-bottom:14px">
+      <span onclick="openJournalHistory()" style="font-size:12px;color:var(--accent);cursor:pointer;font-weight:500">История уроков ›</span>
+    </div>
     <div style="margin-bottom:16px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тема урока${hasTopic ? "" : " — обязательно"}</div>
       <div style="display:flex;gap:8px">
