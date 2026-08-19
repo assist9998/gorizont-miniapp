@@ -267,6 +267,15 @@
     </button>
   </div>
 
+  <!-- Подписанные кнопки (не иконки без текста — жалоба пользователя, что
+       непонятно, что за иконки), сразу под шапкой экрана, выше вкладок —
+       видны только вместе с вкладкой "Оценки" (или всегда в учительском
+       режиме, где вкладок нет вообще). -->
+  <div style="display:none;justify-content:flex-end;gap:8px;margin-bottom:14px" id="journalGradesActionsRow">
+    <button onclick="openJournalHistory()" class="filter-btn">История уроков</button>
+    <button onclick="openJournalPeriodGrades()" class="filter-btn">Итоговые оценки</button>
+  </div>
+
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="journalViewTabBar">
     <button class="filter-btn active" id="journalViewTab-subjects" onclick="switchJournalViewTab('subjects')">Предметы</button>
     <button class="filter-btn" id="journalViewTab-schedule" onclick="switchJournalViewTab('schedule')">Расписание</button>
@@ -2780,6 +2789,7 @@ async function openJournalTeacherSubject(className, subjectId) {
   document.getElementById("journalViewTitle").textContent = className;
   document.getElementById("journalViewEditBtn").style.display = "none";
   document.getElementById("journalViewTabBar").style.display = "none";
+  document.getElementById("journalGradesActionsRow").style.display = "flex";
   ["subjects", "schedule", "students"].forEach(t => {
     const panel = document.getElementById("journalViewPanel-" + t);
     if(panel) panel.style.display = "none";
@@ -2844,6 +2854,7 @@ function switchJournalViewTab(tab) {
     if(tabBtn) tabBtn.className = "filter-btn" + (t === tab ? " active" : "");
     if(panel) panel.style.display = t === tab ? "" : "none";
   });
+  document.getElementById("journalGradesActionsRow").style.display = tab === "grades" ? "flex" : "none";
   if(tab === "grades") loadJournalGrades();
 }
 
@@ -3678,18 +3689,7 @@ function renderJournalGrades() {
   const topicValue = (journalLessonTopic && journalLessonTopic.topic) || "";
   const homeworkValue = (journalHomework && journalHomework.text) || "";
 
-  // Иконки "История"/"Итоговые" — наверху, отдельной строкой, а не мелкими
-  // ссылками под селектом предмета (жалоба пользователя: были мелкими и
-  // "как будто должны быть не здесь, может быть в шапке").
   let html = `
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px">
-      <button onclick="openJournalHistory()" title="История уроков" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 15,14"/></svg>
-      </button>
-      <button onclick="openJournalPeriodGrades()" title="Итоговые оценки" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
-      </button>
-    </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
       <button onclick="shiftJournalGradesDate(-1)" style="border:none;background:var(--surface2);border-radius:10px;width:30px;height:30px;cursor:pointer;color:var(--text);flex-shrink:0">&lsaquo;</button>
       <div style="flex:1;text-align:center;font-weight:600;font-size:14px">${dateLabel}</div>
