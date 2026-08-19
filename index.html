@@ -11,7 +11,7 @@
     --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;
     --accent:#4f8ef7;--accent2:#38d9a9;--danger:#ff6b6b;--warning:#ffd43b;
     --text:#e8eaf0;--text2:#8b90a8;--border:#2d3250;
-    --radius:16px;--radius-sm:10px;--nav-h:64px;
+    --radius:16px;--radius-sm:10px;--nav-h:64px;--kb-offset:0px;
     /* Отдельные (более тёмные) цвета для больших градиентных заливок —
        на тёмном фоне яркий accent/accent2 выглядит слишком кислотно. */
     --grad1:#3f6fd1;--grad2:#22a37e;
@@ -93,7 +93,7 @@
   .city-filter{display:flex;gap:8px;margin-bottom:12px}
 
   /* MODAL */
-  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;align-items:flex-end}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;align-items:flex-end;padding-bottom:var(--kb-offset);transition:padding-bottom .15s ease-out}
   #lessonModalOverlay{z-index:310}
   .modal-overlay.show{display:flex}
   .modal{background:var(--surface);border-radius:24px 24px 0 0;padding:20px;width:100%;max-height:85vh;overflow-y:auto;border-top:1px solid var(--border)}
@@ -686,6 +686,27 @@ function toggleTheme() {
 }
 
 applyTheme(localStorage.getItem("gorizont_theme") || "dark");
+
+// ── Клавиатура и модалки ──────────────────────────────────────────
+// На iOS открытие клавиатуры НЕ ужимает layout viewport (в отличие от
+// большинства Android-вебвью) — .modal-overlay (position:fixed;inset:0)
+// остаётся во весь экран, а клавиатура просто перекрывает низ поверх него,
+// из-за чего textarea/кнопка "Сохранить" уезжают под клавиатуру и всё
+// выглядит дёрганым. window.visualViewport — единственный кросс-платформенный
+// источник РЕАЛЬНОЙ видимой высоты (в отличие от vh/inset, которые её не
+// учитывают): по разнице innerHeight-vv.height считаем высоту клавиатуры и
+// поднимаем модалку на этот отступ через CSS-переменную (плавно, transition
+// уже на .modal-overlay). Жалоба пользователя: "вылетает клава и двигает всё
+// вверх, можно посимпатичнее?".
+function syncKeyboardOffset() {
+  const vv = window.visualViewport;
+  const offset = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+  document.documentElement.style.setProperty("--kb-offset", offset + "px");
+}
+if(window.visualViewport) {
+  window.visualViewport.addEventListener("resize", syncKeyboardOffset);
+  window.visualViewport.addEventListener("scroll", syncKeyboardOffset);
+}
 
 // ── Проверка обновлений — та же схема, что в Balu Kids: при возврате в
 // приложение сверяем реально отдаваемый сервером HTML с тем, что было
