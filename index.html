@@ -3504,11 +3504,21 @@ const JOURNAL_PERIODS = ["1 четверть", "2 четверть", "3 четв
 let journalPeriod = JOURNAL_PERIODS[0];
 let journalPeriodGrades = [];
 
+// Средний балл за месяц — подсказка рядом с именем ребёнка, чтобы было от
+// чего оттолкнуться при выставлении итоговой (запрос пользователя: "может
+// проще за месячную оценку среднего высчитывают"). Считается из текущих
+// оценок (journal_grades) за выбранный месяц, не сохраняется — учитель
+// видит цифру и сам решает, что поставить. Модификаторы (+/-) не учитываем —
+// усреднять базовую цифру честнее, чем изобретать произвольный вес для "4+".
+let journalAvgView = null; // {year, month} — 0-indexed месяц
+let journalAvgByChild = {}; // {childId: "4.3"}
+
 async function openJournalPeriodGrades() {
+  if(!journalAvgView) journalAvgView = { year: now.getFullYear(), month: now.getMonth() };
   document.getElementById("journalPeriodModalContent").innerHTML =
     '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем...</div>';
   document.getElementById("journalPeriodModalOverlay").classList.add("show");
-  await loadJournalPeriodGrades();
+  await Promise.all([loadJournalPeriodGrades(), loadJournalAvg()]);
 }
 
 function closeJournalPeriodGrades() {
@@ -3537,20 +3547,72 @@ async function loadJournalPeriodGrades() {
   renderJournalPeriodModal();
 }
 
+function prevJournalAvgMonth() {
+  if(journalAvgView.month === 0) { journalAvgView.year--; journalAvgView.month = 11; }
+  else journalAvgView.month--;
+  loadJournalAvg();
+}
+function nextJournalAvgMonth() {
+  const isCurrent = journalAvgView.year === now.getFullYear() && journalAvgView.month === now.getMonth();
+  if(isCurrent) return;
+  if(journalAvgView.month === 11) { journalAvgView.year++; journalAvgView.month = 0; }
+  else journalAvgView.month++;
+  loadJournalAvg();
+}
+
+async function loadJournalAvg() {
+  const { year, month } = journalAvgView;
+  const dateFrom = fmtDMY(year, month, 1);
+  const dateTo = fmtDMY(year, month, new Date(year, month + 1, 0).getDate());
+  journalAvgByChild = {};
+  try {
+    const resp = await fetch(
+      API_URL + "/journal/grades?city=" + encodeURIComponent(activeJournalCity) +
+      "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
+      "&date_from=" + dateFrom + "&date_to=" + dateTo,
+      {headers: authHeaders()},
+    );
+    const d = await resp.json();
+    const grades = d.ok ? d.grades : [];
+    const byChild = {};
+    grades.forEach(g => {
+      const base = parseInt(g.value, 10);
+      if(isNaN(base)) return;
+      (byChild[g.child_id] = byChild[g.child_id] || []).push(base);
+    });
+    Object.entries(byChild).forEach(([childId, values]) => {
+      journalAvgByChild[childId] = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1);
+    });
+  } catch(e) {
+    console.error("loadJournalAvg error:", e);
+  }
+  renderJournalPeriodModal();
+}
+
 function renderJournalPeriodModal() {
   const periodOptions = JOURNAL_PERIODS.map(p =>
     `<option value="${p}"${p === journalPeriod ? " selected" : ""}>${p}</option>`
   ).join("");
   const periodSelect = `<select onchange="switchJournalPeriod(this.value)" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px">${periodOptions}</select>`;
 
+  const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  const isCurrentMonth = journalAvgView.year === now.getFullYear() && journalAvgView.month === now.getMonth();
+  const avgNav = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <button onclick="prevJournalAvgMonth()" style="border:none;background:var(--surface2);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text);flex-shrink:0">&lsaquo;</button>
+      <div style="flex:1;text-align:center;font-size:12px;color:var(--text2)">Средний балл · ${RU_MONTHS[journalAvgView.month]}</div>
+      <button onclick="nextJournalAvgMonth()" ${isCurrentMonth ? "disabled" : ""} style="border:none;background:var(--surface2);border-radius:10px;width:28px;height:28px;color:var(--text);flex-shrink:0${isCurrentMonth ? ";opacity:.35" : ";cursor:pointer"}">&rsaquo;</button>
+    </div>`;
+
   if(!journalClassStudents.length) {
-    document.getElementById("journalPeriodModalContent").innerHTML = periodSelect + '<div class="empty">Пока нет учеников в этом классе</div>';
+    document.getElementById("journalPeriodModalContent").innerHTML = periodSelect + avgNav + '<div class="empty">Пока нет учеников в этом классе</div>';
     return;
   }
 
   const rows = journalClassStudents.map(c => {
     // == не === — id ребёнка приходит строкой из /children, child_id оценки числом из Postgres.
     const g = journalPeriodGrades.find(pg => pg.child_id == c.id);
+    const avg = journalAvgByChild[c.id];
     const initials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2);
     const btns = JOURNAL_GRADE_VALUES.map(v =>
       `<button onclick="setJournalPeriodGrade(${c.id},'${v}')" style="width:32px;height:32px;border-radius:50%;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;` +
@@ -3561,12 +3623,15 @@ function renderJournalPeriodModal() {
     ).join("");
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid var(--border)">
       <div class="avatar" style="flex-shrink:0">${initials}</div>
-      <div style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
+        ${avg ? `<div style="font-size:11px;color:var(--text2)">ср. ${avg}</div>` : ""}
+      </div>
       <div style="display:flex;gap:6px;flex-shrink:0">${btns}</div>
     </div>`;
   }).join("");
 
-  document.getElementById("journalPeriodModalContent").innerHTML = periodSelect + rows;
+  document.getElementById("journalPeriodModalContent").innerHTML = periodSelect + avgNav + rows;
 }
 
 async function setJournalPeriodGrade(childId, value) {
