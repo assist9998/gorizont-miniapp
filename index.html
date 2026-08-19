@@ -3283,7 +3283,8 @@ const JOURNAL_GRADE_VALUES = ["2", "3", "4", "5"];
 let journalLessonTopic = null; // {id, topic} | null — тема текущего урока (дата+предмет)
 let journalGradesEditingId = null; // id оценки, чей комментарий сейчас открыт для правки
 let journalGradeModalChildId = null; // id ребёнка, чья модалка оценки сейчас открыта (null — закрыта)
-let journalGradePendingValue = null; // выбранное, но ещё не сохранённое значение оценки (до тапа "Сохранить")
+let journalGradePendingBase = null; // выбранная цифра (2-5), ещё не сохранённая (до тапа "Сохранить")
+let journalGradePendingMod = ""; // "" | "+" | "-" — модификатор к выбранной цифре
 let journalGradePendingComment = ""; // текст комментария, набираемый до выбора оценки — не теряется при перерисовке
 
 function journalGradesToday() {
@@ -3447,7 +3448,8 @@ function renderJournalGrades() {
 function openJournalGradeModal(childId) {
   journalGradeModalChildId = childId;
   journalGradesEditingId = null;
-  journalGradePendingValue = null;
+  journalGradePendingBase = null;
+  journalGradePendingMod = "";
   journalGradePendingComment = "";
   renderJournalGradeModal();
   document.getElementById("journalGradeModalOverlay").classList.add("show");
@@ -3457,7 +3459,8 @@ function closeJournalGradeModal() {
   document.getElementById("journalGradeModalOverlay").classList.remove("show");
   journalGradeModalChildId = null;
   journalGradesEditingId = null;
-  journalGradePendingValue = null;
+  journalGradePendingBase = null;
+  journalGradePendingMod = "";
   journalGradePendingComment = "";
 }
 
@@ -3491,40 +3494,50 @@ function renderJournalGradeModal() {
   // Круглые кнопки-пилюли — тот же визуальный стиль, что у выбора числа
   // уроков в карточке нулёвки (LESSON_COUNT_OPTIONS/renderLessonModal), по
   // просьбе пользователя ("такой же дизайн как при выборе количества уроков").
-  // Тап только выбирает значение (подсвечивается, как выбранное число
-  // уроков) — в систему ничего не уходит, пока не нажата "Сохранить": так
-  // учитель успевает передумать/написать комментарий до записи в журнал.
-  // Поле комментария и кнопка "Сохранить" видны сразу, а не только после
-  // выбора оценки — чтобы блок не "дёргал" вёрстку при выборе значения
-  // (жалоба пользователя на прыгающий интерфейс).
+  // Сначала тапают цифру (2-5), затем опционально "-" или "+" в том же
+  // ряду — модификатор применяется к уже выбранной цифре (по просьбе
+  // пользователя: "нажимают на число, потом добавляют + или -, идут
+  // 2 3 4 5 - и +"). В систему ничего не уходит, пока не нажата "Сохранить".
+  const pendingValue = journalGradePendingBase ? journalGradePendingBase + journalGradePendingMod : null;
+  const pillBtn = (label, active, onclick, disabled) =>
+    `<button onclick="${onclick}" ${disabled ? "disabled" : ""} style="width:42px;height:42px;border-radius:50%;font-family:inherit;font-size:14px;font-weight:700;cursor:${disabled ? "default" : "pointer"};flex-shrink:0;` +
+    (active
+      ? 'border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff'
+      : `border:1.5px solid var(--border);background:var(--surface2);color:var(--text)${disabled ? ";opacity:.4" : ""}`) +
+    `">${label}</button>`;
+
   const quickBtns = hasTopic
     ? '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Поставить оценку</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">' +
       JOURNAL_GRADE_VALUES.map(v =>
-        `<button onclick="pickJournalGradeValue('${v}')" style="width:42px;height:42px;border-radius:50%;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0;` +
-        (journalGradePendingValue === v
-          ? 'border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff'
-          : 'border:1.5px solid var(--border);background:var(--surface2);color:var(--text)') +
-        `">${v}</button>`
+        pillBtn(v, journalGradePendingBase === v, `pickJournalGradeBase('${v}')`, false)
       ).join("") +
+      pillBtn("-", journalGradePendingMod === "-", `pickJournalGradeMod('-')`, !journalGradePendingBase) +
+      pillBtn("+", journalGradePendingMod === "+", `pickJournalGradeMod('+')`, !journalGradePendingBase) +
       '</div>' +
       `<textarea id="journalGradePendingComment" oninput="journalGradePendingComment=this.value" placeholder="За что оценка — увидят родители"
          style="width:100%;min-height:50px;padding:8px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box;margin-bottom:8px">${journalGradePendingComment}</textarea>
-       <button onclick="saveJournalGradePending(${c.id})" class="btn-primary" style="width:100%${journalGradePendingValue ? "" : ";opacity:.4;cursor:default"}"${journalGradePendingValue ? "" : " disabled"}>Сохранить</button>`
+       <button onclick="saveJournalGradePending(${c.id})" class="btn-primary" style="width:100%${pendingValue ? "" : ";opacity:.4;cursor:default"}"${pendingValue ? "" : " disabled"}>Сохранить</button>`
     : '<div style="font-size:12px;color:var(--text2);font-style:italic">Сначала укажите тему урока</div>';
 
   document.getElementById("journalGradeModalContent").innerHTML = `
     ${gradeRows ? `<div style="margin-bottom:14px">${gradeRows}</div>` : ""}
     ${quickBtns}`;
 
-  if(journalGradePendingValue) {
+  if(pendingValue) {
     const ta = document.getElementById("journalGradePendingComment");
     if(ta) ta.focus();
   }
 }
 
-function pickJournalGradeValue(v) {
-  journalGradePendingValue = journalGradePendingValue === v ? null : v;
+function pickJournalGradeBase(v) {
+  journalGradePendingBase = journalGradePendingBase === v ? null : v;
+  renderJournalGradeModal();
+}
+
+function pickJournalGradeMod(m) {
+  if(!journalGradePendingBase) return;
+  journalGradePendingMod = journalGradePendingMod === m ? "" : m;
   renderJournalGradeModal();
 }
 
@@ -3557,8 +3570,8 @@ async function saveJournalGradeComment(id) {
 // "если учитель выбрал оценку — она подсвечивается, как только нажал
 // сохранить — то заносится в систему").
 async function saveJournalGradePending(childId) {
-  const value = journalGradePendingValue;
-  if(!value) return;
+  if(!journalGradePendingBase) return;
+  const value = journalGradePendingBase + journalGradePendingMod;
   const el = document.getElementById("journalGradePendingComment");
   const comment = el ? el.value.trim() : "";
   try {
@@ -3573,7 +3586,8 @@ async function saveJournalGradePending(childId) {
     });
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
-    journalGradePendingValue = null;
+    journalGradePendingBase = null;
+    journalGradePendingMod = "";
     journalGradePendingComment = "";
     await loadJournalGrades();
     showToast("Оценка поставлена");
