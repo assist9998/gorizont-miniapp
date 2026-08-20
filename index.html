@@ -95,6 +95,12 @@
   /* MODAL */
   .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;align-items:flex-end;padding-bottom:var(--kb-offset);transition:padding-bottom .15s ease-out}
   #lessonModalOverlay{z-index:310}
+  /* Попап-подсказка отметки дня в календаре сотрудника — вместо тапа по
+     кругу (project_gorizont_payroll): компактная карточка у самой ячейки
+     дня, не полноэкранный модал. z-index выше .modal-overlay (300), т.к.
+     открывается поверх уже открытого календарного модала. */
+  #dayPopoverBackdrop{display:none;position:fixed;inset:0;z-index:349}
+  #dayPopover{display:none;position:fixed;z-index:350;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;min-width:220px;max-width:260px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
   .modal-overlay.show{display:flex}
   .modal{background:var(--surface);border-radius:24px 24px 0 0;padding:20px;width:100%;max-height:85vh;overflow-y:auto;border-top:1px solid var(--border)}
   .modal-handle{width:36px;height:3px;background:var(--border);border-radius:2px;margin:0 auto 16px}
@@ -612,6 +618,12 @@
     <div id="overtimeModalContent"></div>
   </div>
 </div>
+
+<!-- POPOVER: отметка дня сотрудника (пришла/нет + замена + переработка) —
+     всплывает у самой ячейки дня в календаре, не полноэкранный модал
+     (project_gorizont_payroll, замена тапа по кругу на явный выбор) -->
+<div id="dayPopoverBackdrop" onclick="closeDayPopover()"></div>
+<div id="dayPopover"></div>
 
 <!-- MODAL: DAY ROSTER (админ — "кто работал в этот день", обратный срез к
      календарю одного сотрудника; project_gorizont_payroll) -->
@@ -1754,8 +1766,10 @@ function renderModal(c) {
 }
 
 function closeModal(e) {
-  if(e.target === document.getElementById("modalOverlay"))
+  if(e.target === document.getElementById("modalOverlay")) {
     document.getElementById("modalOverlay").classList.remove("show");
+    closeDayPopover(); // попап отметки дня — отдельный элемент, сам не закроется вместе с модалом
+  }
 }
 
 // ── SAVE ──────────────────────────────────────────────────────────
@@ -4321,6 +4335,7 @@ window._staffAttPending = window._staffAttPending || new Set();
 async function openStaffCalendar(id) {
   const s = staffList.find(x => x.id == id);
   if(!s) return;
+  closeDayPopover();
   window._currentStaffForCalendar = s;
   window._staffCalReadOnly = false;
   window._staffSalaryExpanded = false;
@@ -4400,12 +4415,14 @@ function prevStaffMonth() {
   const v = window._staffCalView;
   v.month === 0 ? (v.year--, v.month = 11) : v.month--;
   window._staffSalaryExpanded = false;
+  closeDayPopover(); // ячейка, к которой был привязан попап, уходит с экрана
   loadStaffMonth();
 }
 function nextStaffMonth() {
   const v = window._staffCalView;
   v.month === 11 ? (v.year++, v.month = 0) : v.month++;
   window._staffSalaryExpanded = false;
+  closeDayPopover();
   loadStaffMonth();
 }
 
@@ -4457,81 +4474,148 @@ async function toggleFutureSchedule(dateStr) {
   }
 }
 
-async function toggleStaffAttDay(dateStr) {
+// ── ПОПАП ОТМЕТКИ ДНЯ (пришла/нет + замена + переработка) ──
+// Раньше был тап по кругу через все комбинации (нет -> пришла -> +замена ->
+// +переработка -> ...) — непредсказуемо и медленно, если нужна не первая
+// комбинация в цикле (пользователь: "не очень нравится сам механизм тапа по
+// кругу"). Теперь тап по дню открывает компактный попап рядом с самой
+// ячейкой (не полноэкранный модал — пользователь явно попросил "подсказка
+// всплывающая около даты") с тремя независимыми контролами: статус,
+// замена, часы переработки. Каждый тап внутри сохраняет сразу же (без
+// отдельной кнопки "Сохранить") — те же гарантии одного запроса за раз, что
+// и раньше (window._staffAttPending).
+function openDayPopover(dateStr, cellEl) {
   const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
   if(dateStr > todayDMY) return; // будущее не редактируем
   const s = window._currentStaffForCalendar;
   if(!s) return;
-  // Та же блокировка повторного тапа, что и в toggleHistDay — без неё двойной
-  // тап шлёт два параллельных запроса с противоположными статусами.
+  window._dayPopoverDate = dateStr;
+  renderDayPopover();
+
+  const pop = document.getElementById("dayPopover");
+  const backdrop = document.getElementById("dayPopoverBackdrop");
+  pop.style.display = "block";
+  backdrop.style.display = "block";
+
+  const rect = cellEl.getBoundingClientRect();
+  const popRect = pop.getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = rect.left + rect.width / 2 - popRect.width / 2;
+  left = Math.max(8, Math.min(left, vw - 8 - popRect.width));
+  let top = rect.bottom + 8;
+  if(top + popRect.height > vh - 8) top = rect.top - popRect.height - 8; // не влезает снизу — открываем сверху
+  if(top < 8) top = 8;
+  pop.style.left = left + "px";
+  pop.style.top = top + "px";
+}
+
+function closeDayPopover() {
+  document.getElementById("dayPopover").style.display = "none";
+  document.getElementById("dayPopoverBackdrop").style.display = "none";
+  window._dayPopoverDate = null;
+}
+
+function renderDayPopover() {
+  const dateStr = window._dayPopoverDate;
+  const s = window._currentStaffForCalendar;
+  if(!dateStr || !s) return;
+  const days = window._staffCalDays;
+  const subs = window._staffCalSubstitutions;
+  const otHours = window._staffCalOvertimeHours || {};
+  const status = days[dateStr] || "absent";
+  const isPresent = status === "present";
+  const isSub = subs.has(dateStr);
+  const hours = otHours[dateStr] || 0;
+  const canSub = s.pay_type === "per_shift" || s.pay_type === "monthly_fixed";
+  const canOt = !!s.overtime_rate;
+
+  let html = '<div style="font-size:12.5px;color:var(--text2);font-weight:600;margin-bottom:10px">' + dateStr + '</div>';
+
+  html += '<div style="display:flex;gap:6px;margin-bottom:' + ((isPresent && (canSub || canOt)) ? "12px" : "0") + '">' +
+    `<button onclick="pickDayStatus('present')" style="flex:1;padding:9px 4px;border-radius:9px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;` +
+    (isPresent
+      ? "border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff"
+      : "border:1.5px solid var(--border);background:var(--surface2);color:var(--text)") +
+    `">Была</button>` +
+    `<button onclick="pickDayStatus('absent')" style="flex:1;padding:9px 4px;border-radius:9px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;` +
+    (!isPresent
+      ? "border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff"
+      : "border:1.5px solid var(--border);background:var(--surface2);color:var(--text)") +
+    `">Не было</button>` +
+    "</div>";
+
+  if(isPresent && canSub) {
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:' + (canOt ? "12px" : "0") + '">' +
+      '<span style="font-size:13px;color:var(--text)">Замена</span>' +
+      `<button onclick="pickDaySub(${!isSub})" style="width:42px;height:25px;border-radius:13px;border:none;cursor:pointer;position:relative;padding:0;` +
+      `background:${isSub ? "linear-gradient(135deg,var(--grad1) 55%,var(--grad2))" : "var(--surface2)"}">` +
+      `<span style="position:absolute;top:2.5px;left:${isSub ? "19px" : "3px"};width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.25)"></span>` +
+      "</button></div>";
+  }
+
+  if(isPresent && canOt) {
+    const buttons = OVERTIME_HOUR_OPTIONS.map(h =>
+      `<button onclick="pickDayOvertime(${h})" style="width:34px;height:34px;border-radius:50%;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;` +
+      (hours === h
+        ? "border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff"
+        : "border:1.5px solid var(--border);background:var(--surface2);color:var(--text)") +
+      `">${h % 1 === 0 ? h : h.toFixed(1)}</button>`
+    ).join("");
+    html += '<div style="font-size:12px;color:var(--text2);margin-bottom:6px">Переработка, ч</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">' + buttons + "</div>";
+  }
+
+  document.getElementById("dayPopover").innerHTML = html;
+}
+
+function pickDayStatus(status) { saveDayAttendance({ status }); }
+function pickDaySub(isSub) { saveDayAttendance({ isSub }); }
+function pickDayOvertime(hours) { saveDayAttendance({ otHours: hours }); }
+
+async function saveDayAttendance(overrides) {
+  const dateStr = window._dayPopoverDate;
+  const s = window._currentStaffForCalendar;
+  if(!dateStr || !s) return;
+  // Та же блокировка повторного тапа, что и раньше в toggleStaffAttDay —
+  // без неё двойной тап шлёт два параллельных запроса.
   const lockKey = s.id + "|" + dateStr;
   if(window._staffAttPending.has(lockKey)) return;
+  window._staffAttPending.add(lockKey);
 
   const days = window._staffCalDays;
   const subs = window._staffCalSubstitutions;
   const otHours = window._staffCalOvertimeHours || (window._staffCalOvertimeHours = {});
-  const prevStatus = days[dateStr];
+  const prevStatus = days[dateStr] || "absent";
   const prevSub = subs.has(dateStr);
-  const prevOtHours = otHours[dateStr] || 0;
-  const prevOt = prevOtHours > 0;
+  const prevHours = otHours[dateStr] || 0;
 
-  // Общий цикл по кругу: нет -> пришла -> (пришла+замена) -> (пришла+переработка)
-  // -> (пришла+замена+переработка) -> нет. Какие из промежуточных состояний
-  // вообще существуют — зависит от того, что применимо этому сотруднику
-  // (замена — за смену ИЛИ месячный фикс, работает в обе стороны: няня
-  // замещает воспитателя или наоборот; переработка — только если задана ставка).
-  // Только тут (в календаре, доступ только у администратора) можно поставить
-  // и снять оба флага за ЛЮБОЙ день — сам сотрудник так может только за
-  // сегодня, кнопками на Home (toggleSelfSubstitution/toggleSelfOvertime).
-  const canSub = s.pay_type === "per_shift" || s.pay_type === "monthly_fixed";
-  const canOt = !!s.overtime_rate;
-  const variants = [{ sub: false, ot: false }];
-  if(canSub) variants.push({ sub: true, ot: false });
-  if(canOt) variants.push({ sub: false, ot: true });
-  if(canSub && canOt) variants.push({ sub: true, ot: true });
+  let nextStatus = overrides.status !== undefined ? overrides.status : prevStatus;
+  let nextSub = overrides.isSub !== undefined ? overrides.isSub : prevSub;
+  let nextHours = overrides.otHours !== undefined ? overrides.otHours : prevHours;
+  if(nextStatus !== "present") { nextSub = false; nextHours = 0; } // "не было" сбрасывает замену и переработку
 
-  let nextStatus, nextSub, nextOt;
-  if(prevStatus !== "present") {
-    nextStatus = "present"; nextSub = false; nextOt = false;
-  } else {
-    const curIdx = variants.findIndex(v => v.sub === prevSub && v.ot === prevOt);
-    const nextVariant = variants[curIdx + 1];
-    if(nextVariant) { nextStatus = "present"; nextSub = nextVariant.sub; nextOt = nextVariant.ot; }
-    else { nextStatus = "absent"; nextSub = false; nextOt = false; }
-  }
-
-  // Переработка теперь в часах, не булевым флагом с мгновенным сохранением —
-  // докрутив цикл до варианта "с переработкой", открываем окно выбора часов
-  // (openOvertimeModal сам всё сохранит); сам тап тут ничего не пишет.
-  if(nextOt) {
-    openOvertimeModal(dateStr, {
-      staffId: s.id, status: nextStatus, isSubstitution: nextSub,
-      currentHours: prevOtHours || 1, isSelf: false,
-    });
-    return;
-  }
-
-  window._staffAttPending.add(lockKey);
   days[dateStr] = nextStatus;
   if(nextSub) subs.add(dateStr); else subs.delete(dateStr);
-  delete otHours[dateStr];
+  if(nextHours > 0) otHours[dateStr] = nextHours; else delete otHours[dateStr];
   renderStaffCalendarModal();
+  renderDayPopover();
 
   try {
     const resp = await fetch(API_URL + "/payroll/attendance", {
       method: "POST",
       headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({staff_id: s.id, date: dateStr, status: nextStatus, is_substitution: nextSub, overtime_hours: 0})
+      body: JSON.stringify({staff_id: s.id, date: dateStr, status: nextStatus, is_substitution: nextSub, overtime_hours: nextHours})
     });
     const data = await resp.json();
     if(!data.ok) throw new Error(data.error || "save failed");
     await loadStaffMonth(); // подтягиваем пересчитанную ЗП с бэкенда, не только клетку
   } catch(e) {
-    console.error("toggleStaffAttDay error:", e);
+    console.error("saveDayAttendance error:", e);
     days[dateStr] = prevStatus;
     if(prevSub) subs.add(dateStr); else subs.delete(dateStr);
-    if(prevOtHours) otHours[dateStr] = prevOtHours;
+    if(prevHours) otHours[dateStr] = prevHours; else delete otHours[dateStr];
     renderStaffCalendarModal();
+    renderDayPopover();
     showToast("Не удалось сохранить", true);
   } finally {
     window._staffAttPending.delete(lockKey);
@@ -4841,13 +4925,13 @@ function renderStaffCalendarModal() {
       ? `onclick="toggleFutureSchedule('${dateStr}')"`
       : (isNulevka
         ? `onclick="promptLessonCount('${dateStr}')"`
-        : `onclick="toggleStaffAttDay('${dateStr}')"`));
+        : `onclick="openDayPopover('${dateStr}', this)"`));
     // Бейдж замены — у "за смену" (няня замещает воспитателя) И у "месячный
     // фикс" (воспитатель замещает няню) — работает в обе стороны, тот же
     // флаг is_substitution. Чисто информационный, не кликабельный нигде (ни
     // у админа, ни у сотрудника). Как ставится/снимается: сам сотрудник —
     // только за сегодня, кнопкой на Home (toggleSelfSubstitution). Админ —
-    // тапом по самой клетке дня в этом календаре (toggleStaffAttDay).
+    // попапом отметки дня в этом календаре (openDayPopover).
     const hasSubCapability = s.pay_type === "per_shift" || s.pay_type === "monthly_fixed";
     const showSubBadge = !isFuture && status === "present" && hasSubCapability && isSub;
     const subBadge = showSubBadge
