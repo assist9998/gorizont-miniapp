@@ -2818,7 +2818,7 @@ function journalClassBadges(className) {
     c.city === activeJournalCity && c.dept === "Школа" && c.group === className
   ).length;
   const subjects = journalClassSubjectCounts[className] || 0;
-  return '<div style="display:flex;gap:18px;justify-content:flex-end">'
+  return '<div style="display:flex;gap:10px;justify-content:flex-end">'
     + journalStatChip(JOURNAL_ICON_STUDENTS, "var(--accent)", students, ruPlural(students, "ученик", "ученика", "учеников"))
     + journalStatChip(JOURNAL_ICON_SUBJECTS, "var(--accent2)", subjects, ruPlural(subjects, "предмет", "предмета", "предметов"))
     + '</div>';
@@ -2875,7 +2875,7 @@ function renderJournalMySubjects() {
       c.city === staffInfo.city && c.dept === "Школа" && c.group === name
     ).length;
     const mySubjects = journalMySubjects.filter(s => s.class_name === name).length;
-    const badges = '<div style="display:flex;gap:18px;justify-content:flex-end">'
+    const badges = '<div style="display:flex;gap:10px;justify-content:flex-end">'
       + journalStatChip(JOURNAL_ICON_STUDENTS, "var(--accent)", students, ruPlural(students, "ученик", "ученика", "учеников"))
       + journalStatChip(JOURNAL_ICON_SUBJECTS, "var(--accent2)", mySubjects, ruPlural(mySubjects, "мой предмет", "моих предмета", "моих предметов"))
       + '</div>';
