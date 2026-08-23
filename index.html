@@ -261,10 +261,11 @@
   <div id="journalClassList"></div>
 </div>
 
-<!-- SCREEN: JOURNAL TEACHER (учительский вход — сразу список своих предметов,
-     без выбора города/класса — см. project_gorizont, роль "Учитель") -->
+<!-- SCREEN: JOURNAL TEACHER (учительский вход — список СВОИХ классов, та же
+     структура класс→предметы, что у админа, только без выбора города и
+     отфильтровано до своих назначений — см. project_gorizont, роль "Учитель") -->
 <div class="screen" id="screen-journal-teacher">
-  <div class="section-title">Мои предметы</div>
+  <div class="section-title">Мои классы</div>
   <div id="journalMySubjectsList"></div>
 </div>
 
@@ -2747,10 +2748,10 @@ let journalGradesDate = null;
 let journalGradesSubjectId = null;
 let journalGrades = [];
 
-// Учительский вход в screen-journal-view — экран открыт из "Мои предметы"
-// (openJournalTeacherSubject), а не из админского списка классов: скрываем
+// Учительский вход в screen-journal-view — экран открыт из "Мои классы"
+// (openJournalTeacherClass), а не из админского списка классов: скрываем
 // вкладки Предметы/Расписание/Дети и карандаш редактирования, "Назад" ведёт
-// на "Мои предметы", а не на список классов города. journalMySubjects —
+// на "Мои классы", а не на список классов города. journalMySubjects —
 // свои предметы учителя (см. loadJournalMySubjects), для сужения выпадающего
 // списка предметов в renderJournalGrades до тех, что он реально ведёт.
 let journalViewTeacherMode = false;
@@ -2805,7 +2806,11 @@ function renderJournalClasses() {
   document.getElementById("journalClassList").innerHTML = html;
 }
 
-// ── Учительский вход ("Мои предметы") ───────────────────────────────────
+// ── Учительский вход ("Мои классы") ─────────────────────────────────────
+// journalMySubjects остаётся плоским списком (class_name, subject_id,
+// subject_name) — он же источник и для списка классов ниже (уникальные
+// class_name), и для выпадающего списка предметов внутри класса на вкладке
+// "Оценки" (см. journalGradesSubjectOptions) — эндпоинт менять не пришлось.
 async function loadJournalMySubjects() {
   try {
     const resp = await fetch(API_URL + "/journal/my-subjects", {headers: authHeaders()});
@@ -2818,12 +2823,15 @@ async function loadJournalMySubjects() {
   renderJournalMySubjects();
 }
 
+// Список классов, а не предметов — та же структура, что и у админа
+// (renderJournalClasses: класс → уже внутри предметы), унифицировано по
+// просьбе пользователя вместо прежнего плоского списка "предмет (класс)".
 function renderJournalMySubjects() {
-  const html = journalMySubjects.map(s =>
-    `<div class="child-list-item" onclick="openJournalTeacherSubject('${s.class_name.replace(/'/g, "\\'")}',${s.subject_id})">
+  const classNames = [...new Set(journalMySubjects.map(s => s.class_name))].sort();
+  const html = classNames.map(name =>
+    `<div class="child-list-item" onclick="openJournalTeacherClass('${name.replace(/'/g, "\\'")}')">
       <div class="child-detail">
-        <div class="child-detail-name">${s.subject_name || "Предмет без названия"}</div>
-        <div class="child-detail-meta">${s.class_name}</div>
+        <div class="child-detail-name">${name}</div>
       </div>
       <span class="child-arrow">›</span>
     </div>`
@@ -2832,12 +2840,16 @@ function renderJournalMySubjects() {
     html || '<div class="empty">Вы пока не назначены учителем ни на один урок — обратитесь к администратору</div>';
 }
 
-async function openJournalTeacherSubject(className, subjectId) {
+async function openJournalTeacherClass(className) {
   journalViewTeacherMode = true;
   activeJournalCity = staffInfo.city;
   activeJournalClass = className;
   journalGradesDate = null;
-  journalGradesSubjectId = subjectId;
+  // subjectId не передаём — если в этом классе у учителя больше одного
+  // своего предмета, loadJournalGrades сам возьмёт первый из
+  // journalGradesSubjectOptions (уже отфильтрован по классу+учителю), а
+  // переключение между ними — тот же выпадающий список, что видит админ.
+  journalGradesSubjectId = null;
   journalGrades = [];
   journalGradeModalChildId = null;
   document.getElementById("journalViewTitle").textContent = className;
