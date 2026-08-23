@@ -3108,19 +3108,14 @@ async function saveJournalSubjectEdit(id) {
 // нижнюю форму (null — форма в режиме добавления нового урока).
 let editingJournalScheduleId = null;
 
-// Сегодняшний день, если в нём есть уроки, иначе первый день недели
-// (Пн..Пт — школа, без сб/вс), в котором они есть. new Date().getDay()
-// отдаёт 0=Вс..6=Сб — переводим в 1=Пн..7=Вс (как isoweekday() и weekday
-// в БД), а сб/вс схлопываем в Пн, раз уроков по выходным в журнале нет.
+// Всегда сегодняшний день недели — даже если в нём нет уроков (тогда видно
+// пустое состояние "Уроков нет", это ожидаемо). new Date().getDay() отдаёт
+// 0=Вс..6=Сб — переводим в 1=Пн..7=Вс (как isoweekday() и weekday в БД), а
+// сб/вс схлопываем в Пн, раз уроков по выходным в журнале нет.
 function pickDefaultScheduleDay(schedule) {
   const jsDay = new Date().getDay();
   const isoToday = jsDay === 0 ? 7 : jsDay;
-  const today = isoToday <= 5 ? isoToday : 1;
-  if(schedule.some(e => e.weekday === today)) return today;
-  for(let wd = 1; wd <= 5; wd++) {
-    if(schedule.some(e => e.weekday === wd)) return wd;
-  }
-  return today;
+  return isoToday <= 5 ? isoToday : 1;
 }
 
 // Пилюли-дни недели (как переключатель дат в школьном дневнике), Пн..Пт —
