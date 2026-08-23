@@ -281,7 +281,7 @@
 <!-- SCREEN: JOURNAL VIEW (обзор класса — только просмотр, без редактирования) -->
 <div class="screen" id="screen-journal-view">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-    <button onclick="goTo(journalViewTeacherMode ? 'journal-teacher' : 'journal')" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
+    <button onclick="journalViewBack()" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
     <div style="font-size:16px;font-weight:600;flex:1" id="journalViewTitle">Класс</div>
     <button onclick="openJournalClassEdit()" id="journalViewEditBtn" title="Редактировать" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
@@ -2967,8 +2967,27 @@ function switchJournalViewTab(tab) {
     if(tabBtn) tabBtn.className = "filter-btn" + (t === tab ? " active" : "");
     if(panel) panel.style.display = t === tab ? "" : "none";
   });
+  // На "Оценках" мы уже внутри конкретного урока — пилюли Предметы/
+  // Расписание/Дети тут не нужны и только путают (жалоба пользователя),
+  // прячем всю панель вкладок целиком.
+  document.getElementById("journalViewTabBar").style.display = tab === "grades" ? "none" : "flex";
   document.getElementById("journalGradesActionsRow").style.display = tab === "grades" ? "flex" : "none";
   if(tab === "grades") loadJournalGrades();
+}
+
+// "Назад" на экране обзора класса — не всегда к списку классов: если мы
+// внутри урока (вкладка "Оценки"), это на самом деле второй уровень
+// вложенности (класс → урок), значит на шаг назад — туда, откуда открыли
+// урок (Предметы или Расписание), а не сразу из класса.
+let journalViewGradesReturnTab = "subjects";
+
+function journalViewBack() {
+  const gradesPanel = document.getElementById("journalViewPanel-grades");
+  if(!journalViewTeacherMode && gradesPanel.style.display !== "none") {
+    switchJournalViewTab(journalViewGradesReturnTab);
+    return;
+  }
+  goTo(journalViewTeacherMode ? "journal-teacher" : "journal");
 }
 
 // Учитель — не текст, а ссылка на карточку в "Персонале" (решение
@@ -3420,7 +3439,8 @@ function renderJournalViewSchedule() {
 // Клик по предмету во вкладке "Предметы" — сразу открывает "Оценки" с этим
 // предметом выбранным, вместо отдельного выбора того же предмета из
 // дропдауна на вкладке "Оценки" (было два несвязанных места про предметы).
-function openJournalViewSubjectGrades(id) {
+function openJournalViewSubjectGrades(id, fromTab) {
+  journalViewGradesReturnTab = fromTab || "subjects";
   journalGradesSubjectId = id;
   journalGradesEditingId = null;
   switchJournalViewTab("grades");
@@ -3429,10 +3449,11 @@ function openJournalViewSubjectGrades(id) {
 // Клик по уроку в сегодняшнем расписании — тот же переход в "Оценки", но
 // дата принудительно сбрасывается на сегодня (расписание всегда про "что
 // сейчас идёт", а не про дату, которая могла остаться выбранной с
-// прошлого визита в Оценки).
+// прошлого визита в Оценки), и "Назад" ведёт обратно в Расписание, а не
+// в Предметы, откуда урок не открывали.
 function openJournalScheduleLessonGrades(subjectId) {
   journalGradesDate = journalGradesToday();
-  openJournalViewSubjectGrades(subjectId);
+  openJournalViewSubjectGrades(subjectId, "schedule");
 }
 
 function renderJournalView() {
