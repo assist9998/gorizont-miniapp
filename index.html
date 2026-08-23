@@ -298,16 +298,16 @@
   </div>
 
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="journalViewTabBar">
-    <button class="filter-btn active" id="journalViewTab-subjects" onclick="switchJournalViewTab('subjects')">Предметы</button>
-    <button class="filter-btn" id="journalViewTab-schedule" onclick="switchJournalViewTab('schedule')">Расписание</button>
+    <button class="filter-btn" id="journalViewTab-subjects" onclick="switchJournalViewTab('subjects')">Предметы</button>
+    <button class="filter-btn active" id="journalViewTab-schedule" onclick="switchJournalViewTab('schedule')">Расписание</button>
     <button class="filter-btn" id="journalViewTab-students" onclick="switchJournalViewTab('students')">Дети</button>
   </div>
 
-  <div id="journalViewPanel-subjects">
+  <div id="journalViewPanel-subjects" style="display:none">
     <div id="journalViewSubjects" style="margin-bottom:20px"></div>
   </div>
 
-  <div id="journalViewPanel-schedule" style="display:none">
+  <div id="journalViewPanel-schedule">
     <div id="journalViewSchedule" style="margin-bottom:20px"></div>
   </div>
 
@@ -2930,7 +2930,7 @@ async function openJournalClass(name) {
   editingJournalSubjectId = null;
   cancelJournalScheduleEdit();
   cancelJournalClassRename();
-  switchJournalViewTab("subjects");
+  switchJournalViewTab("schedule");
   journalScheduleDayView = null;
   journalScheduleDayEdit = null;
   journalGradesDate = null;
@@ -3131,7 +3131,9 @@ function journalLessonCardsHtml(schedule, selectedDay, editable) {
   return entries.map((e, i) => {
     const time = [e.time_start, e.time_end].filter(Boolean).join("–");
     const meta = [time, e.teacher_name].filter(Boolean).join(" · ");
-    const clickAttr = editable ? ` onclick="startJournalScheduleEdit(${e.id})"` : ' style="cursor:default"';
+    const clickAttr = editable
+      ? ` onclick="startJournalScheduleEdit(${e.id})"`
+      : e.subject_id ? ` onclick="openJournalScheduleLessonGrades(${e.subject_id})"` : ' style="cursor:default"';
     const delBtn = editable ? `<button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>` : "";
     return `<div class="child-list-item"${clickAttr}>
         <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${i + 1}</div>
@@ -3422,6 +3424,15 @@ function openJournalViewSubjectGrades(id) {
   journalGradesSubjectId = id;
   journalGradesEditingId = null;
   switchJournalViewTab("grades");
+}
+
+// Клик по уроку в сегодняшнем расписании — тот же переход в "Оценки", но
+// дата принудительно сбрасывается на сегодня (расписание всегда про "что
+// сейчас идёт", а не про дату, которая могла остаться выбранной с
+// прошлого визита в Оценки).
+function openJournalScheduleLessonGrades(subjectId) {
+  journalGradesDate = journalGradesToday();
+  openJournalViewSubjectGrades(subjectId);
 }
 
 function renderJournalView() {
