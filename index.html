@@ -3416,9 +3416,18 @@ function renderJournalViewSchedule() {
   document.getElementById("journalViewSchedule").innerHTML = pills + cards;
 }
 
+// Клик по предмету во вкладке "Предметы" — сразу открывает "Оценки" с этим
+// предметом выбранным, вместо отдельного выбора того же предмета из
+// дропдауна на вкладке "Оценки" (было два несвязанных места про предметы).
+function openJournalViewSubjectGrades(id) {
+  journalGradesSubjectId = id;
+  journalGradesEditingId = null;
+  switchJournalViewTab("grades");
+}
+
 function renderJournalView() {
   const subjHtml = journalSubjects.map(s =>
-    `<div style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px">${s.name}</div>`
+    `<div onclick="openJournalViewSubjectGrades(${s.id})" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px;cursor:pointer">${s.name}</div>`
   ).join("");
   document.getElementById("journalViewSubjects").innerHTML = subjHtml || '<div class="empty" style="padding:14px 0">Пока нет предметов</div>';
 
