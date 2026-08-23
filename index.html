@@ -2765,6 +2765,10 @@ function journalCities() {
   return (staffInfo && staffInfo.city) ? [staffInfo.city] : ["Дананг", "Нячанг"];
 }
 
+// class_name → число предметов в классе — уже приходит вместе с subjData
+// (весь город одним запросом), досчитывать по классам отдельно не нужно.
+let journalClassSubjectCounts = {};
+
 async function loadJournalClasses() {
   const cities = journalCities();
   if(!activeJournalCity || !cities.includes(activeJournalCity)) activeJournalCity = cities[0];
@@ -2774,14 +2778,36 @@ async function loadJournalClasses() {
       fetch(API_URL + "/journal/schedule?city=" + encodeURIComponent(activeJournalCity), {headers: authHeaders()}).then(r => r.json()),
     ]));
     const names = new Set();
-    (subjData.subjects || []).forEach(s => names.add(s.class_name));
+    journalClassSubjectCounts = {};
+    (subjData.subjects || []).forEach(s => {
+      names.add(s.class_name);
+      journalClassSubjectCounts[s.class_name] = (journalClassSubjectCounts[s.class_name] || 0) + 1;
+    });
     (schedData.schedule || []).forEach(s => names.add(s.class_name));
     journalClassNames = [...names].sort();
   } catch(e) {
     console.error("loadJournalClasses error:", e);
     journalClassNames = [];
+    journalClassSubjectCounts = {};
   }
   renderJournalClasses();
+}
+
+// Простая плюрализация для бейджей на плашке класса (ученик/предмет).
+function ruPlural(n, one, few, many) {
+  const mod10 = n % 10, mod100 = n % 100;
+  if(mod10 === 1 && mod100 !== 11) return one;
+  if(mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
+function journalClassBadges(className) {
+  const students = children.filter(c =>
+    c.city === activeJournalCity && c.dept === "Школа" && c.group === className
+  ).length;
+  const subjects = journalClassSubjectCounts[className] || 0;
+  return '<span class="time-badge">' + students + ' ' + ruPlural(students, "ученик", "ученика", "учеников") + '</span>'
+    + '<span class="time-badge" style="margin-left:6px">' + subjects + ' ' + ruPlural(subjects, "предмет", "предмета", "предметов") + '</span>';
 }
 
 function renderJournalClasses() {
@@ -2801,8 +2827,7 @@ function renderJournalClasses() {
   journalClassNames.forEach(name => {
     html += `<div class="child-list-item" onclick="openJournalClass('${name.replace(/'/g, "\\'")}')">
       <div class="avatar avatar-oval">${name}</div>
-      <div class="child-detail"></div>
-      <span class="child-arrow">›</span>
+      <div class="child-detail">${journalClassBadges(name)}</div>
     </div>`;
   });
   if(!journalClassNames.length) html = '<div class="empty">Нет классов — впишите название ниже и нажмите «Открыть»</div>';
@@ -2831,13 +2856,18 @@ async function loadJournalMySubjects() {
 // просьбе пользователя вместо прежнего плоского списка "предмет (класс)".
 function renderJournalMySubjects() {
   const classNames = [...new Set(journalMySubjects.map(s => s.class_name))].sort();
-  const html = classNames.map(name =>
-    `<div class="child-list-item" onclick="openJournalTeacherClass('${name.replace(/'/g, "\\'")}')">
+  const html = classNames.map(name => {
+    const students = children.filter(c =>
+      c.city === staffInfo.city && c.dept === "Школа" && c.group === name
+    ).length;
+    const mySubjects = journalMySubjects.filter(s => s.class_name === name).length;
+    const badges = '<span class="time-badge">' + students + ' ' + ruPlural(students, "ученик", "ученика", "учеников") + '</span>'
+      + '<span class="time-badge" style="margin-left:6px">' + mySubjects + ' ' + ruPlural(mySubjects, "мой предмет", "моих предмета", "моих предметов") + '</span>';
+    return `<div class="child-list-item" onclick="openJournalTeacherClass('${name.replace(/'/g, "\\'")}')">
       <div class="avatar avatar-oval">${name}</div>
-      <div class="child-detail"></div>
-      <span class="child-arrow">›</span>
-    </div>`
-  ).join("");
+      <div class="child-detail">${badges}</div>
+    </div>`;
+  }).join("");
   document.getElementById("journalMySubjectsList").innerHTML =
     html || '<div class="empty">Вы пока не назначены учителем ни на один урок — обратитесь к администратору</div>';
 }
