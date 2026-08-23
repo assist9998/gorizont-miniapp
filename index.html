@@ -75,6 +75,9 @@
   .child-card.present{border-color:rgba(56,217,169,.6);background:var(--surface)}
   .child-card.absent{border-color:var(--border);background:var(--surface)}
   .avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;background:var(--surface2);color:var(--accent)}
+  /* Тот же кружок-аватар, что у инициалов ребёнка, но овалом — название
+     класса длиннее двух букв и не влезает в круг фиксированной ширины. */
+  .avatar-oval{width:auto;min-width:42px;padding:0 14px;border-radius:21px}
   .child-info{flex:1;min-width:0}
   .child-name{font-size:14px;font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .child-meta{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:6px}
@@ -252,13 +255,14 @@
 <div class="screen" id="screen-journal">
   <div class="filters" id="entrySwitcherJournal" style="margin-bottom:10px;display:none"></div>
   <div class="city-filter" id="journalCityFilter" style="margin-bottom:12px"></div>
-  <div style="display:flex;gap:8px;margin-bottom:16px">
+  <div class="section-title">Классы</div>
+  <div id="journalClassList"></div>
+  <div style="display:flex;gap:8px;margin-top:12px">
     <input id="journalNewClassInput" type="text" placeholder="Класс, например 5А"
       style="flex:1;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
     <button onclick="openNewJournalClass()" style="flex-shrink:0;padding:0 16px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Открыть</button>
   </div>
-  <div class="section-title">Классы</div>
-  <div id="journalClassList"></div>
+  <div style="height:20px"></div>
 </div>
 
 <!-- SCREEN: JOURNAL TEACHER (учительский вход — список СВОИХ классов, та же
@@ -2796,13 +2800,12 @@ function renderJournalClasses() {
   let html = "";
   journalClassNames.forEach(name => {
     html += `<div class="child-list-item" onclick="openJournalClass('${name.replace(/'/g, "\\'")}')">
-      <div class="child-detail">
-        <div class="child-detail-name">${name}</div>
-      </div>
+      <div class="avatar avatar-oval">${name}</div>
+      <div class="child-detail"></div>
       <span class="child-arrow">›</span>
     </div>`;
   });
-  if(!journalClassNames.length) html = '<div class="empty">Нет классов — впишите название выше и нажмите «Открыть»</div>';
+  if(!journalClassNames.length) html = '<div class="empty">Нет классов — впишите название ниже и нажмите «Открыть»</div>';
   document.getElementById("journalClassList").innerHTML = html;
 }
 
@@ -2830,9 +2833,8 @@ function renderJournalMySubjects() {
   const classNames = [...new Set(journalMySubjects.map(s => s.class_name))].sort();
   const html = classNames.map(name =>
     `<div class="child-list-item" onclick="openJournalTeacherClass('${name.replace(/'/g, "\\'")}')">
-      <div class="child-detail">
-        <div class="child-detail-name">${name}</div>
-      </div>
+      <div class="avatar avatar-oval">${name}</div>
+      <div class="child-detail"></div>
       <span class="child-arrow">›</span>
     </div>`
   ).join("");
