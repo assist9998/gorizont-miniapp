@@ -304,7 +304,7 @@
   </div>
 
   <div id="journalViewPanel-subjects">
-    <div id="journalViewSubjects" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px"></div>
+    <div id="journalViewSubjects" style="margin-bottom:20px"></div>
   </div>
 
   <div id="journalViewPanel-schedule" style="display:none">
@@ -3425,9 +3425,14 @@ function openJournalViewSubjectGrades(id) {
 }
 
 function renderJournalView() {
-  const subjHtml = journalSubjects.map(s =>
-    `<div onclick="openJournalViewSubjectGrades(${s.id})" style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px;cursor:pointer">${s.name}</div>`
-  ).join("");
+  const subjHtml = journalSubjects.map(s => {
+    const initial = s.name.trim().charAt(0).toUpperCase() || "?";
+    return `<div class="child-list-item" onclick="openJournalViewSubjectGrades(${s.id})">
+      <div class="avatar">${initial}</div>
+      <div class="child-detail"><div class="child-detail-name">${s.name}</div></div>
+      <span class="child-arrow">&#8250;</span>
+    </div>`;
+  }).join("");
   document.getElementById("journalViewSubjects").innerHTML = subjHtml || '<div class="empty" style="padding:14px 0">Пока нет предметов</div>';
 
   renderJournalViewSchedule();
