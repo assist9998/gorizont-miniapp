@@ -3427,9 +3427,16 @@ function openJournalViewSubjectGrades(id) {
 function renderJournalView() {
   const subjHtml = journalSubjects.map(s => {
     const initial = s.name.trim().charAt(0).toUpperCase() || "?";
+    // Учитель предмета берётся из расписания (там же назначается) — своего
+    // поля teacher у предмета нет, чтобы не дублировать источник истины.
+    const teacherEntry = journalSchedule.find(e => e.subject_id === s.id && e.teacher_name);
+    const teacherLine = teacherEntry ? teacherEntry.teacher_name : "Учитель не назначен";
     return `<div class="child-list-item" onclick="openJournalViewSubjectGrades(${s.id})">
       <div class="avatar">${initial}</div>
-      <div class="child-detail"><div class="child-detail-name">${s.name}</div></div>
+      <div class="child-detail">
+        <div class="child-detail-name">${s.name}</div>
+        <div class="child-detail-meta">${teacherLine}</div>
+      </div>
       <span class="child-arrow">&#8250;</span>
     </div>`;
   }).join("");
