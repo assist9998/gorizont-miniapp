@@ -2942,12 +2942,16 @@ async function openJournalClass(name) {
 }
 
 // Карандаш на экране-обзоре — переход в редактирование той же, уже
-// загруженной карты класса (не перезапрашиваем с сервера).
+// загруженной карты класса (не перезапрашиваем с сервера). Открывается на
+// той же вкладке, с которой нажали карандаш (жалоба пользователя: было
+// всегда кидало в "Предметы", даже нажимая из "Расписания") — кроме
+// "Оценки", которой в редактировании нет, туда — на "Предметы" по умолчанию.
 function openJournalClassEdit() {
   editingJournalSubjectId = null;
   cancelJournalScheduleEdit();
   cancelJournalClassRename();
-  switchJournalEditTab("subjects");
+  const editTab = ["subjects", "schedule", "students"].includes(journalViewActiveTab) ? journalViewActiveTab : "subjects";
+  switchJournalEditTab(editTab);
   goTo("journal-class");
 }
 
@@ -2960,7 +2964,12 @@ function switchJournalEditTab(tab) {
   });
 }
 
+// Текущая активная вкладка экрана-обзора — нужна, чтобы карандаш
+// (openJournalClassEdit) открывал редактирование на той же вкладке.
+let journalViewActiveTab = "schedule";
+
 function switchJournalViewTab(tab) {
+  journalViewActiveTab = tab;
   ["subjects", "schedule", "grades", "students"].forEach(t => {
     const tabBtn = document.getElementById("journalViewTab-" + t);
     const panel = document.getElementById("journalViewPanel-" + t);
