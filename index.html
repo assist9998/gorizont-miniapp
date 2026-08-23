@@ -195,6 +195,7 @@
 
 <!-- SCREEN: ATTENDANCE -->
 <div class="screen" id="screen-attendance">
+  <div class="filters" id="entrySwitcherAtt" style="margin-bottom:10px;display:none"></div>
   <div class="filters" id="attFilters" style="margin-bottom:10px"></div>
   <div class="att-stats">
     <button onclick="openAttDatePicker()" id="attDateBtn" class="att-stat" style="border:1px solid var(--border);cursor:pointer;font-family:inherit">
@@ -249,6 +250,7 @@
 
 <!-- SCREEN: JOURNAL (электронный журнал / расписание и предметы, Этап 1) -->
 <div class="screen" id="screen-journal">
+  <div class="filters" id="entrySwitcherJournal" style="margin-bottom:10px;display:none"></div>
   <div class="city-filter" id="journalCityFilter" style="margin-bottom:12px"></div>
   <div style="display:flex;gap:8px;margin-bottom:16px">
     <input id="journalNewClassInput" type="text" placeholder="Класс, например 5А"
@@ -675,10 +677,6 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
     <span>Главная</span>
   </button>
-  <button class="nav-btn" id="nav-attendance" onclick="goTo('attendance')">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-    <span>Посещаемость</span>
-  </button>
   <button class="nav-btn" id="nav-children" onclick="goTo('children')">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     <span>Дети</span>
@@ -687,7 +685,7 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
     <span>Персонал</span>
   </button>
-  <button class="nav-btn" id="nav-journal" onclick="openJournalEntry()" style="display:none">
+  <button class="nav-btn" id="nav-journal" onclick="openMainEntry()">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
     <span>Журнал</span>
   </button>
@@ -920,11 +918,15 @@ let activeChildDept = "", activeChildGroup = "Все группы";
 let currentScreen = "home";
 
 // ── Navigation ────────────────────────────────────────────────────
+// "Посещаемость" больше не отдельный пункт меню — она открывается тем же
+// nav-кнопкой "Журнал", что и школьный журнал (см. openMainEntry), поэтому
+// подсвечивать нужно nav-journal, а не несуществующий nav-attendance.
+const NAV_SCREEN_ALIAS = { attendance: "journal" };
 function goTo(screen) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   document.getElementById("screen-" + screen).classList.add("active");
-  document.getElementById("nav-" + screen)?.classList.add("active");
+  document.getElementById("nav-" + (NAV_SCREEN_ALIAS[screen] || screen))?.classList.add("active");
   document.getElementById("attActions").style.display = screen === "attendance" ? "flex" : "none";
   currentScreen = screen;
   if(screen === "home") renderHome();
@@ -1242,6 +1244,7 @@ function setHomeCity(city) {
 
 // ── ATTENDANCE ────────────────────────────────────────────────────
 function renderAttFilters() {
+  renderEntrySwitcher("entrySwitcherAtt");
   const cities = [...new Set(children.map(c => c.city))];
   const depts = [...new Set(children.filter(c => c.city === activeCity).map(c => c.dept))];
   const groups = ["Все группы", ...new Set(children.filter(c => c.city === activeCity && c.dept === activeDept).map(c => c.group || "Без группы"))];
@@ -2009,7 +2012,7 @@ function isDirectorRole(role) {
 // Учитель — по подстроке в должности (staffInfo.role — свободный текст из
 // payroll_staff.position), та же классификация, что и на бэкенде
 // (_is_teacher_staff в api.py). Видит только вкладку "Журнал", и в ней —
-// только свои предметы (см. openJournalEntry/loadJournalMySubjects).
+// только свои предметы (см. openMainEntry/loadJournalMySubjects).
 function isTeacherRole(role) {
   return (role || "").toLowerCase().includes("учител");
 }
@@ -2024,24 +2027,52 @@ function isTeacherRole(role) {
 // (см. также серверную проверку роли в api.py).
 function applyRolePermissions() {
   const admin = !!staffInfo && isAdminRole(staffInfo.role);
-  const teacher = !!staffInfo && isTeacherRole(staffInfo.role);
   const navStaff = document.getElementById("nav-staff");
   if(navStaff) navStaff.style.display = admin ? "" : "none";
-  const navJournal = document.getElementById("nav-journal");
-  if(navJournal) navJournal.style.display = (admin || teacher) ? "" : "none";
+  // nav-journal сама кнопка видна всем всегда — она теперь единая точка
+  // входа и в посещаемость (сад/воспитатель), и в журнал (школа/учитель),
+  // просто ведёт в разные экраны по роли (см. openMainEntry).
 }
 
-// Вход в "Журнал" из нижней навигации — у админа/директора свой путь (список
-// классов города, полное редактирование), у учителя свой (сразу список
-// своих предметов, только оценки). Роли не пересекаются на практике (role —
-// одно значение), но на всякий случай админ имеет приоритет.
-function openJournalEntry() {
-  if(staffInfo && isAdminRole(staffInfo.role)) {
-    goTo("journal");
-  } else {
+// Единая точка входа из нижней навигации — раньше были два разных пункта
+// меню ("Посещаемость" и "Журнал"), пользователь попросил объединить: одна
+// кнопка "Журнал", развилка по роли внутри.
+// - Учитель (не админ) — сразу список своих предметов, без выбора.
+// - Воспитатель/прочий рядовой сотрудник — сразу посещаемость сада, без выбора.
+// - Админ/Директор/developer видят оба направления одного города(ов) —
+//   им нужен явный переключатель Сад/Школа (см. renderEntrySwitcher),
+//   entryDept запоминает последний выбор на время сессии.
+let entryDept = "Сад";
+function openMainEntry() {
+  if(staffInfo && isTeacherRole(staffInfo.role) && !isAdminRole(staffInfo.role)) {
     goTo("journal-teacher");
     loadJournalMySubjects();
+    return;
   }
+  if(staffInfo && isAdminRole(staffInfo.role)) {
+    goTo(entryDept === "Школа" ? "journal" : "attendance");
+    return;
+  }
+  goTo("attendance");
+}
+
+function switchEntryDept(dept) {
+  entryDept = dept;
+  goTo(dept === "Школа" ? "journal" : "attendance");
+}
+
+// Показывается только админу/директору — у них одна кнопка "Журнал" ведёт в
+// оба разных по структуре экрана (день целиком для сада / уроки для школы),
+// остальным ролям выбирать нечего, для них это не пилюля-фильтр, а заранее
+// решённая развилка.
+function renderEntrySwitcher(containerId) {
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  if(!staffInfo || !isAdminRole(staffInfo.role)) { el.style.display = "none"; el.innerHTML = ""; return; }
+  el.style.display = "flex";
+  el.innerHTML = ["Сад", "Школа"].map(d =>
+    '<button class="filter-btn' + (d === entryDept ? " active" : "") + '" onclick="switchEntryDept(\'' + d + '\')">' + d + '</button>'
+  ).join("");
 }
 
 async function initStaff(){
@@ -2749,6 +2780,7 @@ async function loadJournalClasses() {
 }
 
 function renderJournalClasses() {
+  renderEntrySwitcher("entrySwitcherJournal");
   const cities = journalCities();
   const cf = document.getElementById("journalCityFilter");
   cf.innerHTML = "";
