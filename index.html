@@ -3519,13 +3519,19 @@ function journalGradesSubjectOptions() {
   return journalSubjects.map(s => ({id: s.id, name: s.name}));
 }
 
+// journalAttendance — {child_id: "present"|"absent"} для текущего урока
+// (предмет+дата). Не тронутый ребёнок (нет ключа) считается отсутствующим,
+// как и в посещаемости сада (renderAttList) — единообразно с уже привычным
+// поведением, отметить нужно явно.
+let journalAttendance = {};
+
 async function loadJournalGrades() {
   if(journalGradesDate === null) journalGradesDate = journalGradesToday();
   const options = journalGradesSubjectOptions();
   if(journalGradesSubjectId === null && options.length) journalGradesSubjectId = options[0].id;
-  if(!journalGradesSubjectId) { journalGrades = []; journalLessonTopic = null; journalHomework = null; renderJournalGrades(); return; }
+  if(!journalGradesSubjectId) { journalGrades = []; journalLessonTopic = null; journalHomework = null; journalAttendance = {}; renderJournalGrades(); return; }
   try {
-    const [gradesData, topicData, homeworkData] = await Promise.all([
+    const [gradesData, topicData, homeworkData, attendanceData] = await Promise.all([
       fetch(
         API_URL + "/journal/grades?city=" + encodeURIComponent(activeJournalCity) +
         "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
@@ -3544,17 +3550,49 @@ async function loadJournalGrades() {
         "&date=" + encodeURIComponent(journalGradesDate),
         {headers: authHeaders()},
       ).then(r => r.json()),
+      fetch(
+        API_URL + "/journal/attendance?city=" + encodeURIComponent(activeJournalCity) +
+        "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
+        "&date=" + encodeURIComponent(journalGradesDate),
+        {headers: authHeaders()},
+      ).then(r => r.json()),
     ]);
     journalGrades = gradesData.ok ? gradesData.grades : [];
     journalLessonTopic = topicData.ok ? topicData.topic : null;
     journalHomework = homeworkData.ok ? homeworkData.homework : null;
+    journalAttendance = {};
+    if(attendanceData.ok) {
+      attendanceData.attendance.forEach(a => { journalAttendance[a.child_id] = a.status; });
+    }
   } catch(e) {
     console.error("loadJournalGrades error:", e);
     journalGrades = [];
     journalLessonTopic = null;
     journalHomework = null;
+    journalAttendance = {};
   }
   renderJournalGrades();
+}
+
+async function toggleJournalAttendance(childId) {
+  const status = journalAttendance[childId] === "present" ? "absent" : "present";
+  journalAttendance[childId] = status;
+  renderJournalGrades();
+  try {
+    const resp = await fetch(API_URL + "/journal/attendance", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        city: activeJournalCity, class_name: activeJournalClass,
+        subject_id: journalGradesSubjectId, date: journalGradesDate,
+        records: [{child_id: childId, status}],
+      }),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+  } catch(e) {
+    showToast("Не удалось сохранить посещаемость", true);
+  }
 }
 
 async function saveJournalLessonTopic() {
@@ -3878,15 +3916,17 @@ function renderJournalGrades() {
     const badges = grades.map(g =>
       `<span class="time-badge" style="background:var(--accent);color:#fff;font-weight:700">${g.value}</span>`
     ).join("");
+    const present = journalAttendance[c.id] === "present";
     return `<div class="child-card-wrap">
-      <div class="child-card" onclick="openJournalGradeModal(${c.id})" style="cursor:pointer">
-        <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">
+      <div class="child-card ${present ? "present" : "absent"}">
+        <div onclick="openJournalGradeModal(${c.id})" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer">
           <div class="avatar">${initials}</div>
           <div class="child-info">
             <div class="child-name">${c.name}</div>
             <div class="child-meta">${badges || '<span>нет оценок</span>'}</div>
           </div>
         </div>
+        <button onclick="event.stopPropagation();toggleJournalAttendance(${c.id})" title="${present ? "Был на уроке" : "Отметить присутствие"}" style="flex-shrink:0;border:none;background:none;cursor:pointer;color:${present ? "var(--accent2)" : "var(--text2)"};padding:6px">${CHECKIN_ICON}</button>
       </div>
     </div>`;
   }).join("");
