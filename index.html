@@ -493,6 +493,9 @@
         <input id="f_telegram" type="text" placeholder="@username" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
       </div>
     </div>
+    <div id="parentLinkRow" style="display:none;margin-bottom:20px">
+      <button type="button" onclick="generateParentLinkCode()" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">👪 Привязать родителя (отдельное read-only приложение)</button>
+    </div>
     <div style="margin-bottom:20px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Особенности здоровья</div>
       <input id="f_allergy" type="text" placeholder="Аллергии, непереносимости..." style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
@@ -2393,6 +2396,7 @@ function openAddForm() {
   document.getElementById("formTabs").style.display = "flex";
   document.getElementById("formSubmitBtn").textContent = "Добавить ребёнка";
   document.getElementById("formDeleteBtn").style.display = "none";
+  document.getElementById("parentLinkRow").style.display = "none";
   clearForm();
   switchFormTab("new");
   if(staffInfo && staffInfo.city) document.getElementById("f_city").value = staffInfo.city;
@@ -2478,6 +2482,7 @@ function openEditForm(id) {
   document.getElementById("formSubmitBtn").textContent = "Сохранить изменения";
   document.getElementById("formDeleteBtn").style.display = "block";
   document.getElementById("archiveBtn").style.display = "none";
+  document.getElementById("parentLinkRow").style.display = "block";
   const nameParts = splitFullName(c.name);
   document.getElementById("f_name").value = nameParts.name;
   document.getElementById("f_surname").value = nameParts.surname;
@@ -2493,6 +2498,29 @@ function openEditForm(id) {
   document.getElementById("f_telegram").value = (parts[2]||"").trim();
   document.getElementById("f_allergy").value = (c.allergy && c.allergy !== "Нет") ? c.allergy : "";
   goTo("form");
+}
+
+// Код привязки родителя — открывает read-only приложение parent.html
+// (отдельное от этого, staff-версии), см. api.py /children/{id}/parent-link.
+async function generateParentLinkCode() {
+  if(!editChildId) return;
+  try {
+    const resp = await fetch(API_URL + "/children/" + editChildId + "/parent-link", {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.error || "failed");
+    document.getElementById("modalName").textContent = "Код для родителя";
+    document.getElementById("modalContent").innerHTML =
+      '<div style="text-align:center;padding:10px 0">' +
+      '<div style="font-size:36px;font-weight:700;letter-spacing:.1em;color:var(--accent);margin-bottom:14px">' + data.code + '</div>' +
+      '<div style="font-size:13px;color:var(--text2);line-height:1.5">Попросите родителя открыть бота Горизонт в Telegram и отправить этот код сообщением <b>/start ' + data.code + '</b>.<br><br>Код действует 24 часа и одноразовый.</div>' +
+      '</div>';
+    document.getElementById("modalOverlay").classList.add("show");
+  } catch(e) {
+    showToast("Не удалось сгенерировать код", true);
+  }
 }
 
 function clearForm() {

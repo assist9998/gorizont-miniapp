@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Горизонт — Мой ребёнок</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geologica:wght@300;400;500;600;700&display=swap');
+  :root {
+    --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;
+    --accent:#4f8ef7;--accent2:#38d9a9;--danger:#ff6b6b;--warning:#ffd43b;
+    --text:#e8eaf0;--text2:#8b90a8;--border:#2d3250;
+    --radius:16px;--radius-sm:10px;
+  }
+  html[data-theme="light"] {
+    --bg:#f4f5f9;--surface:#ffffff;--surface2:#eef0f6;
+    --text:#1a1d27;--text2:#6b7086;--border:#e2e4ee;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Geologica',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+  .header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 16px;padding-top:calc(52px + env(safe-area-inset-top));display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100}
+  .header-title{font-size:17px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .back-btn{padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer;flex-shrink:0}
+
+  .screen{display:none;padding:16px}
+  .screen.active{display:block}
+  .empty{text-align:center;padding:40px 20px;color:var(--text2);font-size:14px}
+
+  .avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;background:var(--surface2);color:var(--accent)}
+  .avatar-oval{width:auto;min-width:42px;padding:0 14px;border-radius:21px}
+  .child-list-item{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .2s}
+  .child-arrow{color:var(--text2);font-size:16px;flex-shrink:0}
+  .child-detail{flex:1;min-width:0}
+  .child-detail-name{font-size:14px;font-weight:600;margin-bottom:2px}
+  .child-detail-meta{font-size:12px;color:var(--text2)}
+
+  .feed-item{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:12px 14px;margin-bottom:8px;display:flex;flex-direction:column;gap:6px}
+  .feed-date-row{display:flex;justify-content:space-between;align-items:center}
+  .feed-date{font-weight:700;font-size:13px}
+  .feed-topic{font-size:13px;line-height:1.4}
+  .feed-homework{font-size:12px;color:var(--text2);line-height:1.4}
+  .grade-chip{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--accent);color:#fff;font-size:12px;font-weight:700}
+  .att-pill{font-size:11px;font-weight:600;padding:3px 9px;border-radius:12px}
+  .att-pill.present{background:rgba(56,217,169,.18);color:var(--accent2)}
+  .att-pill.absent{background:rgba(255,107,107,.18);color:var(--danger)}
+
+  .cal-wrap{background:var(--surface2);border-radius:12px;padding:12px;margin-bottom:16px}
+  .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .cal-nav button{border:none;background:var(--surface);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text);font-size:15px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .cal-dow{text-align:center;font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px}
+  .cal-cell{aspect-ratio:1;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+  .cal-legend{display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text2)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <button class="back-btn" id="backBtn" style="display:none" onclick="goBack()">&#8592;</button>
+  <div class="header-title" onclick="toggleTheme()" style="flex:1;cursor:pointer" id="screenTitle">Горизонт</div>
+</div>
+
+<div class="screen active" id="screen-loading">
+  <div class="empty">Загрузка...</div>
+</div>
+
+<div class="screen" id="screen-no-access">
+  <div class="empty">Этот Telegram-аккаунт пока не привязан ни к одному ребёнку.<br><br>Обратитесь к администратору «Горизонт» за кодом привязки.</div>
+</div>
+
+<div class="screen" id="screen-children">
+  <div id="childrenList"></div>
+</div>
+
+<div class="screen" id="screen-child">
+  <div id="childContent"></div>
+</div>
+
+<div class="screen" id="screen-subject-feed">
+  <div id="subjectFeedList"></div>
+</div>
+
+<script>
+const API_URL = "https://y95h81n2pl7zlyb6hfca50s2.95.179.188.141.sslip.io";
+const tg = window.Telegram?.WebApp;
+
+function authHeaders(extra) {
+  return Object.assign(
+    {"ngrok-skip-browser-warning": "true", "X-Telegram-Init-Data": (tg && tg.initData) || ""},
+    extra || {}
+  );
+}
+if(tg){ tg.ready(); tg.expand(); }
+
+function applyTheme(theme) { document.documentElement.setAttribute("data-theme", theme); }
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  const next = current === "light" ? "dark" : "light";
+  localStorage.setItem("gorizont_parent_theme", next);
+  applyTheme(next);
+}
+applyTheme(localStorage.getItem("gorizont_parent_theme") || "dark");
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+// дд.мм.гггг -> "12 сен"
+const RU_MONTHS_SHORT = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
+function formatShortDate(dmy) {
+  const [d, m] = dmy.split(".");
+  return parseInt(d, 10) + " " + RU_MONTHS_SHORT[parseInt(m, 10) - 1];
+}
+
+// ── Навигация — простой стек экранов (без нижнего таб-бара, только drill-down) ──
+let screenStack = [];
+let screenTitles = {"children": "Мои дети"};
+
+function showScreen(id, title) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById("screen-" + id).classList.add("active");
+  document.getElementById("screenTitle").textContent = title || "Горизонт";
+  document.getElementById("backBtn").style.display = screenStack.length ? "" : "none";
+}
+
+function navTo(id, title) {
+  const current = document.querySelector(".screen.active")?.id?.replace("screen-", "");
+  if(current && current !== id) screenStack.push({id: current, title: document.getElementById("screenTitle").textContent});
+  showScreen(id, title);
+}
+
+function goBack() {
+  const prev = screenStack.pop();
+  if(!prev) return;
+  showScreen(prev.id, prev.title);
+}
+
+// ── Данные ──────────────────────────────────────────────────────────
+let parentChildren = [];
+let activeChild = null;
+let activeSubjectId = null;
+let activeSubjectName = "";
+
+async function init() {
+  try {
+    const resp = await fetch(API_URL + "/parent/children", {headers: authHeaders()});
+    const data = await resp.json();
+    parentChildren = data.ok ? data.children : [];
+  } catch(e) {
+    console.error("init error:", e);
+    parentChildren = [];
+  }
+  if(!parentChildren.length) {
+    showScreen("no-access");
+    return;
+  }
+  if(parentChildren.length === 1) {
+    // Единственный ребёнок — сразу его экран, это и есть корень (без
+    // возможности вернуться к списку из одного элемента).
+    await openChild(parentChildren[0]);
+    screenStack = [];
+    document.getElementById("backBtn").style.display = "none";
+    return;
+  }
+  renderChildrenList();
+  showScreen("children", "Мои дети");
+}
+init();
+
+function renderChildrenList() {
+  document.getElementById("childrenList").innerHTML = parentChildren.map((c, i) => {
+    const initials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2);
+    return `<div class="child-list-item" onclick="openChild(parentChildren[${i}])">
+      <div class="avatar">${initials}</div>
+      <div class="child-detail">
+        <div class="child-detail-name">${escapeHtml(c.name)}</div>
+        <div class="child-detail-meta">${escapeHtml(c.city)} · ${escapeHtml(c.dept)}${c.group ? " · " + escapeHtml(c.group) : ""}</div>
+      </div>
+      <span class="child-arrow">&#8250;</span>
+    </div>`;
+  }).join("");
+}
+
+async function openChild(c) {
+  activeChild = c;
+  navTo("child", c.name);
+  document.getElementById("childContent").innerHTML = '<div class="empty">Загрузка...</div>';
+  if(c.dept === "Школа") {
+    await renderChildSubjects();
+  } else {
+    await renderChildAttendance();
+  }
+}
+
+// ── Школа: список предметов ──────────────────────────────────────────
+async function renderChildSubjects() {
+  let subjects = [];
+  try {
+    const resp = await fetch(API_URL + "/parent/subjects?child_id=" + activeChild.id, {headers: authHeaders()});
+    const data = await resp.json();
+    subjects = data.ok ? data.subjects : [];
+  } catch(e) { console.error("subjects error:", e); }
+
+  if(!subjects.length) {
+    document.getElementById("childContent").innerHTML = '<div class="empty">Пока нет предметов</div>';
+    return;
+  }
+  document.getElementById("childContent").innerHTML = subjects.map(s => {
+    // Экранируем для JS-строки внутри onclick-атрибута (не HTML-сущности —
+    // те к моменту разбора JS уже раскодированы браузером обратно в кавычку).
+    const jsSafeName = String(s.name).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    return `<div class="child-list-item" onclick="openSubjectFeed(${s.id}, '${jsSafeName}')">
+      <div class="avatar avatar-oval">${escapeHtml(s.name)}</div>
+      <div class="child-detail"></div>
+      <span class="child-arrow">&#8250;</span>
+    </div>`;
+  }).join("");
+}
+
+async function openSubjectFeed(subjectId, subjectName) {
+  activeSubjectId = subjectId;
+  activeSubjectName = subjectName;
+  navTo("subject-feed", subjectName);
+  document.getElementById("subjectFeedList").innerHTML = '<div class="empty">Загрузка...</div>';
+  let feed = [];
+  try {
+    const resp = await fetch(
+      API_URL + "/parent/subject-feed?child_id=" + activeChild.id + "&subject_id=" + subjectId,
+      {headers: authHeaders()},
+    );
+    const data = await resp.json();
+    feed = data.ok ? data.feed : [];
+  } catch(e) { console.error("subject-feed error:", e); }
+
+  if(!feed.length) {
+    document.getElementById("subjectFeedList").innerHTML = '<div class="empty">Пока нет записей по этому предмету</div>';
+    return;
+  }
+  document.getElementById("subjectFeedList").innerHTML = feed.map(item => {
+    const attBadge = item.attendance === "present"
+      ? '<span class="att-pill present">Был</span>'
+      : item.attendance === "absent"
+      ? '<span class="att-pill absent">Не был</span>'
+      : "";
+    const grades = (item.grades || []).map(g => `<span class="grade-chip">${escapeHtml(g)}</span>`).join(" ");
+    return `<div class="feed-item">
+      <div class="feed-date-row">
+        <div class="feed-date">${formatShortDate(item.date)}</div>
+        ${attBadge}
+      </div>
+      ${item.topic ? `<div class="feed-topic">${escapeHtml(item.topic)}</div>` : '<div class="feed-topic" style="color:var(--text2)">Тема не указана</div>'}
+      ${item.homework ? `<div class="feed-homework">ДЗ: ${escapeHtml(item.homework)}</div>` : ""}
+      ${grades ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${grades}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+// ── Сад: календарь посещаемости ──────────────────────────────────────
+let histView = null; // {year, month(0-11)}
+let histData = {current:{present:0,absent:0,total:0}, prev:{present:0,absent:0,total:0}, days:{}};
+
+async function renderChildAttendance() {
+  const n = new Date();
+  histView = {year: n.getFullYear(), month: n.getMonth()};
+  try {
+    const resp = await fetch(API_URL + "/parent/attendance-history?child_id=" + activeChild.id, {headers: authHeaders()});
+    const data = await resp.json();
+    histData = data.ok ? data.history : histData;
+  } catch(e) { console.error("attendance-history error:", e); }
+  renderCalendar();
+}
+
+function fmtDMY(year, month, day) {
+  return String(day).padStart(2,'0') + "." + String(month+1).padStart(2,'0') + "." + year;
+}
+function prevHistMonth() { histView.month === 0 ? (histView.year--, histView.month = 11) : histView.month--; renderCalendar(); }
+function nextHistMonth() { histView.month === 11 ? (histView.year++, histView.month = 0) : histView.month++; renderCalendar(); }
+
+function renderCalendar() {
+  const { year, month } = histView;
+  const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  const DOW = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+
+  let startDow = new Date(year, month, 1).getDay();
+  startDow = startDow === 0 ? 6 : startDow - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  let present = 0, absent = 0;
+  const cells = [];
+  for(let i = 0; i < startDow; i++) cells.push(null);
+  for(let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  let grid = DOW.map(d => `<div class="cal-dow">${d}</div>`).join("");
+  grid = `<div class="cal-grid" style="margin-bottom:4px">${grid}</div><div class="cal-grid">`;
+  cells.forEach(d => {
+    if(d === null) { grid += "<div></div>"; return; }
+    const dateStr = fmtDMY(year, month, d);
+    const status = histData.days[dateStr];
+    if(status === "present") present++;
+    if(status === "absent") absent++;
+    const bg = status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface)";
+    grid += `<div class="cal-cell" style="background:${bg}">${d}</div>`;
+  });
+  grid += "</div>";
+
+  document.getElementById("childContent").innerHTML = `<div class="cal-wrap">
+    <div class="cal-nav">
+      <button onclick="prevHistMonth()">&lsaquo;</button>
+      <div style="font-weight:700;font-size:13px">${RU_MONTHS[month]} ${year}</div>
+      <button onclick="nextHistMonth()">&rsaquo;</button>
+    </div>
+    ${grid}
+    <div class="cal-legend">
+      <span>Пришёл: <b style="color:var(--accent2)">${present}</b></span>
+      <span>Нет: <b style="color:var(--danger)">${absent}</b></span>
+    </div>
+  </div>`;
+}
+</script>
+</body>
+</html>
