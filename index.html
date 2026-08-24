@@ -299,8 +299,14 @@
 
   <!-- Значок класса — бейджиком как в списке классов (avatar-oval), а не
        мелким текстом рядом с "Назад" (терялся, жалоба пользователя) —
-       своей строкой, освобождает верхнюю строку под кнопки. -->
-  <div class="avatar avatar-oval" id="journalViewTitle" style="margin-bottom:16px;border:1.5px solid var(--border);background:var(--surface)">Класс</div>
+       своей строкой, освобождает верхнюю строку под кнопки. На вкладке
+       "Оценки" рядом появляется такой же бейдж предмета (пол экрана на
+       двоих) — предмет уже выбран тапом по строке, отдельный выпадающий
+       список для него не нужен (просьба пользователя). -->
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <div class="avatar avatar-oval" id="journalViewTitle" style="flex:1;border:1.5px solid var(--border);background:var(--surface)">Класс</div>
+    <div class="avatar avatar-oval" id="journalGradesSubjectBadge" style="flex:1;display:none;border:1.5px solid var(--accent);background:var(--surface);color:var(--accent)">Предмет</div>
+  </div>
 
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="journalViewTabBar">
     <button class="filter-btn active" id="journalViewTab-schedule" onclick="switchJournalViewTab('schedule')">Расписание</button>
@@ -2942,6 +2948,7 @@ async function openJournalTeacherClass(className) {
   document.getElementById("journalViewEditBtn").style.display = "none";
   document.getElementById("journalViewTabBar").style.display = "none";
   document.getElementById("journalGradesActionsRow").style.display = "flex";
+  document.getElementById("journalGradesSubjectBadge").style.display = "flex";
   ["subjects", "schedule", "students"].forEach(t => {
     const panel = document.getElementById("journalViewPanel-" + t);
     if(panel) panel.style.display = "none";
@@ -3020,6 +3027,7 @@ function switchJournalViewTab(tab) {
   // прячем всю панель вкладок целиком.
   document.getElementById("journalViewTabBar").style.display = tab === "grades" ? "none" : "flex";
   document.getElementById("journalGradesActionsRow").style.display = tab === "grades" ? "flex" : "none";
+  document.getElementById("journalGradesSubjectBadge").style.display = tab === "grades" ? "flex" : "none";
   // Карандаш здесь тоже не нужен — тема урока, дз, оценки и посещаемость на
   // этой вкладке и так редактируются прямо на месте, а карандаш вместо
   // "редактировать это окно" уводил в редактирование расписания/предметов
@@ -3975,23 +3983,33 @@ function renderJournalGrades() {
     return;
   }
 
-  const subjOptions = options.map(s =>
-    `<option value="${s.id}"${s.id === journalGradesSubjectId ? " selected" : ""}>${s.name}</option>`
-  ).join("");
+  const currentSubject = options.find(s => s.id === journalGradesSubjectId);
+  document.getElementById("journalGradesSubjectBadge").textContent = currentSubject ? currentSubject.name : "Предмет";
   const hasTopic = !!(journalLessonTopic && journalLessonTopic.topic);
   const topicValue = (journalLessonTopic && journalLessonTopic.topic) || "";
   const homeworkValue = (journalHomework && journalHomework.text) || "";
 
-  // Предмет и тема — в одном ряду (просьба пользователя: раньше выпадающий
-  // список предмета занимал отдельную полноширинную строку сам по себе).
+  // Выпадающий список предмета убрали (просьба пользователя) — предмет уже
+  // выбран тапом по строке в "Предметы"/расписании, показываем его теперь
+  // бейджем рядом с классом сверху. Исключение — учитель: он заходит сразу
+  // в класс (не по конкретному предмету, "Мои классы" сгруппированы по
+  // классу), и если ведёт в этом классе больше одного своего предмета,
+  // переключаться между ними больше неоткуда, кроме этого списка.
+  const subjOptions = journalViewTeacherMode ? options.map(s =>
+    `<option value="${s.id}"${s.id === journalGradesSubjectId ? " selected" : ""}>${s.name}</option>`
+  ).join("") : "";
+  const subjectSelectHtml = journalViewTeacherMode && options.length > 1
+    ? `<select id="journalGradesSubjectSelect" onchange="switchJournalGradesSubject(this.value)"
+        style="flex:0 1 116px;min-width:96px;padding:10px 8px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box">
+        ${subjOptions}
+      </select>`
+    : "";
+
   let html = `
     <div style="margin-bottom:16px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тема урока${hasTopic ? "" : " — обязательно"}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <select id="journalGradesSubjectSelect" onchange="switchJournalGradesSubject(this.value)"
-          style="flex:0 1 116px;min-width:96px;padding:10px 8px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box">
-          ${subjOptions}
-        </select>
+        ${subjectSelectHtml}
         <input id="journalLessonTopicInput" type="text" value="${topicValue.replace(/"/g, "&quot;")}" placeholder="Например: Дроби — сложение и вычитание"
           style="flex:1;min-width:120px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
         <button onclick="saveJournalLessonTopic()" style="flex-shrink:0;padding:0 14px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Сохранить</button>
