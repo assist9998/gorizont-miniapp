@@ -4019,7 +4019,9 @@ function renderJournalPeriodModal() {
     const g = journalPeriodGrades.find(pg => pg.child_id == c.id);
     const avg = journalAvgByChild[c.id];
     const initials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2);
-    const expanded = journalPeriodExpandedChild === c.id;
+    // == не === — c.id ребёнка приходит строкой из /children, а из onclick
+    // toggleJournalPeriodRow(${c.id}) в journalPeriodExpandedChild попадает число.
+    const expanded = journalPeriodExpandedChild == c.id;
     // Свёрнуто — одна плашка (текущая оценка или "—"), тап раскрывает ряд
     // 2-3-4-5 (просьба пользователя: список из полного ряда кружков на
     // каждого ученика выглядел громоздко, лучше раскрывать по тапу).
@@ -4034,7 +4036,7 @@ function renderJournalPeriodModal() {
       : `<button onclick="toggleJournalPeriodRow(${c.id})" style="width:32px;height:32px;border-radius:50%;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;` +
         (g
           ? 'border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff'
-          : 'border:1.5px dashed var(--border);background:var(--surface2);color:var(--text2)') +
+          : 'border:1.5px solid var(--border);background:var(--surface2);color:var(--text2)') +
         `">${g ? g.value : "—"}</button>`;
     return `<div class="child-list-item" style="cursor:default">
       <div class="avatar" style="flex-shrink:0">${initials}</div>
