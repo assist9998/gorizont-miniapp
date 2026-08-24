@@ -3631,6 +3631,11 @@ function journalGradesSubjectOptions() {
 let journalAttendance = {};
 
 async function loadJournalGrades() {
+  // Дата/предмет могли смениться (переход по истории, другой урок) с
+  // непогашенным автосохранением по старому полю — иначе оно бы сработало
+  // уже после перехода и молча переотправило значение в новый контекст.
+  clearTimeout(journalTopicSaveTimer);
+  clearTimeout(journalHomeworkSaveTimer);
   if(journalGradesDate === null) journalGradesDate = journalGradesToday();
   const options = journalGradesSubjectOptions();
   if(journalGradesSubjectId === null && options.length) journalGradesSubjectId = options[0].id;
@@ -3700,24 +3705,41 @@ async function toggleJournalAttendance(childId) {
   }
 }
 
-// Кнопка "Сохранить" (кружок-галочка поверх поля) показывается, только
-// пока текст в поле отличается от того, что уже сохранено (макет утвердил
-// пользователь) — data-original обновляется заново при каждом рендере
-// (после успешного сохранения экран перерисовывается целиком через
-// loadJournalGrades). Появляется/исчезает на месте, не сдвигая текст под
-// полем — раньше отдельная строка с кнопкой снизу пихала всё ниже (жалоба
-// пользователя).
-function toggleJournalFieldSave(inputId, btnId) {
+// Кнопка (кружок-галочка поверх поля) — только индикатор несохранённых
+// изменений и запасной способ сохранить сразу, тапом. Основной путь —
+// автосохранение через 3с после того, как перестали печатать (просьба
+// пользователя, чтобы не тыкать кнопку руками), тост "сохранено" сам
+// подтверждает результат. data-original обновляется заново при каждом
+// рендере (после сохранения экран перерисовывается целиком через
+// loadJournalGrades) — оттуда же и кнопка гаснет, отдельно её прятать не
+// нужно.
+function updateJournalFieldSaveBtn(inputId, btnId) {
   const input = document.getElementById(inputId);
   const btn = document.getElementById(btnId);
-  if(!input || !btn) return;
+  if(!input || !btn) return false;
   const dirty = input.value.trim() !== (input.dataset.original || "").trim();
   btn.style.opacity = dirty ? "1" : "0";
   btn.style.pointerEvents = dirty ? "auto" : "none";
   btn.style.transform = "translateY(-50%) scale(" + (dirty ? "1" : ".5") + ")";
+  return dirty;
+}
+
+let journalTopicSaveTimer = null;
+function onJournalTopicInput() {
+  const dirty = updateJournalFieldSaveBtn("journalLessonTopicInput", "journalTopicSaveBtn");
+  clearTimeout(journalTopicSaveTimer);
+  journalTopicSaveTimer = dirty ? setTimeout(saveJournalLessonTopic, 3000) : null;
+}
+
+let journalHomeworkSaveTimer = null;
+function onJournalHomeworkInput() {
+  const dirty = updateJournalFieldSaveBtn("journalHomeworkInput", "journalHomeworkSaveBtn");
+  clearTimeout(journalHomeworkSaveTimer);
+  journalHomeworkSaveTimer = dirty ? setTimeout(saveJournalHomework, 3000) : null;
 }
 
 async function saveJournalLessonTopic() {
+  clearTimeout(journalTopicSaveTimer);
   const el = document.getElementById("journalLessonTopicInput");
   const topic = el ? el.value.trim() : "";
   if(!topic) { showToast("Введите тему урока", true); return; }
@@ -3744,6 +3766,7 @@ async function saveJournalLessonTopic() {
 }
 
 async function saveJournalHomework() {
+  clearTimeout(journalHomeworkSaveTimer);
   const el = document.getElementById("journalHomeworkInput");
   const text = el ? el.value.trim() : "";
   if(!text) { showToast("Введите домашнее задание", true); return; }
@@ -4039,7 +4062,7 @@ function renderJournalGrades() {
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тема урока${hasTopic ? "" : " — обязательно"}</div>
         <div style="position:relative">
           <input id="journalLessonTopicInput" type="text" value="${topicValue.replace(/"/g, "&quot;")}" data-original="${topicValue.replace(/"/g, "&quot;")}"
-            oninput="toggleJournalFieldSave('journalLessonTopicInput','journalTopicSaveBtn')" placeholder="Например: Дроби — сложение и вычитание"
+            oninput="onJournalTopicInput()" placeholder="Например: Дроби — сложение и вычитание"
             style="width:100%;padding:10px 40px 10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
           ${saveIconBtn("journalTopicSaveBtn", "saveJournalLessonTopic()")}
         </div>
@@ -4048,7 +4071,7 @@ function renderJournalGrades() {
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Домашнее задание</div>
         <div style="position:relative">
           <input id="journalHomeworkInput" type="text" value="${homeworkValue.replace(/"/g, "&quot;")}" data-original="${homeworkValue.replace(/"/g, "&quot;")}"
-            oninput="toggleJournalFieldSave('journalHomeworkInput','journalHomeworkSaveBtn')" placeholder="Например: §12, упр. 3-5"
+            oninput="onJournalHomeworkInput()" placeholder="Например: §12, упр. 3-5"
             style="width:100%;padding:10px 40px 10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
           ${saveIconBtn("journalHomeworkSaveBtn", "saveJournalHomework()")}
         </div>
