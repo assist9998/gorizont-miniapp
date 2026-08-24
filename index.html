@@ -3871,9 +3871,9 @@ function renderJournalHistoryModal(history) {
     const d = dmyToDate(h.date);
     return `
     <div class="child-list-item" onclick="jumpToJournalHistoryDate('${h.date}')"${isToday ? ' style="border-color:var(--accent)"' : ""}>
-      <div style="width:44px;height:44px;border-radius:12px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;${isToday ? "background:var(--accent);color:#fff" : "background:var(--surface2);color:var(--text)"}">
-        <div style="font-size:16px;font-weight:700;line-height:1.1">${d.getDate()}</div>
-        <div style="font-size:8.5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;opacity:.85">${months[d.getMonth()]}</div>
+      <div class="avatar" style="flex-direction:column;gap:0;${isToday ? "background:var(--accent);color:#fff" : ""}">
+        <div style="font-size:14px;font-weight:700;line-height:1.05">${d.getDate()}</div>
+        <div style="font-size:7px;font-weight:600;text-transform:uppercase;letter-spacing:.02em;opacity:.85">${months[d.getMonth()]}</div>
       </div>
       <div class="child-detail">
         <div class="child-detail-name"${h.topic ? "" : ' style="font-weight:500;color:var(--text2)"'}>${h.topic ? h.topic : "без темы"}</div>
