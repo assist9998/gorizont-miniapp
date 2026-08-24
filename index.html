@@ -3985,10 +3985,12 @@ async function loadJournalAvg() {
 }
 
 function renderJournalPeriodModal() {
-  const periodOptions = JOURNAL_PERIODS.map(p =>
-    `<option value="${p}"${p === journalPeriod ? " selected" : ""}>${p}</option>`
-  ).join("");
-  const periodSelect = `<select onchange="switchJournalPeriod(this.value)" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px">${periodOptions}</select>`;
+  // Пилюли вместо select — тот же паттерн, что и везде в приложении
+  // (город/дни недели), просьба пользователя выровнять дизайн "Итоговых
+  // оценок" с остальным журналом.
+  const periodSelect = '<div class="filters">' + JOURNAL_PERIODS.map(p =>
+    `<button class="filter-btn${p === journalPeriod ? " active" : ""}" onclick="switchJournalPeriod('${p}')">${p}</button>`
+  ).join("") + '</div>';
 
   const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
   const isCurrentMonth = journalAvgView.year === now.getFullYear() && journalAvgView.month === now.getMonth();
@@ -4016,11 +4018,11 @@ function renderJournalPeriodModal() {
         : 'border:1.5px solid var(--border);background:var(--surface2);color:var(--text)') +
       `">${v}</button>`
     ).join("");
-    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid var(--border)">
+    return `<div class="child-list-item" style="cursor:default">
       <div class="avatar" style="flex-shrink:0">${initials}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
-        ${avg ? `<div style="font-size:11px;color:var(--text2)">ср. ${avg}</div>` : ""}
+      <div class="child-detail">
+        <div class="child-detail-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
+        ${avg ? `<div class="child-detail-meta">ср. ${avg}</div>` : ""}
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">${btns}</div>
     </div>`;
