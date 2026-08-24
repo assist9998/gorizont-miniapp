@@ -3821,22 +3821,31 @@ function closeJournalHistory() {
 // теперь единственный способ вернуться к сегодняшнему уроку после перехода
 // на другую дату из истории (отдельный переключатель "‹ Сегодня ›" убрали,
 // жалоба пользователя на лишнее место).
+// Список рядов теперь той же карточкой, что и везде в приложении
+// (.child-list-item), вместо голых строк с подчёркиванием — дата вынесена
+// в компактную плашку слева (число + месяц), как мини-календарь, вместо
+// текстовой даты в шапке строки (просьба пользователя "тоже как-то
+// преобразуй"). Тема — главная строка, ДЗ — подпись под ней, "Сегодня" —
+// акцентная плашка вместо серой и отдельная надпись над темой.
 function renderJournalHistoryModal(history) {
   const today = journalGradesToday();
   const todayEntry = history.find(h => h.date === today) || {date: today, topic: null, homework: null};
   const items = [todayEntry, ...history.filter(h => h.date !== today)];
-  // Тема и ДЗ — каждое на своей строке (жалоба пользователя: в одну строку
-  // через "·" нечитабельно), без бейджа с числом оценок — он тут не нужен.
   document.getElementById("journalHistoryModalContent").innerHTML = items.map(h => {
     const isToday = h.date === today;
+    const d = dmyToDate(h.date);
     return `
-    <div onclick="jumpToJournalHistoryDate('${h.date}')" style="padding:10px 2px;border-bottom:1px solid var(--border);cursor:pointer">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
-        <div style="font-weight:600;font-size:14px${isToday ? ";color:var(--accent)" : ""}">${isToday ? "Сегодня" : formatShortDate(h.date)}</div>
-        <span class="child-arrow">›</span>
+    <div class="child-list-item" onclick="jumpToJournalHistoryDate('${h.date}')"${isToday ? ' style="border-color:var(--accent)"' : ""}>
+      <div style="width:44px;height:44px;border-radius:12px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;${isToday ? "background:var(--accent);color:#fff" : "background:var(--surface2);color:var(--text)"}">
+        <div style="font-size:16px;font-weight:700;line-height:1.1">${d.getDate()}</div>
+        <div style="font-size:8.5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;opacity:.85">${months[d.getMonth()]}</div>
       </div>
-      <div style="font-size:13px;color:var(--text);margin-bottom:${h.homework ? "2px" : "0"}">${h.topic ? h.topic : "без темы"}</div>
-      ${h.homework ? `<div style="font-size:12px;color:var(--text2)">ДЗ: ${h.homework}</div>` : ""}
+      <div class="child-detail">
+        ${isToday ? '<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px">Сегодня</div>' : ""}
+        <div class="child-detail-name"${h.topic ? "" : ' style="font-weight:500;color:var(--text2)"'}>${h.topic ? h.topic : "без темы"}</div>
+        ${h.homework ? `<div class="child-detail-meta">ДЗ: ${h.homework}</div>` : ""}
+      </div>
+      <span class="child-arrow">›</span>
     </div>`;
   }).join("");
 }
