@@ -2768,6 +2768,10 @@ let journalClassNames = [];
 let activeJournalClass = null;
 let journalSubjects = [];
 let journalSchedule = [];
+// Защита от двойного тапа (как _staffAttPending в payroll) — без неё на
+// нестабильной сети два тапа подряд по "Добавить урок"/"Сохранить" создают
+// дубли (аудит журнала, project_gorizont).
+const journalPending = new Set();
 // Как в школьном дневнике — расписание смотрим по одному дню, а не
 // списком "все дни один под другим". null = ещё не выбран (выберется
 // сам при загрузке класса: сегодняшний день, если в нём есть уроки,
@@ -3213,6 +3217,9 @@ async function addJournalSubject() {
   const input = document.getElementById("journalNewSubjectInput");
   const name = input.value.trim();
   if(!name) return;
+  const lockKey = "subject:add";
+  if(journalPending.has(lockKey)) return;
+  journalPending.add(lockKey);
   try {
     const resp = await fetch(API_URL + "/journal/subjects", {
       method: "POST",
@@ -3225,10 +3232,19 @@ async function addJournalSubject() {
     await loadJournalClassData();
   } catch(e) {
     showToast("Не удалось добавить предмет", true);
+  } finally {
+    journalPending.delete(lockKey);
   }
 }
 
+// Удаление без подтверждения теряло данные молча: оценки/темы/дз по
+// предмету оставались в БД, но переставали резолвиться в интерфейсе
+// (аудит журнала, project_gorizont) — плюс кнопка "×" стоит вплотную к
+// названию предмета (тап для переименования), с телефона легко промахнуться.
 async function deleteJournalSubject(id) {
+  const s = journalSubjects.find(x => x.id === id);
+  const name = s ? s.name : "предмет";
+  if(!confirm("Удалить «" + name + "»? Все оценки, темы уроков и домашние задания по этому предмету останутся в базе, но пропадут из журнала. Отменить нельзя.")) return;
   try {
     const resp = await fetch(API_URL + "/journal/subjects?id=" + id, {method: "DELETE", headers: authHeaders()});
     const d = await resp.json();
@@ -3266,6 +3282,9 @@ function cancelJournalScheduleEdit() {
 }
 
 async function submitJournalScheduleForm() {
+  const lockKey = "schedule:submit";
+  if(journalPending.has(lockKey)) return;
+  journalPending.add(lockKey);
   const weekday = parseInt(document.getElementById("js_weekday").value, 10);
   const subjectId = document.getElementById("js_subject").value;
   const timeStart = document.getElementById("js_time_start").value.trim();
@@ -3299,10 +3318,15 @@ async function submitJournalScheduleForm() {
     showToast(wasEdit ? "Урок сохранён" : "Урок добавлен");
   } catch(e) {
     showToast("Не удалось сохранить урок", true);
+  } finally {
+    journalPending.delete(lockKey);
   }
 }
 
 async function deleteJournalScheduleEntry(id) {
+  const e = journalSchedule.find(x => x.id === id);
+  const label = e ? [e.subject_name || "Урок без предмета", [e.time_start, e.time_end].filter(Boolean).join("–")].filter(Boolean).join(", ") : "урок";
+  if(!confirm("Удалить «" + label + "» из расписания?")) return;
   try {
     const resp = await fetch(API_URL + "/journal/schedule?id=" + id, {method: "DELETE", headers: authHeaders()});
     const d = await resp.json();
@@ -3652,6 +3676,9 @@ async function saveJournalLessonTopic() {
   const el = document.getElementById("journalLessonTopicInput");
   const topic = el ? el.value.trim() : "";
   if(!topic) { showToast("Введите тему урока", true); return; }
+  const lockKey = "topic:save";
+  if(journalPending.has(lockKey)) return;
+  journalPending.add(lockKey);
   try {
     const resp = await fetch(API_URL + "/journal/lesson-topic", {
       method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
@@ -3666,6 +3693,8 @@ async function saveJournalLessonTopic() {
     showToast("Тема урока сохранена");
   } catch(e) {
     showToast("Не удалось сохранить тему урока", true);
+  } finally {
+    journalPending.delete(lockKey);
   }
 }
 
@@ -3673,6 +3702,9 @@ async function saveJournalHomework() {
   const el = document.getElementById("journalHomeworkInput");
   const text = el ? el.value.trim() : "";
   if(!text) { showToast("Введите домашнее задание", true); return; }
+  const lockKey = "homework:save";
+  if(journalPending.has(lockKey)) return;
+  journalPending.add(lockKey);
   try {
     const resp = await fetch(API_URL + "/journal/homework", {
       method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
@@ -3687,6 +3719,8 @@ async function saveJournalHomework() {
     showToast("Домашнее задание сохранено");
   } catch(e) {
     showToast("Не удалось сохранить домашнее задание", true);
+  } finally {
+    journalPending.delete(lockKey);
   }
 }
 
@@ -4114,6 +4148,9 @@ async function saveJournalGradeComment(id) {
 // сохранить — то заносится в систему").
 async function saveJournalGradePending(childId) {
   if(!journalGradePendingBase) return;
+  const lockKey = "grade:save";
+  if(journalPending.has(lockKey)) return;
+  journalPending.add(lockKey);
   const value = journalGradePendingBase + journalGradePendingMod;
   const el = document.getElementById("journalGradePendingComment");
   const comment = el ? el.value.trim() : "";
@@ -4136,10 +4173,14 @@ async function saveJournalGradePending(childId) {
     showToast("Оценка поставлена");
   } catch(e) {
     showToast("Не удалось поставить оценку", true);
+  } finally {
+    journalPending.delete(lockKey);
   }
 }
 
 async function deleteJournalGrade(id) {
+  const g = journalGrades.find(x => x.id === id);
+  if(!confirm("Удалить оценку" + (g ? " " + g.value : "") + "?")) return;
   try {
     const resp = await fetch(API_URL + "/journal/grades?id=" + id, {method: "DELETE", headers: authHeaders()});
     const d = await resp.json();
