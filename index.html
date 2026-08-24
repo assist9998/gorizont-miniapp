@@ -3700,16 +3700,21 @@ async function toggleJournalAttendance(childId) {
   }
 }
 
-// Кнопка "Сохранить" под темой/дз показывается, только пока текст в поле
-// отличается от того, что уже сохранено (макет утвердил пользователь) —
-// data-original обновляется заново при каждом рендере (после успешного
-// сохранения экран перерисовывается целиком через loadJournalGrades).
-function toggleJournalFieldSave(inputId, rowId) {
+// Кнопка "Сохранить" (кружок-галочка поверх поля) показывается, только
+// пока текст в поле отличается от того, что уже сохранено (макет утвердил
+// пользователь) — data-original обновляется заново при каждом рендере
+// (после успешного сохранения экран перерисовывается целиком через
+// loadJournalGrades). Появляется/исчезает на месте, не сдвигая текст под
+// полем — раньше отдельная строка с кнопкой снизу пихала всё ниже (жалоба
+// пользователя).
+function toggleJournalFieldSave(inputId, btnId) {
   const input = document.getElementById(inputId);
-  const row = document.getElementById(rowId);
-  if(!input || !row) return;
+  const btn = document.getElementById(btnId);
+  if(!input || !btn) return;
   const dirty = input.value.trim() !== (input.dataset.original || "").trim();
-  row.style.display = dirty ? "block" : "none";
+  btn.style.opacity = dirty ? "1" : "0";
+  btn.style.pointerEvents = dirty ? "auto" : "none";
+  btn.style.transform = "translateY(-50%) scale(" + (dirty ? "1" : ".5") + ")";
 }
 
 async function saveJournalLessonTopic() {
@@ -4017,28 +4022,35 @@ function renderJournalGrades() {
       </select>`
     : "";
 
-  // Тема и дз — одна карточка с разделителем вместо двух отдельных рамок,
-  // кнопка "Сохранить" не висит всегда, а появляется только когда текст
-  // отличается от уже сохранённого (сверялись на макете с пользователем).
+  // Тема и дз — одна карточка с разделителем вместо двух отдельных рамок.
+  // Кнопка "Сохранить" — кружок-галочка поверх поля (справа), не отдельная
+  // строка снизу — раньше её появление сдвигало текст под ней (жалоба
+  // пользователя), теперь просто проявляется/скрывается на месте, поле ниже
+  // никуда не двигается. Правый паддинг инпута зарезервирован под неё всегда.
+  const saveIconBtn = (id, onclickFn) =>
+    `<button onclick="${onclickFn}" id="${id}" title="Сохранить"
+      style="position:absolute;right:6px;top:50%;width:26px;height:26px;border-radius:50%;border:none;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transform:translateY(-50%) scale(.5);transition:opacity .15s ease,transform .15s ease">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </button>`;
   let html = subjectSelectHtml ? `<div style="margin-bottom:10px">${subjectSelectHtml}</div>` : "";
   html += `
     <div style="background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px">
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тема урока${hasTopic ? "" : " — обязательно"}</div>
-        <input id="journalLessonTopicInput" type="text" value="${topicValue.replace(/"/g, "&quot;")}" data-original="${topicValue.replace(/"/g, "&quot;")}"
-          oninput="toggleJournalFieldSave('journalLessonTopicInput','journalTopicSaveRow')" placeholder="Например: Дроби — сложение и вычитание"
-          style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
-        <div id="journalTopicSaveRow" style="display:none;margin-top:8px">
-          <button onclick="saveJournalLessonTopic()" style="width:100%;padding:8px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Сохранить</button>
+        <div style="position:relative">
+          <input id="journalLessonTopicInput" type="text" value="${topicValue.replace(/"/g, "&quot;")}" data-original="${topicValue.replace(/"/g, "&quot;")}"
+            oninput="toggleJournalFieldSave('journalLessonTopicInput','journalTopicSaveBtn')" placeholder="Например: Дроби — сложение и вычитание"
+            style="width:100%;padding:10px 40px 10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
+          ${saveIconBtn("journalTopicSaveBtn", "saveJournalLessonTopic()")}
         </div>
       </div>
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Домашнее задание</div>
-        <input id="journalHomeworkInput" type="text" value="${homeworkValue.replace(/"/g, "&quot;")}" data-original="${homeworkValue.replace(/"/g, "&quot;")}"
-          oninput="toggleJournalFieldSave('journalHomeworkInput','journalHomeworkSaveRow')" placeholder="Например: §12, упр. 3-5"
-          style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
-        <div id="journalHomeworkSaveRow" style="display:none;margin-top:8px">
-          <button onclick="saveJournalHomework()" style="width:100%;padding:8px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Сохранить</button>
+        <div style="position:relative">
+          <input id="journalHomeworkInput" type="text" value="${homeworkValue.replace(/"/g, "&quot;")}" data-original="${homeworkValue.replace(/"/g, "&quot;")}"
+            oninput="toggleJournalFieldSave('journalHomeworkInput','journalHomeworkSaveBtn')" placeholder="Например: §12, упр. 3-5"
+            style="width:100%;padding:10px 40px 10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
+          ${saveIconBtn("journalHomeworkSaveBtn", "saveJournalHomework()")}
         </div>
       </div>
     </div>`;
