@@ -4166,6 +4166,27 @@ async function saveJournalGradePending(childId) {
     });
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
+    // Оценка ставится только тому, кто был на уроке — если ребёнок ещё не
+    // отмечен присутствующим, отмечаем автоматически вместе с оценкой (по
+    // просьбе пользователя, чтобы не отмечать посещаемость отдельным тапом).
+    // Ошибку этой отметки не показываем как провал всей операции — оценка
+    // уже сохранена, это лишь синхронизация посещаемости.
+    if(journalAttendance[childId] !== "present") {
+      journalAttendance[childId] = "present";
+      try {
+        await fetch(API_URL + "/journal/attendance", {
+          method: "POST",
+          headers: authHeaders({"Content-Type": "application/json"}),
+          body: JSON.stringify({
+            city: activeJournalCity, class_name: activeJournalClass,
+            subject_id: journalGradesSubjectId, date: journalGradesDate,
+            records: [{child_id: childId, status: "present"}],
+          }),
+        });
+      } catch(attErr) {
+        console.error("auto-mark attendance on grade error:", attErr);
+      }
+    }
     journalGradePendingBase = null;
     journalGradePendingMod = "";
     journalGradePendingComment = "";
