@@ -3584,10 +3584,45 @@ let journalGradesEditingId = null; // id оценки, чей комментар
 let journalGradeModalChildId = null; // id ребёнка, чья модалка оценки сейчас открыта (null — закрыта)
 let journalGradePendingBase = null; // выбранная цифра (2-5), ещё не сохранённая (до тапа "Сохранить")
 let journalGradePendingMod = ""; // "" | "+" | "-" — модификатор к выбранной цифре
+let journalGradePendingType = "Урок"; // "Урок" | "Дз" — тип оценки, переключается вручную, дефолт см. journalDefaultGradeType()
 let journalGradePendingComment = ""; // текст комментария, набираемый до выбора оценки — не теряется при перерисовке
 
 function journalGradesToday() {
   return dateToDmy(now);
+}
+
+// Дефолт для переключателя "Урок/Дз" (просьба пользователя): пока урок ещё
+// идёт (сегодня, время не вышло за time_end по расписанию этого дня недели)
+// — логичнее оценка за сам урок; если день/время урока уже прошли — скорее
+// уже проверяют домашку. Переключить вручную можно всегда, это только
+// начальное положение при открытии карточки оценки.
+function journalDefaultGradeType() {
+  const today = journalGradesToday();
+  if(journalGradesDate !== today) {
+    return dmyToDate(journalGradesDate) < dmyToDate(today) ? "Дз" : "Урок";
+  }
+  const isoDay = now.getDay() === 0 ? 7 : now.getDay();
+  const entry = journalSchedule.find(e => e.subject_id === journalGradesSubjectId && e.weekday === isoDay);
+  if(entry && entry.time_end) {
+    const [h, m] = entry.time_end.split(":").map(Number);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m || 0);
+    if(now > end) return "Дз";
+  }
+  return "Урок";
+}
+
+// Общий вид бейджа с оценкой — покрупнее кружком в модалке (по умолчанию)
+// и мелкой плашкой в списке детей (size="sm"). Оценка "Дз" помечается
+// маленьким уголком, чтобы отличать от оценки за сам урок (просьба
+// пользователя добавить оценки за дз отдельным типом).
+function journalGradeBadgeHtml(value, gradeType, size) {
+  const mark = gradeType === "Дз"
+    ? '<span style="position:absolute;bottom:-4px;right:-4px;font-size:7px;font-weight:700;line-height:1.3;background:var(--surface);color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:0 3px">дз</span>'
+    : "";
+  if(size === "sm") {
+    return `<span class="time-badge" style="position:relative;display:inline-block;background:var(--accent);color:#fff;font-weight:700">${value}${mark}</span>`;
+  }
+  return `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;flex-shrink:0">${value}${mark}</span>`;
 }
 
 // Отдельная строка "‹ Сегодня ›" отъедала место (жалоба пользователя) — раз
@@ -4097,9 +4132,7 @@ function renderJournalGrades() {
     // == не === — id ребёнка приходит строкой из /children, child_id оценки числом из Postgres.
     const grades = journalGrades.filter(g => g.child_id == c.id);
     const initials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2);
-    const badges = grades.map(g =>
-      `<span class="time-badge" style="background:var(--accent);color:#fff;font-weight:700">${g.value}</span>`
-    ).join("");
+    const badges = grades.map(g => journalGradeBadgeHtml(g.value, g.grade_type, "sm")).join("");
     const present = journalAttendance[c.id] === "present";
     return `<div class="child-card-wrap">
       <div class="child-card ${present ? "present" : "absent"}">
@@ -4125,6 +4158,7 @@ function openJournalGradeModal(childId) {
   journalGradePendingBase = null;
   journalGradePendingMod = "";
   journalGradePendingComment = "";
+  journalGradePendingType = journalDefaultGradeType();
   renderJournalGradeModal();
   document.getElementById("journalGradeModalOverlay").classList.add("show");
 }
@@ -4146,7 +4180,7 @@ function renderJournalGradeModal() {
   const hasTopic = !!(journalLessonTopic && journalLessonTopic.topic);
   const grades = journalGrades.filter(g => g.child_id == c.id);
   const gradeRows = grades.map(g => {
-    const badge = `<span style="display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;flex-shrink:0">${g.value}</span>`;
+    const badge = journalGradeBadgeHtml(g.value, g.grade_type);
     if(journalGradesEditingId === g.id) {
       return `<div style="display:flex;flex-direction:column;gap:6px;padding:8px;margin-bottom:6px;border-radius:10px;background:var(--surface2)">
         <div style="display:flex;align-items:center;gap:8px">${badge}<span style="font-size:11px;color:var(--text2)">${(journalLessonTopic && journalLessonTopic.topic) || ""}</span></div>
@@ -4180,8 +4214,18 @@ function renderJournalGradeModal() {
       : `border:1.5px solid var(--border);background:var(--surface2);color:var(--text)${disabled ? ";opacity:.4" : ""}`) +
     `">${label}</button>`;
 
+  // Тип оценки — Урок/Дз (просьба пользователя). Дефолт при открытии
+  // карточки считает journalDefaultGradeType(), переключить можно вручную
+  // в любой момент, положение сохраняется, пока открыта эта модалка.
+  const typeToggle =
+    '<div style="display:flex;gap:6px;margin-bottom:12px">' +
+    `<button class="filter-btn${journalGradePendingType === "Урок" ? " active" : ""}" onclick="pickJournalGradeType('Урок')">Урок</button>` +
+    `<button class="filter-btn${journalGradePendingType === "Дз" ? " active" : ""}" onclick="pickJournalGradeType('Дз')">Дз</button>` +
+    '</div>';
+
   const quickBtns = hasTopic
-    ? '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Поставить оценку</div>' +
+    ? typeToggle +
+      '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Поставить оценку</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">' +
       JOURNAL_GRADE_VALUES.map(v =>
         pillBtn(v, journalGradePendingBase === v, `pickJournalGradeBase('${v}')`, false)
@@ -4212,6 +4256,11 @@ function pickJournalGradeBase(v) {
 function pickJournalGradeMod(m) {
   if(!journalGradePendingBase) return;
   journalGradePendingMod = journalGradePendingMod === m ? "" : m;
+  renderJournalGradeModal();
+}
+
+function pickJournalGradeType(t) {
+  journalGradePendingType = t;
   renderJournalGradeModal();
 }
 
@@ -4258,7 +4307,7 @@ async function saveJournalGradePending(childId) {
       body: JSON.stringify({
         city: activeJournalCity, class_name: activeJournalClass,
         child_id: childId, subject_id: journalGradesSubjectId,
-        date: journalGradesDate, value, grade_type: "Урок", comment,
+        date: journalGradesDate, value, grade_type: journalGradePendingType, comment,
       }),
     });
     const d = await resp.json();
