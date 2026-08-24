@@ -292,7 +292,7 @@
          с вкладкой "Оценки" (или всегда в учительском режиме, где вкладок
          нет вообще) — тогда же карандаш и скрыт, так что ряд не теснится. -->
     <div style="display:none;gap:8px" id="journalGradesActionsRow">
-      <button onclick="openJournalHistory()" class="filter-btn">История уроков</button>
+      <button onclick="openJournalHistory()" class="filter-btn" id="journalHistoryBtn">История уроков</button>
       <button onclick="openJournalPeriodGrades()" class="filter-btn">Итоговые оценки</button>
     </div>
   </div>
@@ -3582,15 +3582,20 @@ function journalGradesToday() {
   return dateToDmy(now);
 }
 
-function shiftJournalGradesDate(delta) {
-  if(journalGradesDate === null) journalGradesDate = journalGradesToday();
-  const d = dmyToDate(journalGradesDate);
-  d.setDate(d.getDate() + delta);
-  const dmy = dateToDmy(d);
-  if(dmy > journalGradesToday()) return;
-  journalGradesDate = dmy;
-  journalGradesEditingId = null;
-  loadJournalGrades();
+// Отдельная строка "‹ Сегодня ›" отъедала место (жалоба пользователя) — раз
+// есть кнопка "История уроков" со списком дат, дата и так там показывается
+// по тапу. Вместо отдельного переключателя сама кнопка "История уроков"
+// теперь двойного назначения: на сегодняшнем уроке — обычная подпись, на
+// любой другой дате — подсвечивается акцентом (как "Сохранить") и вместо
+// текста показывает саму дату, чтобы было видно, что урок не сегодняшний.
+function updateJournalHistoryBtn() {
+  const btn = document.getElementById("journalHistoryBtn");
+  if(!btn) return;
+  const isToday = journalGradesDate === journalGradesToday();
+  btn.textContent = isToday ? "История уроков" : formatShortDate(journalGradesDate);
+  btn.style.borderColor = isToday ? "var(--border)" : "var(--accent)";
+  btn.style.color = isToday ? "var(--text2)" : "var(--accent)";
+  btn.style.fontWeight = isToday ? "" : "600";
 }
 
 function switchJournalGradesSubject(id) {
@@ -3764,24 +3769,28 @@ function closeJournalHistory() {
   document.getElementById("journalHistoryModalOverlay").classList.remove("show");
 }
 
+// "Сегодня" закреплено первой строкой всегда (даже без темы/дз) — это
+// теперь единственный способ вернуться к сегодняшнему уроку после перехода
+// на другую дату из истории (отдельный переключатель "‹ Сегодня ›" убрали,
+// жалоба пользователя на лишнее место).
 function renderJournalHistoryModal(history) {
-  if(!history.length) {
-    document.getElementById("journalHistoryModalContent").innerHTML =
-      '<div class="empty" style="padding:20px 0">Пока нет уроков по этому предмету</div>';
-    return;
-  }
+  const today = journalGradesToday();
+  const todayEntry = history.find(h => h.date === today) || {date: today, topic: null, homework: null};
+  const items = [todayEntry, ...history.filter(h => h.date !== today)];
   // Тема и ДЗ — каждое на своей строке (жалоба пользователя: в одну строку
   // через "·" нечитабельно), без бейджа с числом оценок — он тут не нужен.
-  document.getElementById("journalHistoryModalContent").innerHTML = history.map(h => `
+  document.getElementById("journalHistoryModalContent").innerHTML = items.map(h => {
+    const isToday = h.date === today;
+    return `
     <div onclick="jumpToJournalHistoryDate('${h.date}')" style="padding:10px 2px;border-bottom:1px solid var(--border);cursor:pointer">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
-        <div style="font-weight:600;font-size:14px">${formatShortDate(h.date)}</div>
+        <div style="font-weight:600;font-size:14px${isToday ? ";color:var(--accent)" : ""}">${isToday ? "Сегодня" : formatShortDate(h.date)}</div>
         <span class="child-arrow">›</span>
       </div>
       <div style="font-size:13px;color:var(--text);margin-bottom:${h.homework ? "2px" : "0"}">${h.topic ? h.topic : "без темы"}</div>
       ${h.homework ? `<div style="font-size:12px;color:var(--text2)">ДЗ: ${h.homework}</div>` : ""}
-    </div>`
-  ).join("");
+    </div>`;
+  }).join("");
 }
 
 function jumpToJournalHistoryDate(date) {
@@ -3957,6 +3966,7 @@ async function setJournalPeriodGrade(childId, value) {
 // прогоне: "система проставления оценок выглядит некрасиво, слишком большая").
 function renderJournalGrades() {
   const container = document.getElementById("journalViewGrades");
+  updateJournalHistoryBtn();
   const options = journalGradesSubjectOptions();
   if(!options.length) {
     container.innerHTML = journalViewTeacherMode
@@ -3965,8 +3975,6 @@ function renderJournalGrades() {
     return;
   }
 
-  const dateLabel = journalGradesDate === journalGradesToday() ? "Сегодня" : formatShortDate(journalGradesDate);
-  const nextDisabled = journalGradesDate === journalGradesToday();
   const subjOptions = options.map(s =>
     `<option value="${s.id}"${s.id === journalGradesSubjectId ? " selected" : ""}>${s.name}</option>`
   ).join("");
@@ -3975,11 +3983,6 @@ function renderJournalGrades() {
   const homeworkValue = (journalHomework && journalHomework.text) || "";
 
   let html = `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-      <button onclick="shiftJournalGradesDate(-1)" style="border:none;background:var(--surface2);border-radius:10px;width:30px;height:30px;cursor:pointer;color:var(--text);flex-shrink:0">&lsaquo;</button>
-      <div style="flex:1;text-align:center;font-weight:600;font-size:14px">${dateLabel}</div>
-      <button onclick="shiftJournalGradesDate(1)" ${nextDisabled ? "disabled" : ""} style="border:none;background:var(--surface2);border-radius:10px;width:30px;height:30px;color:var(--text);flex-shrink:0${nextDisabled ? ";opacity:.35" : ";cursor:pointer"}">&rsaquo;</button>
-    </div>
     <select id="journalGradesSubjectSelect" onchange="switchJournalGradesSubject(this.value)"
       style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px">
       ${subjOptions}
