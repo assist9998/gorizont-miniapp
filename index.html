@@ -3896,6 +3896,17 @@ function jumpToJournalHistoryDate(date) {
 // модификаторов +/- и без комментария, тап по цифре сразу сохраняет
 // (запрос пользователя: "сначала итоговые оценки").
 const JOURNAL_PERIODS = ["1 четверть", "2 четверть", "3 четверть", "4 четверть", "Год"];
+// Даты четвертей 2026/2027 — рекомендованный федеральный график Минпросвещения РФ
+// (учебный год 01.09.2026-26.05.2027). Конкретная школа может сдвигать даты в
+// пределах нескольких дней своим календарным графиком, но отдельного графика
+// у Горизонта нет — берём стандарт как попросил пользователь.
+const JOURNAL_QUARTER_RANGES = {
+  "1 четверть": { from: "01.09.2026", to: "25.10.2026" },
+  "2 четверть": { from: "04.11.2026", to: "30.12.2026" },
+  "3 четверть": { from: "11.01.2027", to: "26.03.2027" },
+  "4 четверть": { from: "05.04.2027", to: "26.05.2027" },
+  "Год": { from: "01.09.2026", to: "26.05.2027" },
+};
 let journalPeriod = JOURNAL_PERIODS[0];
 let journalPeriodGrades = [];
 let journalPeriodExpandedChild = null; // id ребёнка, у которого сейчас раскрыт ряд оценок 2-3-4-5
@@ -3905,18 +3916,17 @@ function toggleJournalPeriodRow(childId) {
   renderJournalPeriodModal();
 }
 
-// Средний балл за месяц — подсказка рядом с именем ребёнка, чтобы было от
+// Средний балл за четверть — подсказка рядом с именем ребёнка, чтобы было от
 // чего оттолкнуться при выставлении итоговой (запрос пользователя: "может
 // проще за месячную оценку среднего высчитывают"). Считается из текущих
-// оценок (journal_grades) за выбранный месяц, не сохраняется — учитель
-// видит цифру и сам решает, что поставить. Модификаторы (+/-) не учитываем —
-// усреднять базовую цифру честнее, чем изобретать произвольный вес для "4+".
-let journalAvgView = null; // {year, month} — 0-indexed месяц
+// оценок (journal_grades) за даты выбранной четверти (JOURNAL_QUARTER_RANGES),
+// не сохраняется — учитель видит цифру и сам решает, что поставить.
+// Модификаторы (+/-) не учитываем — усреднять базовую цифру честнее, чем
+// изобретать произвольный вес для "4+".
 let journalAvgByChild = {}; // {childId: "4.3"}
 
 async function openJournalPeriodGrades() {
   journalPeriodExpandedChild = null;
-  if(!journalAvgView) journalAvgView = { year: now.getFullYear(), month: now.getMonth() };
   document.getElementById("journalPeriodModalContent").innerHTML =
     '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем...</div>';
   document.getElementById("journalPeriodModalOverlay").classList.add("show");
@@ -3930,7 +3940,7 @@ function closeJournalPeriodGrades() {
 async function switchJournalPeriod(period) {
   journalPeriod = period;
   journalPeriodExpandedChild = null;
-  await loadJournalPeriodGrades();
+  await Promise.all([loadJournalPeriodGrades(), loadJournalAvg()]);
 }
 
 async function loadJournalPeriodGrades() {
@@ -3950,29 +3960,15 @@ async function loadJournalPeriodGrades() {
   renderJournalPeriodModal();
 }
 
-function prevJournalAvgMonth() {
-  if(journalAvgView.month === 0) { journalAvgView.year--; journalAvgView.month = 11; }
-  else journalAvgView.month--;
-  loadJournalAvg();
-}
-function nextJournalAvgMonth() {
-  const isCurrent = journalAvgView.year === now.getFullYear() && journalAvgView.month === now.getMonth();
-  if(isCurrent) return;
-  if(journalAvgView.month === 11) { journalAvgView.year++; journalAvgView.month = 0; }
-  else journalAvgView.month++;
-  loadJournalAvg();
-}
-
 async function loadJournalAvg() {
-  const { year, month } = journalAvgView;
-  const dateFrom = fmtDMY(year, month, 1);
-  const dateTo = fmtDMY(year, month, new Date(year, month + 1, 0).getDate());
+  const range = JOURNAL_QUARTER_RANGES[journalPeriod];
   journalAvgByChild = {};
+  if(!range) { renderJournalPeriodModal(); return; }
   try {
     const resp = await fetch(
       API_URL + "/journal/grades?city=" + encodeURIComponent(activeJournalCity) +
       "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
-      "&date_from=" + dateFrom + "&date_to=" + dateTo,
+      "&date_from=" + range.from + "&date_to=" + range.to,
       {headers: authHeaders()},
     );
     const d = await resp.json();
@@ -4000,14 +3996,10 @@ function renderJournalPeriodModal() {
     `<button class="filter-btn${p === journalPeriod ? " active" : ""}" onclick="switchJournalPeriod('${p}')">${p}</button>`
   ).join("") + '</div>';
 
-  const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
-  const isCurrentMonth = journalAvgView.year === now.getFullYear() && journalAvgView.month === now.getMonth();
-  const avgNav = `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-      <button onclick="prevJournalAvgMonth()" style="border:none;background:var(--surface2);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text);flex-shrink:0">&lsaquo;</button>
-      <div style="flex:1;text-align:center;font-size:12px;color:var(--text2)">Средний балл · ${RU_MONTHS[journalAvgView.month]}</div>
-      <button onclick="nextJournalAvgMonth()" ${isCurrentMonth ? "disabled" : ""} style="border:none;background:var(--surface2);border-radius:10px;width:28px;height:28px;color:var(--text);flex-shrink:0${isCurrentMonth ? ";opacity:.35" : ";cursor:pointer"}">&rsaquo;</button>
-    </div>`;
+  const range = JOURNAL_QUARTER_RANGES[journalPeriod];
+  const avgNav = range
+    ? `<div style="text-align:center;font-size:12px;color:var(--text2);margin-bottom:12px">Средний балл · ${formatShortDate(range.from)} — ${formatShortDate(range.to)}</div>`
+    : "";
 
   if(!journalClassStudents.length) {
     document.getElementById("journalPeriodModalContent").innerHTML = periodSelect + avgNav + '<div class="empty">Пока нет учеников в этом классе</div>';
