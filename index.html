@@ -300,7 +300,7 @@
   <!-- Значок класса — бейджиком как в списке классов (avatar-oval), а не
        мелким текстом рядом с "Назад" (терялся, жалоба пользователя) —
        своей строкой, освобождает верхнюю строку под кнопки. -->
-  <div class="avatar avatar-oval" id="journalViewTitle" style="margin-bottom:16px">Класс</div>
+  <div class="avatar avatar-oval" id="journalViewTitle" style="margin-bottom:16px;border:1.5px solid var(--border);background:var(--surface)">Класс</div>
 
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="journalViewTabBar">
     <button class="filter-btn active" id="journalViewTab-schedule" onclick="switchJournalViewTab('schedule')">Расписание</button>
@@ -335,7 +335,7 @@
     </button>
   </div>
   <!-- Значок класса — тот же бейджик, что на экране просмотра (project_gorizont). -->
-  <div class="avatar avatar-oval" id="journalClassTitle" style="margin-bottom:16px">Класс</div>
+  <div class="avatar avatar-oval" id="journalClassTitle" style="margin-bottom:16px;border:1.5px solid var(--border);background:var(--surface)">Класс</div>
   <div id="journalRenameRow" style="display:none;gap:8px;margin-bottom:16px">
     <input id="journalRenameInput" type="text" style="flex:1;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
     <button onclick="saveJournalClassRename()" style="flex-shrink:0;padding:0 16px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Сохранить</button>
