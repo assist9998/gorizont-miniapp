@@ -4973,14 +4973,32 @@ async function saveLessonDay() {
   if(!s || !dateStr) return;
   const lockKey = s.id + "|" + dateStr;
   if(window._staffAttPending.has(lockKey)) return;
-  window._staffAttPending.add(lockKey);
 
   const count = s.lesson_rate ? (window._lessonModalCount ?? 0) : 0;
   const extToday = s.extended_day_rate ? window._lessonModalExt : false;
+  const nextStatus = (count > 0 || extToday) ? "present" : "absent";
+
+  // Своя карточка (не правка админом за другого сотрудника) и итог
+  // "present" — бэкенд требует геолокацию для самоотметки (is_self_checkin
+  // в api.py, не зависит от даты), а эта модалка её не спрашивала → всегда
+  // 400 geolocation_required, ничего не сохранялось (баг: нельзя было
+  // выбрать число уроков). Спрашиваем так же, как markSelfAttendance.
+  const isSelf = staffInfo && s.id === staffInfo.payroll_staff_id;
+  const needsGeo = isSelf && nextStatus === "present" && !isAdminRole(staffInfo.role);
+  let coords = null;
+  if(needsGeo) {
+    try {
+      coords = await getGeoPosition();
+    } catch(e) {
+      showToast("Нужна геолокация, чтобы отметиться — разрешите доступ к местоположению", true);
+      return;
+    }
+  }
+
+  window._staffAttPending.add(lockKey);
   const prevDetails = window._staffCalLessonDetails[dateStr] || {};
   const days = window._staffCalDays;
   const prevStatus = days[dateStr];
-  const nextStatus = (count > 0 || extToday) ? "present" : "absent";
   days[dateStr] = nextStatus;
   window._staffCalLessonDetails[dateStr] = { lessons_count: count, worked_extended_day: extToday };
   closeLessonModal();
@@ -4990,7 +5008,10 @@ async function saveLessonDay() {
     const resp = await fetch(API_URL + "/payroll/attendance", {
       method: "POST",
       headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({staff_id: s.id, date: dateStr, status: nextStatus, lessons_count: count, worked_extended_day: extToday})
+      body: JSON.stringify(Object.assign(
+        {staff_id: s.id, date: dateStr, status: nextStatus, lessons_count: count, worked_extended_day: extToday},
+        coords ? {lat: coords.lat, lng: coords.lng} : {},
+      ))
     });
     const data = await resp.json();
     if(!data.ok) throw new Error(data.error || "save failed");
@@ -5010,7 +5031,13 @@ async function saveLessonDay() {
     days[dateStr] = prevStatus;
     window._staffCalLessonDetails[dateStr] = prevDetails;
     renderStaffCalendarModal();
-    showToast("Не удалось сохранить", true);
+    if(e.message === "too_far") {
+      showToast("Вы не на месте — отметиться можно только рядом с садиком/школой", true);
+    } else if(e.message === "geolocation_required") {
+      showToast("Не удалось определить местоположение, попробуйте ещё раз", true);
+    } else {
+      showToast("Не удалось сохранить", true);
+    }
   } finally {
     window._staffAttPending.delete(lockKey);
   }
