@@ -3013,6 +3013,14 @@ function switchJournalViewTab(tab) {
   // прячем всю панель вкладок целиком.
   document.getElementById("journalViewTabBar").style.display = tab === "grades" ? "none" : "flex";
   document.getElementById("journalGradesActionsRow").style.display = tab === "grades" ? "flex" : "none";
+  // Карандаш здесь тоже не нужен — тема урока, дз, оценки и посещаемость на
+  // этой вкладке и так редактируются прямо на месте, а карандаш вместо
+  // "редактировать это окно" уводил в редактирование расписания/предметов
+  // (жалоба пользователя, project_gorizont). В режиме учителя кнопка и так
+  // скрыта на всех вкладках — не трогаем.
+  if(!journalViewTeacherMode) {
+    document.getElementById("journalViewEditBtn").style.display = tab === "grades" ? "none" : "";
+  }
   if(tab === "grades") loadJournalGrades();
 }
 
