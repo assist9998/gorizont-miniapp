@@ -3876,11 +3876,9 @@ function renderJournalHistoryModal(history) {
         <div style="font-size:8.5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;opacity:.85">${months[d.getMonth()]}</div>
       </div>
       <div class="child-detail">
-        ${isToday ? '<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px">Сегодня</div>' : ""}
         <div class="child-detail-name"${h.topic ? "" : ' style="font-weight:500;color:var(--text2)"'}>${h.topic ? h.topic : "без темы"}</div>
         ${h.homework ? `<div class="child-detail-meta">ДЗ: ${h.homework}</div>` : ""}
       </div>
-      <span class="child-arrow">›</span>
     </div>`;
   }).join("");
 }
