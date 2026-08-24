@@ -3898,6 +3898,12 @@ function jumpToJournalHistoryDate(date) {
 const JOURNAL_PERIODS = ["1 четверть", "2 четверть", "3 четверть", "4 четверть", "Год"];
 let journalPeriod = JOURNAL_PERIODS[0];
 let journalPeriodGrades = [];
+let journalPeriodExpandedChild = null; // id ребёнка, у которого сейчас раскрыт ряд оценок 2-3-4-5
+
+function toggleJournalPeriodRow(childId) {
+  journalPeriodExpandedChild = journalPeriodExpandedChild === childId ? null : childId;
+  renderJournalPeriodModal();
+}
 
 // Средний балл за месяц — подсказка рядом с именем ребёнка, чтобы было от
 // чего оттолкнуться при выставлении итоговой (запрос пользователя: "может
@@ -3909,6 +3915,7 @@ let journalAvgView = null; // {year, month} — 0-indexed месяц
 let journalAvgByChild = {}; // {childId: "4.3"}
 
 async function openJournalPeriodGrades() {
+  journalPeriodExpandedChild = null;
   if(!journalAvgView) journalAvgView = { year: now.getFullYear(), month: now.getMonth() };
   document.getElementById("journalPeriodModalContent").innerHTML =
     '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем...</div>';
@@ -3922,6 +3929,7 @@ function closeJournalPeriodGrades() {
 
 async function switchJournalPeriod(period) {
   journalPeriod = period;
+  journalPeriodExpandedChild = null;
   await loadJournalPeriodGrades();
 }
 
@@ -4011,20 +4019,30 @@ function renderJournalPeriodModal() {
     const g = journalPeriodGrades.find(pg => pg.child_id == c.id);
     const avg = journalAvgByChild[c.id];
     const initials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2);
-    const btns = JOURNAL_GRADE_VALUES.map(v =>
-      `<button onclick="setJournalPeriodGrade(${c.id},'${v}')" style="width:32px;height:32px;border-radius:50%;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;` +
-      (g && g.value === v
-        ? 'border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff'
-        : 'border:1.5px solid var(--border);background:var(--surface2);color:var(--text)') +
-      `">${v}</button>`
-    ).join("");
+    const expanded = journalPeriodExpandedChild === c.id;
+    // Свёрнуто — одна плашка (текущая оценка или "—"), тап раскрывает ряд
+    // 2-3-4-5 (просьба пользователя: список из полного ряда кружков на
+    // каждого ученика выглядел громоздко, лучше раскрывать по тапу).
+    const actionArea = expanded
+      ? JOURNAL_GRADE_VALUES.map(v =>
+          `<button onclick="setJournalPeriodGrade(${c.id},'${v}')" style="width:32px;height:32px;border-radius:50%;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;` +
+          (g && g.value === v
+            ? 'border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff'
+            : 'border:1.5px solid var(--border);background:var(--surface2);color:var(--text)') +
+          `">${v}</button>`
+        ).join("")
+      : `<button onclick="toggleJournalPeriodRow(${c.id})" style="width:32px;height:32px;border-radius:50%;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;` +
+        (g
+          ? 'border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff'
+          : 'border:1.5px dashed var(--border);background:var(--surface2);color:var(--text2)') +
+        `">${g ? g.value : "—"}</button>`;
     return `<div class="child-list-item" style="cursor:default">
       <div class="avatar" style="flex-shrink:0">${initials}</div>
       <div class="child-detail">
         <div class="child-detail-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
         ${avg ? `<div class="child-detail-meta">ср. ${avg}</div>` : ""}
       </div>
-      <div style="display:flex;gap:6px;flex-shrink:0">${btns}</div>
+      <div style="display:flex;gap:6px;flex-shrink:0">${actionArea}</div>
     </div>`;
   }).join("");
 
@@ -4043,6 +4061,7 @@ async function setJournalPeriodGrade(childId, value) {
     });
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
+    journalPeriodExpandedChild = null;
     await loadJournalPeriodGrades();
     showToast("Итоговая оценка сохранена");
   } catch(e) {
