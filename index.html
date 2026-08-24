@@ -3982,16 +3982,18 @@ function renderJournalGrades() {
   const topicValue = (journalLessonTopic && journalLessonTopic.topic) || "";
   const homeworkValue = (journalHomework && journalHomework.text) || "";
 
+  // Предмет и тема — в одном ряду (просьба пользователя: раньше выпадающий
+  // список предмета занимал отдельную полноширинную строку сам по себе).
   let html = `
-    <select id="journalGradesSubjectSelect" onchange="switchJournalGradesSubject(this.value)"
-      style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px">
-      ${subjOptions}
-    </select>
     <div style="margin-bottom:16px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тема урока${hasTopic ? "" : " — обязательно"}</div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="journalGradesSubjectSelect" onchange="switchJournalGradesSubject(this.value)"
+          style="flex:0 1 116px;min-width:96px;padding:10px 8px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box">
+          ${subjOptions}
+        </select>
         <input id="journalLessonTopicInput" type="text" value="${topicValue.replace(/"/g, "&quot;")}" placeholder="Например: Дроби — сложение и вычитание"
-          style="flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
+          style="flex:1;min-width:120px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
         <button onclick="saveJournalLessonTopic()" style="flex-shrink:0;padding:0 14px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Сохранить</button>
       </div>
     </div>`;
