@@ -125,13 +125,16 @@ const CHECKIN_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none
 // в основном приложении персонала (пилюля "← Назад" + бейдж avatar-oval).
 let screenStack = [];
 
-function screenHeadRow(showBack, badgeText) {
+function screenHeadRow(showBack, name, groupText) {
   const back = showBack
     ? '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">' +
       '<button onclick="goBack()" style="flex-shrink:0;padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>' +
       '</div>'
     : "";
-  return back + `<div class="avatar avatar-oval" style="margin-bottom:16px;border:1.5px solid var(--border);background:var(--surface)">${escapeHtml(badgeText)}</div>`;
+  const badges = [groupText, name].filter(Boolean)
+    .map(t => `<div class="avatar avatar-oval" style="border:1.5px solid var(--border);background:var(--surface)">${escapeHtml(t)}</div>`)
+    .join("");
+  return back + `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${badges}</div>`;
 }
 
 function showScreen(id) {
@@ -209,7 +212,7 @@ async function openChild(c, showBack = true) {
   activeChild = c;
   if(showBack) navTo("child"); else showScreen("child");
   document.getElementById("childContent").innerHTML =
-    screenHeadRow(showBack, c.name) + '<div id="childBody"><div class="empty">Загрузка...</div></div>';
+    screenHeadRow(showBack, c.name, c.group) + '<div id="childBody"><div class="empty">Загрузка...</div></div>';
   await renderChildSchool();
 }
 
