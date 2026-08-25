@@ -2495,7 +2495,9 @@ function openEditForm(id) {
   document.getElementById("formSubmitBtn").textContent = "Сохранить изменения";
   document.getElementById("formDeleteBtn").style.display = "block";
   document.getElementById("archiveBtn").style.display = "none";
-  document.getElementById("parentLinkRow").style.display = "block";
+  // Родительская панель есть только для школьников — детсадовский родитель
+  // видел бы там лишь календарь посещаемости, решили что это не нужно.
+  document.getElementById("parentLinkRow").style.display = c.dept === "Школа" ? "block" : "none";
   const nameParts = splitFullName(c.name);
   document.getElementById("f_name").value = nameParts.name;
   document.getElementById("f_surname").value = nameParts.surname;
