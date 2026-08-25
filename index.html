@@ -3420,12 +3420,38 @@ function renderJournalStudents() {
         <div class="child-detail-name">${c.name}</div>
         <div class="child-detail-meta">${c.dob ? calcAge(c.dob) : ""}</div>
       </div>
+      <button onclick="downloadReportCard('${c.id}', '${c.name.replace(/'/g, "\\'")}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;flex-shrink:0">ведомость</button>
       <button onclick="removeChildFromClass('${c.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">убрать</button>
     </div>`;
   });
   if(!journalClassStudents.length) html = '<div class="empty">Пока нет учеников в этом классе</div>';
   document.getElementById("journalStudentList").innerHTML = html;
   renderJournalAssignSelect();
+}
+
+// Ведомость успеваемости (xlsx) — для перевода ребёнка в другую школу.
+// Бэкенд отдаёт файл напрямую (не JSON), поэтому нельзя открыть ссылку
+// напрямую (нужны authHeaders) — качаем через fetch+blob и триггерим
+// сохранение через временную <a download>.
+async function downloadReportCard(id, name) {
+  try {
+    const resp = await fetch(API_URL + "/journal/report-card?child_id=" + id, {headers: authHeaders()});
+    if(!resp.ok) {
+      const d = await resp.json().catch(() => ({}));
+      throw new Error(d.error || "Ошибка загрузки");
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Ведомость ${name}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    showToast(e.message || "Не удалось скачать ведомость", true);
+  }
 }
 
 function renderJournalAssignSelect() {
