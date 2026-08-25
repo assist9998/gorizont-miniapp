@@ -176,6 +176,12 @@ async function init() {
   }
   renderChildrenList();
   showScreen("children");
+
+  // ?child_id= — кнопка в боте у родителя с несколькими детьми ведёт сразу
+  // в дневник конкретного ребёнка (см. kb_parent_menu), а не в общий список.
+  const targetId = new URLSearchParams(location.search).get("child_id");
+  const targetChild = targetId && parentChildren.find(c => String(c.id) === targetId);
+  if(targetChild) await openChild(targetChild, true);
 }
 init();
 
