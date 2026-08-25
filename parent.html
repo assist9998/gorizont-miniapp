@@ -345,7 +345,11 @@ function schoolDayDetailHtml(dateStr) {
   const rows = lessons.map((e, i) => {
     const item = feedBySubject[e.subject_id];
     const time = [e.time_start, e.time_end].filter(Boolean).join("–");
-    const grades = ((item && item.grades) || []).map(g => `<span class="grade-chip">${escapeHtml(g)}</span>`).join(" ");
+    const gradeItems = (item && item.grades) || [];
+    const grades = gradeItems.map(g => `<span class="grade-chip">${escapeHtml(g.value)}</span>`).join(" ");
+    const gradeComments = gradeItems.filter(g => g.comment)
+      .map(g => `<div style="font-size:12px;color:var(--text2);margin-top:2px">${escapeHtml(g.value)}: ${escapeHtml(g.comment)}</div>`)
+      .join("");
     const present = item && item.attendance === "present";
     const attIcon = item && item.attendance
       ? `<span style="flex-shrink:0;margin-top:2px;color:${present ? "var(--accent2)" : "var(--text2)"};display:flex" title="${present ? "Был на уроке" : "Не был на уроке"}">${CHECKIN_ICON}</span>`
@@ -358,6 +362,7 @@ function schoolDayDetailHtml(dateStr) {
         ${item && item.topic ? `<div style="font-size:13px;margin-top:4px">${escapeHtml(item.topic)}</div>` : ""}
         ${item && item.homework ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">ДЗ: ${escapeHtml(item.homework)}</div>` : ""}
         ${grades ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${grades}</div>` : ""}
+        ${gradeComments}
       </div>
       ${attIcon}
     </div>`;
