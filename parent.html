@@ -373,12 +373,18 @@ function schoolDayDetailHtml(dateStr) {
 }
 
 // ── Сад: календарь посещаемости ──────────────────────────────────────
+// Тот же паттерн, что и школьный дневник: дни с данными кликабельны, тап
+// раскрывает карточку статуса той же иконкой-галочкой (без заливки
+// зелёным/красным по дням — это выбивалось из общего стиля, см. школьный
+// календарь, единственный акцентный цвет — var(--accent)).
 let histView = null; // {year, month(0-11)}
 let histData = {current:{present:0,absent:0,total:0}, prev:{present:0,absent:0,total:0}, days:{}};
+let histSelectedDate = null;
 
 async function renderChildAttendance() {
   const n = new Date();
   histView = {year: n.getFullYear(), month: n.getMonth()};
+  histSelectedDate = null;
   try {
     const resp = await fetch(API_URL + "/parent/attendance-history?child_id=" + activeChild.id, {headers: authHeaders()});
     const data = await resp.json();
@@ -392,6 +398,7 @@ function fmtDMY(year, month, day) {
 }
 function prevHistMonth() { histView.month === 0 ? (histView.year--, histView.month = 11) : histView.month--; renderCalendar(); }
 function nextHistMonth() { histView.month === 11 ? (histView.year++, histView.month = 0) : histView.month++; renderCalendar(); }
+function selectHistDate(dateStr) { histSelectedDate = histSelectedDate === dateStr ? null : dateStr; renderCalendar(); }
 
 function renderCalendar() {
   const { year, month } = histView;
@@ -414,8 +421,12 @@ function renderCalendar() {
     const status = histData.days[dateStr];
     if(status === "present") present++;
     if(status === "absent") absent++;
-    const bg = status === "present" ? "rgba(56,217,169,.25)" : status === "absent" ? "rgba(255,107,107,.25)" : "var(--surface)";
-    grid += `<div class="cal-cell" style="background:${bg}">${d}</div>`;
+    const hasStatus = !!status;
+    const selected = dateStr === histSelectedDate;
+    const bg = selected ? "var(--accent)" : hasStatus ? "rgba(79,142,247,.18)" : "var(--surface)";
+    const color = selected ? "#fff" : hasStatus ? "var(--text)" : "var(--text2)";
+    const clickAttr = hasStatus ? ` onclick="selectHistDate('${dateStr}')"` : "";
+    grid += `<div class="cal-cell"${clickAttr} style="background:${bg};color:${color};${hasStatus ? "cursor:pointer" : "opacity:.4"}">${d}</div>`;
   });
   grid += "</div>";
 
@@ -427,8 +438,23 @@ function renderCalendar() {
     </div>
     ${grid}
     <div class="cal-legend">
-      <span>Пришёл: <b style="color:var(--accent2)">${present}</b></span>
-      <span>Нет: <b style="color:var(--danger)">${absent}</b></span>
+      <span>Дней в саду: <b style="color:var(--text)">${present}</b></span>
+      <span>Пропущено: <b style="color:var(--text)">${absent}</b></span>
+    </div>
+  </div>` + (histSelectedDate ? histDayDetailHtml(histSelectedDate) : "");
+}
+
+function histDayDetailHtml(dateStr) {
+  const d = dmyToDate(dateStr);
+  const present = histData.days[dateStr] === "present";
+  const head = `<div class="avatar" style="flex-direction:column;gap:0;background:var(--accent);color:#fff;margin-bottom:12px">
+    <div style="font-size:14px;font-weight:700;line-height:1.05">${d.getDate()}</div>
+    <div style="font-size:7px;font-weight:600;text-transform:uppercase;letter-spacing:.02em;opacity:.85">${RU_MONTHS_SHORT[d.getMonth()]}</div>
+  </div>`;
+  return head + `<div class="child-list-item" style="cursor:default">
+    <span style="flex-shrink:0;color:${present ? "var(--accent2)" : "var(--text2)"};display:flex">${CHECKIN_ICON}</span>
+    <div class="child-detail">
+      <div class="child-detail-name">${present ? "Был в саду" : "Не был в саду"}</div>
     </div>
   </div>`;
 }
