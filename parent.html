@@ -20,9 +20,8 @@
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{font-family:'Geologica',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 
-  .header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 16px;padding-top:calc(52px + env(safe-area-inset-top));display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100}
+  .header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 16px;padding-top:calc(52px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
   .header-title{font-size:17px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-  .back-btn{padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer;flex-shrink:0}
 
   .screen{display:none;padding:16px}
   .screen.active{display:block}
@@ -57,9 +56,11 @@
 </head>
 <body>
 
-<div class="header">
-  <button class="back-btn" id="backBtn" style="display:none" onclick="goBack()">&#8592;</button>
-  <div class="header-title" onclick="toggleTheme()" style="flex:1;cursor:pointer" id="screenTitle">Горизонт</div>
+<div class="header" style="justify-content:center">
+  <div class="header-title" onclick="toggleTheme()" style="font-size:20px;display:flex;align-items:center;gap:8px;cursor:pointer">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/></svg>
+    Горизонт
+  </div>
 </div>
 
 <div class="screen active" id="screen-loading">
@@ -71,6 +72,7 @@
 </div>
 
 <div class="screen" id="screen-children">
+  <div style="font-size:15px;font-weight:700;margin-bottom:14px">Мои дети</div>
   <div id="childrenList"></div>
 </div>
 
@@ -92,7 +94,7 @@ function authHeaders(extra) {
     extra || {}
   );
 }
-if(tg){ tg.ready(); tg.expand(); }
+if(tg){ tg.ready(); tg.expand(); if(tg.requestFullscreen) tg.requestFullscreen(); }
 
 function applyTheme(theme) { document.documentElement.setAttribute("data-theme", theme); }
 function toggleTheme() {
@@ -114,27 +116,36 @@ function formatShortDate(dmy) {
   return parseInt(d, 10) + " " + RU_MONTHS_SHORT[parseInt(m, 10) - 1];
 }
 
-// ── Навигация — простой стек экранов (без нижнего таб-бара, только drill-down) ──
+// ── Навигация — простой стек экранов (без нижнего таб-бара, только drill-down).
+// Верхний .header статичный (лого+"Горизонт", как в index.html) — заголовок
+// экрана и "Назад" рисуются внутри самого экрана, тем же паттерном, что и
+// в основном приложении персонала (пилюля "← Назад" + бейдж avatar-oval).
 let screenStack = [];
-let screenTitles = {"children": "Мои дети"};
 
-function showScreen(id, title) {
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  document.getElementById("screen-" + id).classList.add("active");
-  document.getElementById("screenTitle").textContent = title || "Горизонт";
-  document.getElementById("backBtn").style.display = screenStack.length ? "" : "none";
+function screenHeadRow(showBack, badgeText) {
+  const back = showBack
+    ? '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">' +
+      '<button onclick="goBack()" style="flex-shrink:0;padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>' +
+      '</div>'
+    : "";
+  return back + `<div class="avatar avatar-oval" style="margin-bottom:16px;border:1.5px solid var(--border);background:var(--surface)">${escapeHtml(badgeText)}</div>`;
 }
 
-function navTo(id, title) {
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById("screen-" + id).classList.add("active");
+}
+
+function navTo(id) {
   const current = document.querySelector(".screen.active")?.id?.replace("screen-", "");
-  if(current && current !== id) screenStack.push({id: current, title: document.getElementById("screenTitle").textContent});
-  showScreen(id, title);
+  if(current && current !== id) screenStack.push(current);
+  showScreen(id);
 }
 
 function goBack() {
   const prev = screenStack.pop();
   if(!prev) return;
-  showScreen(prev.id, prev.title);
+  showScreen(prev);
 }
 
 // ── Данные ──────────────────────────────────────────────────────────
@@ -158,14 +169,12 @@ async function init() {
   }
   if(parentChildren.length === 1) {
     // Единственный ребёнок — сразу его экран, это и есть корень (без
-    // возможности вернуться к списку из одного элемента).
-    await openChild(parentChildren[0]);
-    screenStack = [];
-    document.getElementById("backBtn").style.display = "none";
+    // возможности вернуться к списку из одного элемента, поэтому без "Назад").
+    await openChild(parentChildren[0], false);
     return;
   }
   renderChildrenList();
-  showScreen("children", "Мои дети");
+  showScreen("children");
 }
 init();
 
@@ -183,10 +192,11 @@ function renderChildrenList() {
   }).join("");
 }
 
-async function openChild(c) {
+async function openChild(c, showBack = true) {
   activeChild = c;
-  navTo("child", c.name);
-  document.getElementById("childContent").innerHTML = '<div class="empty">Загрузка...</div>';
+  if(showBack) navTo("child"); else showScreen("child");
+  document.getElementById("childContent").innerHTML =
+    screenHeadRow(showBack, c.name) + '<div id="childBody"><div class="empty">Загрузка...</div></div>';
   if(c.dept === "Школа") {
     await renderChildSubjects();
   } else {
@@ -203,11 +213,12 @@ async function renderChildSubjects() {
     subjects = data.ok ? data.subjects : [];
   } catch(e) { console.error("subjects error:", e); }
 
+  const body = document.getElementById("childBody");
   if(!subjects.length) {
-    document.getElementById("childContent").innerHTML = '<div class="empty">Пока нет предметов</div>';
+    body.innerHTML = '<div class="empty">Пока нет предметов</div>';
     return;
   }
-  document.getElementById("childContent").innerHTML = subjects.map(s => {
+  body.innerHTML = subjects.map(s => {
     // Экранируем для JS-строки внутри onclick-атрибута (не HTML-сущности —
     // те к моменту разбора JS уже раскодированы браузером обратно в кавычку).
     const jsSafeName = String(s.name).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
@@ -222,8 +233,9 @@ async function renderChildSubjects() {
 async function openSubjectFeed(subjectId, subjectName) {
   activeSubjectId = subjectId;
   activeSubjectName = subjectName;
-  navTo("subject-feed", subjectName);
-  document.getElementById("subjectFeedList").innerHTML = '<div class="empty">Загрузка...</div>';
+  navTo("subject-feed");
+  document.getElementById("subjectFeedList").innerHTML =
+    screenHeadRow(true, subjectName) + '<div id="subjectFeedBody"><div class="empty">Загрузка...</div></div>';
   let feed = [];
   try {
     const resp = await fetch(
@@ -234,11 +246,12 @@ async function openSubjectFeed(subjectId, subjectName) {
     feed = data.ok ? data.feed : [];
   } catch(e) { console.error("subject-feed error:", e); }
 
+  const body = document.getElementById("subjectFeedBody");
   if(!feed.length) {
-    document.getElementById("subjectFeedList").innerHTML = '<div class="empty">Пока нет записей по этому предмету</div>';
+    body.innerHTML = '<div class="empty">Пока нет записей по этому предмету</div>';
     return;
   }
-  document.getElementById("subjectFeedList").innerHTML = feed.map(item => {
+  body.innerHTML = feed.map(item => {
     const attBadge = item.attendance === "present"
       ? '<span class="att-pill present">Был</span>'
       : item.attendance === "absent"
@@ -305,7 +318,7 @@ function renderCalendar() {
   });
   grid += "</div>";
 
-  document.getElementById("childContent").innerHTML = `<div class="cal-wrap">
+  document.getElementById("childBody").innerHTML = `<div class="cal-wrap">
     <div class="cal-nav">
       <button onclick="prevHistMonth()">&lsaquo;</button>
       <div style="font-weight:700;font-size:13px">${RU_MONTHS[month]} ${year}</div>
