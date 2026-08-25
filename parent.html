@@ -35,22 +35,14 @@
   .child-detail-name{font-size:14px;font-weight:600;margin-bottom:2px}
   .child-detail-meta{font-size:12px;color:var(--text2)}
 
-  .feed-item{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:12px 14px;margin-bottom:8px;display:flex;flex-direction:column;gap:6px}
-  .feed-date-row{display:flex;justify-content:space-between;align-items:center}
-  .feed-date{font-weight:700;font-size:13px}
-  .feed-topic{font-size:13px;line-height:1.4}
-  .feed-homework{font-size:12px;color:var(--text2);line-height:1.4}
   .grade-chip{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--accent);color:#fff;font-size:12px;font-weight:700}
-  .att-pill{font-size:11px;font-weight:600;padding:3px 9px;border-radius:12px}
-  .att-pill.present{background:rgba(56,217,169,.18);color:var(--accent2)}
-  .att-pill.absent{background:rgba(255,107,107,.18);color:var(--danger)}
 
   .cal-wrap{background:var(--surface2);border-radius:12px;padding:12px;margin-bottom:16px}
   .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
   .cal-nav button{border:none;background:var(--surface);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text);font-size:15px}
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
   .cal-dow{text-align:center;font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px}
-  .cal-cell{aspect-ratio:1;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+  .cal-cell{aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
   .cal-legend{display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text2)}
 </style>
 </head>
@@ -80,10 +72,6 @@
   <div id="childContent"></div>
 </div>
 
-<div class="screen" id="screen-subject-feed">
-  <div id="subjectFeedList"></div>
-</div>
-
 <script>
 const API_URL = "https://y95h81n2pl7zlyb6hfca50s2.95.179.188.141.sslip.io";
 const tg = window.Telegram?.WebApp;
@@ -111,10 +99,25 @@ function escapeHtml(s) {
 
 // дд.мм.гггг -> "12 сен"
 const RU_MONTHS_SHORT = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
+const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 function formatShortDate(dmy) {
   const [d, m] = dmy.split(".");
   return parseInt(d, 10) + " " + RU_MONTHS_SHORT[parseInt(m, 10) - 1];
 }
+
+// дд.мм.гггг -> Date
+function dmyToDate(dmy) {
+  const [d, m, y] = dmy.split(".").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// Тот же значок отметки посещаемости, что и в index.html (CHECKIN_ICON) —
+// там кликабельный тумблер, здесь просто индикатор (родитель ничего не
+// меняет), цвет как там же: зелёный (--accent2) = был, серый = не был.
+const CHECKIN_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+  '<circle cx="12" cy="12" r="10"/>' +
+  '<polyline points="7.5 12.5 10.5 15.5 16.5 8.5"/>' +
+  '</svg>';
 
 // ── Навигация — простой стек экранов (без нижнего таб-бара, только drill-down).
 // Верхний .header статичный (лого+"Горизонт", как в index.html) — заголовок
@@ -151,8 +154,6 @@ function goBack() {
 // ── Данные ──────────────────────────────────────────────────────────
 let parentChildren = [];
 let activeChild = null;
-let activeSubjectId = null;
-let activeSubjectName = "";
 
 async function init() {
   try {
@@ -193,81 +194,176 @@ function renderChildrenList() {
 }
 
 async function openChild(c, showBack = true) {
+  if(!activeChild || activeChild.id !== c.id) {
+    // Смена ребёнка (у родителя может быть несколько) — кэш и раскрытый
+    // день предыдущего ребёнка тут не годятся.
+    schoolCache = null;
+    schoolSelectedDate = null;
+  }
   activeChild = c;
   if(showBack) navTo("child"); else showScreen("child");
   document.getElementById("childContent").innerHTML =
     screenHeadRow(showBack, c.name) + '<div id="childBody"><div class="empty">Загрузка...</div></div>';
   if(c.dept === "Школа") {
-    await renderChildSubjects();
+    await renderChildSchool();
   } else {
     await renderChildAttendance();
   }
 }
 
-// ── Школа: список предметов ──────────────────────────────────────────
-async function renderChildSubjects() {
-  let subjects = [];
-  try {
-    const resp = await fetch(API_URL + "/parent/subjects?child_id=" + activeChild.id, {headers: authHeaders()});
-    const data = await resp.json();
-    subjects = data.ok ? data.subjects : [];
-  } catch(e) { console.error("subjects error:", e); }
+// ── Школа: календарь-дневник ───────────────────────────────────────────
+// Как в бумажном дневнике: открываем месяц, дни с уроками (по расписанию)
+// кликабельны, тап раскрывает список уроков этого конкретного дня — тема,
+// домашка, оценки, был/не был. Расписание задаёт, какие предметы в какой
+// день недели, реальные данные (тема/дз/оценки/посещаемость) подтягиваются
+// из ленты каждого предмета и кэшируются один раз при открытии ребёнка —
+// дальше переключение месяцев и раскрытие дней работает без новых запросов.
+let schoolCache = null; // {subjects, schedule, feedByDate: {"дд.мм.гггг": [{subject_id, subject_name, topic, homework, grades, attendance}]}}
+let schoolCalView = null; // {year, month(0-11)}
+let schoolSelectedDate = null;
 
+async function renderChildSchool() {
   const body = document.getElementById("childBody");
-  if(!subjects.length) {
+  if(!schoolCache) {
+    body.innerHTML = '<div class="empty">Загрузка...</div>';
+    let subjects = [], schedule = [];
+    try {
+      const resp = await fetch(API_URL + "/parent/subjects?child_id=" + activeChild.id, {headers: authHeaders()});
+      const data = await resp.json();
+      subjects = data.ok ? data.subjects : [];
+    } catch(e) { console.error("subjects error:", e); }
+    try {
+      const resp = await fetch(API_URL + "/parent/schedule?child_id=" + activeChild.id, {headers: authHeaders()});
+      const data = await resp.json();
+      schedule = data.ok ? data.schedule : [];
+    } catch(e) { console.error("schedule error:", e); }
+
+    const feedByDate = {};
+    await Promise.all(subjects.map(async s => {
+      try {
+        const resp = await fetch(
+          API_URL + "/parent/subject-feed?child_id=" + activeChild.id + "&subject_id=" + s.id,
+          {headers: authHeaders()},
+        );
+        const data = await resp.json();
+        (data.ok ? data.feed : []).forEach(item => {
+          (feedByDate[item.date] = feedByDate[item.date] || [])
+            .push(Object.assign({subject_id: s.id, subject_name: s.name}, item));
+        });
+      } catch(e) { console.error("subject-feed error:", e); }
+    }));
+
+    schoolCache = {subjects, schedule, feedByDate};
+  }
+
+  if(!schoolCache.subjects.length) {
     body.innerHTML = '<div class="empty">Пока нет предметов</div>';
     return;
   }
-  body.innerHTML = subjects.map(s => {
-    // Экранируем для JS-строки внутри onclick-атрибута (не HTML-сущности —
-    // те к моменту разбора JS уже раскодированы браузером обратно в кавычку).
-    const jsSafeName = String(s.name).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-    return `<div class="child-list-item" onclick="openSubjectFeed(${s.id}, '${jsSafeName}')">
-      <div class="avatar avatar-oval">${escapeHtml(s.name)}</div>
-      <div class="child-detail"></div>
-      <span class="child-arrow">&#8250;</span>
-    </div>`;
-  }).join("");
+  if(!schoolCalView) {
+    const n = new Date();
+    schoolCalView = {year: n.getFullYear(), month: n.getMonth()};
+  }
+  renderSchoolCalendar();
 }
 
-async function openSubjectFeed(subjectId, subjectName) {
-  activeSubjectId = subjectId;
-  activeSubjectName = subjectName;
-  navTo("subject-feed");
-  document.getElementById("subjectFeedList").innerHTML =
-    screenHeadRow(true, subjectName) + '<div id="subjectFeedBody"><div class="empty">Загрузка...</div></div>';
-  let feed = [];
-  try {
-    const resp = await fetch(
-      API_URL + "/parent/subject-feed?child_id=" + activeChild.id + "&subject_id=" + subjectId,
-      {headers: authHeaders()},
-    );
-    const data = await resp.json();
-    feed = data.ok ? data.feed : [];
-  } catch(e) { console.error("subject-feed error:", e); }
+function prevSchoolMonth() { schoolCalView.month === 0 ? (schoolCalView.year--, schoolCalView.month = 11) : schoolCalView.month--; renderSchoolCalendar(); }
+function nextSchoolMonth() { schoolCalView.month === 11 ? (schoolCalView.year++, schoolCalView.month = 0) : schoolCalView.month++; renderSchoolCalendar(); }
+function selectSchoolDate(dateStr) { schoolSelectedDate = schoolSelectedDate === dateStr ? null : dateStr; renderSchoolCalendar(); }
 
-  const body = document.getElementById("subjectFeedBody");
-  if(!feed.length) {
-    body.innerHTML = '<div class="empty">Пока нет записей по этому предмету</div>';
-    return;
+function renderSchoolCalendar() {
+  const { year, month } = schoolCalView;
+  const DOW = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+  const schoolWeekdays = new Set(schoolCache.schedule.map(e => e.weekday));
+
+  let startDow = new Date(year, month, 1).getDay();
+  startDow = startDow === 0 ? 6 : startDow - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells = [];
+  for(let i = 0; i < startDow; i++) cells.push(null);
+  for(let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  let sumGrades = 0, cntGrades = 0;
+  let grid = DOW.map(d => `<div class="cal-dow">${d}</div>`).join("");
+  grid = `<div class="cal-grid" style="margin-bottom:4px">${grid}</div><div class="cal-grid">`;
+  cells.forEach(d => {
+    if(d === null) { grid += "<div></div>"; return; }
+    const dateStr = fmtDMY(year, month, d);
+    const jsDow = new Date(year, month, d).getDay();
+    const isoDow = jsDow === 0 ? 7 : jsDow;
+    const hasLessons = schoolWeekdays.has(isoDow);
+    const entries = schoolCache.feedByDate[dateStr] || [];
+    entries.forEach(item => (item.grades || []).forEach(g => {
+      const n = parseInt(g, 10);
+      if(!isNaN(n)) { sumGrades += n; cntGrades++; }
+    }));
+    const selected = dateStr === schoolSelectedDate;
+    const bg = selected ? "var(--accent)" : entries.length ? "rgba(79,142,247,.18)" : "var(--surface)";
+    const color = selected ? "#fff" : hasLessons ? "var(--text)" : "var(--text2)";
+    const clickAttr = hasLessons ? ` onclick="selectSchoolDate('${dateStr}')"` : "";
+    grid += `<div class="cal-cell"${clickAttr} style="background:${bg};color:${color};${hasLessons ? "cursor:pointer" : "opacity:.4"}">${d}</div>`;
+  });
+  grid += "</div>";
+
+  const avg = cntGrades ? (sumGrades / cntGrades).toFixed(1) : null;
+  const avgLine = avg
+    ? `<div style="text-align:center;font-size:12px;color:var(--text2);margin-bottom:10px">Средний балл за месяц: <b style="color:var(--text)">${avg}</b></div>`
+    : "";
+
+  document.getElementById("childBody").innerHTML = avgLine + `<div class="cal-wrap">
+    <div class="cal-nav">
+      <button onclick="prevSchoolMonth()">&lsaquo;</button>
+      <div style="font-weight:700;font-size:13px">${RU_MONTHS[month]} ${year}</div>
+      <button onclick="nextSchoolMonth()">&rsaquo;</button>
+    </div>
+    ${grid}
+  </div>` + (schoolSelectedDate ? schoolDayDetailHtml(schoolSelectedDate) : "");
+}
+
+function schoolDayDetailHtml(dateStr) {
+  const d = dmyToDate(dateStr);
+  const jsDow = d.getDay();
+  const isoDow = jsDow === 0 ? 7 : jsDow;
+  const lessons = schoolCache.schedule
+    .filter(e => e.weekday === isoDow)
+    .slice()
+    .sort((a, b) => (a.time_start || "").localeCompare(b.time_start || ""));
+
+  const feedBySubject = {};
+  (schoolCache.feedByDate[dateStr] || []).forEach(item => { feedBySubject[item.subject_id] = item; });
+
+  const head = `<div class="avatar" style="flex-direction:column;gap:0;background:var(--accent);color:#fff;margin-bottom:12px">
+    <div style="font-size:14px;font-weight:700;line-height:1.05">${d.getDate()}</div>
+    <div style="font-size:7px;font-weight:600;text-transform:uppercase;letter-spacing:.02em;opacity:.85">${RU_MONTHS_SHORT[d.getMonth()]}</div>
+  </div>`;
+
+  if(!lessons.length) {
+    return head + '<div class="empty">Уроков нет</div>';
   }
-  body.innerHTML = feed.map(item => {
-    const attBadge = item.attendance === "present"
-      ? '<span class="att-pill present">Был</span>'
-      : item.attendance === "absent"
-      ? '<span class="att-pill absent">Не был</span>'
+
+  const rows = lessons.map((e, i) => {
+    const item = feedBySubject[e.subject_id];
+    const time = [e.time_start, e.time_end].filter(Boolean).join("–");
+    const grades = ((item && item.grades) || []).map(g => `<span class="grade-chip">${escapeHtml(g)}</span>`).join(" ");
+    const present = item && item.attendance === "present";
+    const attIcon = item && item.attendance
+      ? `<span style="flex-shrink:0;margin-top:2px;color:${present ? "var(--accent2)" : "var(--text2)"};display:flex" title="${present ? "Был на уроке" : "Не был на уроке"}">${CHECKIN_ICON}</span>`
       : "";
-    const grades = (item.grades || []).map(g => `<span class="grade-chip">${escapeHtml(g)}</span>`).join(" ");
-    return `<div class="feed-item">
-      <div class="feed-date-row">
-        <div class="feed-date">${formatShortDate(item.date)}</div>
-        ${attBadge}
+    return `<div class="child-list-item" style="cursor:default;align-items:flex-start">
+      <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;margin-top:2px">${i + 1}</div>
+      <div class="child-detail">
+        <div class="child-detail-name">${escapeHtml(e.subject_name || "Предмет")}</div>
+        <div class="child-detail-meta">${time || "Время не указано"}</div>
+        ${item && item.topic ? `<div style="font-size:13px;margin-top:4px">${escapeHtml(item.topic)}</div>` : ""}
+        ${item && item.homework ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">ДЗ: ${escapeHtml(item.homework)}</div>` : ""}
+        ${grades ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${grades}</div>` : ""}
       </div>
-      ${item.topic ? `<div class="feed-topic">${escapeHtml(item.topic)}</div>` : '<div class="feed-topic" style="color:var(--text2)">Тема не указана</div>'}
-      ${item.homework ? `<div class="feed-homework">ДЗ: ${escapeHtml(item.homework)}</div>` : ""}
-      ${grades ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${grades}</div>` : ""}
+      ${attIcon}
     </div>`;
   }).join("");
+
+  return head + rows;
 }
 
 // ── Сад: календарь посещаемости ──────────────────────────────────────
@@ -293,7 +389,6 @@ function nextHistMonth() { histView.month === 11 ? (histView.year++, histView.mo
 
 function renderCalendar() {
   const { year, month } = histView;
-  const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
   const DOW = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 
   let startDow = new Date(year, month, 1).getDay();
