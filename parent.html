@@ -131,10 +131,15 @@ function screenHeadRow(showBack, name, groupText) {
       '<button onclick="goBack()" style="flex-shrink:0;padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>' +
       '</div>'
     : "";
-  const badges = [groupText, name].filter(Boolean)
-    .map(t => `<div class="avatar avatar-oval" style="border:1.5px solid var(--border);background:var(--surface)">${escapeHtml(t)}</div>`)
-    .join("");
-  return back + `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${badges}</div>`;
+  const parts = [groupText, name].filter(Boolean);
+  const badges = parts.map((t, i) => {
+    // Класс — по своему содержимому, имя — тянется на оставшуюся ширину
+    // (последний бейдж всегда самый "тяжёлый" по тексту), вместе на всю
+    // ширину экрана.
+    const grow = i === parts.length - 1 ? "1 1 auto" : "0 0 auto";
+    return `<div class="avatar avatar-oval" style="flex:${grow};width:auto;border:1.5px solid var(--border);background:var(--surface)">${escapeHtml(t)}</div>`;
+  }).join("");
+  return back + `<div style="display:flex;gap:8px;margin-bottom:16px">${badges}</div>`;
 }
 
 function showScreen(id) {
