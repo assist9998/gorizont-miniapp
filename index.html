@@ -757,6 +757,16 @@ function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
 }
 
+// Экранирование свободного текста (имя ребёнка, класс, тема урока, дз,
+// комментарий к оценке и т.п.) перед вставкой в innerHTML — эти поля вводит
+// сотрудник/учитель руками, без экранирования это stored XSS: скрипт,
+// подсунутый в имя одним сотрудником, выполнился бы в браузере всех, кто
+// потом откроет эту карточку (security review, 2026-08-25). Та же функция,
+// что уже есть в parent.html — держим их идентичными.
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
 function toggleTheme() {
   const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
   const next = current === "light" ? "dark" : "light";
@@ -1370,7 +1380,7 @@ function renderAttList() {
     const gPresent = kids.filter(k => map[k.id] === true).length;
     html += `<div class="group-section">
       <div class="group-header">
-        <div class="group-title">${group}</div>
+        <div class="group-title">${escapeHtml(group)}</div>
         <div class="group-count">${gPresent}/${kids.length}</div>
       </div>`;
 
@@ -1385,10 +1395,10 @@ function renderAttList() {
           <div onclick="openAttCalendar('${child.id}')" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer">
             <div class="avatar">${initials}</div>
             <div class="child-info">
-              <div class="child-name">${child.name}</div>
+              <div class="child-name">${escapeHtml(child.name)}</div>
               <div class="child-meta">
-                ${child.until ? `<span class="time-badge">до ${child.until}</span>` : ""}
-                ${child.type ? `<span>${child.type}</span>` : ""}
+                ${child.until ? `<span class="time-badge">до ${escapeHtml(child.until)}</span>` : ""}
+                ${child.type ? `<span>${escapeHtml(child.type)}</span>` : ""}
                 ${hasAllergy ? '<div class="allergy-dot"></div>' : ""}
               </div>
             </div>
@@ -1570,8 +1580,8 @@ function renderChildList() {
     return `<div class="child-list-item" onclick="openModal('${child.id}')">
       <div class="avatar">${initials}</div>
       <div class="child-detail">
-        <div class="child-detail-name">${child.name}</div>
-        <div class="child-detail-meta">${child.group || "Без группы"}${age ? " · " + age : ""}${child.type ? " · " + child.type : ""}</div>
+        <div class="child-detail-name">${escapeHtml(child.name)}</div>
+        <div class="child-detail-meta">${escapeHtml(child.group || "Без группы")}${age ? " · " + age : ""}${child.type ? " · " + escapeHtml(child.type) : ""}</div>
       </div>
       ${(!staffInfo || isAdminRole(staffInfo.role)) ? `<button onclick="event.stopPropagation();openEditForm('${child.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>` : ""}
       <span class="child-arrow">›</span>
@@ -1583,7 +1593,7 @@ function renderChildList() {
     for(const [group, kids] of Object.entries(byGroup)) {
       html += `<div class="group-section">
         <div class="group-header">
-          <div class="group-title">${group}</div>
+          <div class="group-title">${escapeHtml(group)}</div>
           <div class="group-count">${kids.length}</div>
         </div>${kids.map(childItem).join("")}</div>`;
     }
@@ -1764,7 +1774,7 @@ function renderHistCalendar(history) {
 function renderCalendarModal(c, history) {
   const cal = renderHistCalendar(history);
   document.getElementById("modalContent").innerHTML =
-    '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (c.group||"") + '</div>' +
+    '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + escapeHtml(c.group||"") + '</div>' +
     '<div style="background:var(--surface2);border-radius:12px;padding:12px">' +
       cal.html +
       '<div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text2)">' +
@@ -1784,7 +1794,7 @@ function renderModal(c) {
   // Тип/до какого времени — только у сада, у школы этих полей нет вообще
   // (см. typeUntilRow в форме) — не показываем "до" без значения.
   const typeUntil = c.type ? (c.type + (c.until ? " до " + c.until : "")) : "";
-  const subtitleParts = [age, c.group, typeUntil].filter(Boolean);
+  const subtitleParts = [age, c.group, typeUntil].filter(Boolean).map(escapeHtml);
 
   document.getElementById("modalContent").innerHTML =
     // Subtitle
@@ -1792,20 +1802,20 @@ function renderModal(c) {
     // Rows
     '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
       '<span style="color:var(--text2)">Родитель</span>' +
-      '<span style="font-weight:500">' + (parts[0]||"—").trim() + '</span>' +
+      '<span style="font-weight:500">' + escapeHtml((parts[0]||"—").trim()) + '</span>' +
     '</div>' +
     '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
       '<span style="color:var(--text2)">Телефон</span>' +
-      '<span style="font-weight:500">' + (parts[1]||"—").trim() + '</span>' +
+      '<span style="font-weight:500">' + escapeHtml((parts[1]||"—").trim()) + '</span>' +
     '</div>' +
     '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
       '<span style="color:var(--text2)">Telegram</span>' +
-      '<span style="font-weight:500;color:var(--accent)">' + (parts[2]||"—").trim() + '</span>' +
+      '<span style="font-weight:500;color:var(--accent)">' + escapeHtml((parts[2]||"—").trim()) + '</span>' +
     '</div>' +
     (hasAllergy ?
       '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;align-items:center;font-size:13px">' +
         '<span style="color:var(--text2)">Особенности</span>' +
-        '<span class="allergy-chip">' + c.allergy + '</span>' +
+        '<span class="allergy-chip">' + escapeHtml(c.allergy) + '</span>' +
       '</div>' : "") +
     '<div style="height:6px"></div>';
 }
@@ -1991,7 +2001,7 @@ function renderNotifications() {
       '<div style="font-size:20px;flex-shrink:0;width:32px;height:32px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:' + n.color + ';font-weight:700">' + n.icon + '</div>' +
       '<div style="flex:1;min-width:0">' +
         '<div style="font-size:14px;font-weight:600;margin-bottom:3px;color:' + n.color + '">' + n.title + '</div>' +
-        '<div style="font-size:13px;color:var(--text2)">' + n.text + '</div>' +
+        '<div style="font-size:13px;color:var(--text2)">' + escapeHtml(n.text) + '</div>' +
       '</div>' +
       '<div style="color:var(--text2);font-size:18px;align-self:center">›</div>' +
     '</div>'
@@ -2449,8 +2459,8 @@ function openArchive() {
     `<div onclick="restoreChild('${c.id}')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface2);border-radius:14px;margin-bottom:8px;cursor:pointer">
       <div class="avatar">${c.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
       <div>
-        <div style="font-weight:600;font-size:14px">${c.name}</div>
-        <div style="font-size:12px;color:var(--text2)">${c.city} · ${c.group||""}</div>
+        <div style="font-weight:600;font-size:14px">${escapeHtml(c.name)}</div>
+        <div style="font-size:12px;color:var(--text2)">${escapeHtml(c.city)} · ${escapeHtml(c.group||"")}</div>
       </div>
     </div>`
   ).join("") : '<div class="empty">Архив пуст</div>';
@@ -2736,8 +2746,8 @@ function renderStaffList() {
     html += `<div class="child-list-item" onclick="openStaffCalendar('${s.id}')">
       <div class="avatar">${initials}</div>
       <div class="child-detail">
-        <div class="child-detail-name">${s.name}</div>
-        <div class="child-detail-meta">${s.position || "—"}${rate ? " · " + rate : ""}</div>
+        <div class="child-detail-name">${escapeHtml(s.name)}</div>
+        <div class="child-detail-meta">${escapeHtml(s.position || "—")}${rate ? " · " + rate : ""}</div>
       </div>
       <button onclick="event.stopPropagation();openEditStaffForm('${s.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>
       <span class="child-arrow">›</span>
@@ -3111,7 +3121,7 @@ function renderJournalTeacherSelect() {
   const sel = document.getElementById("js_teacher");
   const prev = sel.value;
   sel.innerHTML = '<option value="">Без учителя</option>' +
-    journalTeachers.map(t => `<option value="${t.id}">${t.name}${t.position ? " (" + t.position + ")" : ""}</option>`).join("");
+    journalTeachers.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
   sel.value = prev;
 }
 
@@ -3120,13 +3130,13 @@ function renderJournalSubjects() {
   journalSubjects.forEach(s => {
     if(s.id === editingJournalSubjectId) {
       html += `<div style="display:flex;align-items:center;gap:4px;padding:4px;border-radius:20px;border:1.5px solid var(--accent);background:var(--surface2)">
-        <input id="journalSubjectEditInput_${s.id}" type="text" value="${s.name.replace(/"/g, "&quot;")}" style="width:90px;padding:4px 8px;border-radius:14px;border:none;background:transparent;color:var(--text);font-family:inherit;font-size:13px;outline:none">
+        <input id="journalSubjectEditInput_${s.id}" type="text" value="${escapeHtml(s.name)}" style="width:90px;padding:4px 8px;border-radius:14px;border:none;background:transparent;color:var(--text);font-family:inherit;font-size:13px;outline:none">
         <button onclick="saveJournalSubjectEdit(${s.id})" style="border:none;background:transparent;color:var(--accent);cursor:pointer;font-size:14px;padding:2px 4px">✓</button>
         <button onclick="cancelJournalSubjectEdit()" style="border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:14px;padding:2px 4px">✕</button>
       </div>`;
     } else {
       html += `<div style="display:flex;align-items:center;gap:6px;padding:6px 6px 6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px">
-        <span onclick="startJournalSubjectEdit(${s.id})" style="cursor:pointer">${s.name}</span>
+        <span onclick="startJournalSubjectEdit(${s.id})" style="cursor:pointer">${escapeHtml(s.name)}</span>
         <button onclick="deleteJournalSubject(${s.id})" style="border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px">×</button>
       </div>`;
     }
@@ -3137,7 +3147,7 @@ function renderJournalSubjects() {
   const sel = document.getElementById("js_subject");
   const prev = sel.value;
   sel.innerHTML = '<option value="">Без предмета</option>' +
-    journalSubjects.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+    journalSubjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
   sel.value = prev;
 }
 
@@ -3210,7 +3220,7 @@ function journalLessonCardsHtml(schedule, selectedDay, editable) {
   }
   return entries.map((e, i) => {
     const time = [e.time_start, e.time_end].filter(Boolean).join("–");
-    const meta = [time, e.teacher_name].filter(Boolean).join(" · ");
+    const meta = escapeHtml([time, e.teacher_name].filter(Boolean).join(" · "));
     const clickAttr = editable
       ? ` onclick="startJournalScheduleEdit(${e.id})"`
       : e.subject_id ? ` onclick="openJournalScheduleLessonGrades(${e.subject_id})"` : ' style="cursor:default"';
@@ -3218,7 +3228,7 @@ function journalLessonCardsHtml(schedule, selectedDay, editable) {
     return `<div class="child-list-item"${clickAttr}>
         <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${i + 1}</div>
         <div class="child-detail">
-          <div class="child-detail-name">${e.subject_name || "Предмет не указан"}</div>
+          <div class="child-detail-name">${e.subject_name ? escapeHtml(e.subject_name) : "Предмет не указан"}</div>
           <div class="child-detail-meta">${meta || "Время не указано"}</div>
         </div>
         ${delBtn}
@@ -3417,7 +3427,7 @@ function renderJournalStudents() {
     html += `<div class="child-list-item" style="cursor:default">
       <div class="avatar">${initials}</div>
       <div class="child-detail">
-        <div class="child-detail-name">${c.name}</div>
+        <div class="child-detail-name">${escapeHtml(c.name)}</div>
         <div class="child-detail-meta">${c.dob ? calcAge(c.dob) : ""}</div>
       </div>
       <button onclick="downloadReportCard('${c.id}', '${jsAttrEscape(c.name)}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;flex-shrink:0">ведомость</button>
@@ -3470,7 +3480,7 @@ function renderJournalAssignSelect() {
     c.city === activeJournalCity && c.dept === "Школа" && c.group !== activeJournalClass
   );
   sel.innerHTML = candidates.length
-    ? candidates.map(c => `<option value="${c.id}">${c.name}${c.group ? " (" + c.group + ")" : " (без класса)"}</option>`).join("")
+    ? candidates.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.group ? " (" + escapeHtml(c.group) + ")" : " (без класса)"}</option>`).join("")
     : '<option value="">Нет доступных учеников</option>';
 }
 
@@ -3582,8 +3592,8 @@ function renderJournalView() {
     return `<div class="child-list-item" onclick="openJournalViewSubjectGrades(${s.id})">
       <div class="avatar">${initial}</div>
       <div class="child-detail">
-        <div class="child-detail-name">${s.name}</div>
-        <div class="child-detail-meta">${teacherLine}</div>
+        <div class="child-detail-name">${escapeHtml(s.name)}</div>
+        <div class="child-detail-meta">${escapeHtml(teacherLine)}</div>
       </div>
       <span class="child-arrow">&#8250;</span>
     </div>`;
@@ -3597,7 +3607,7 @@ function renderJournalView() {
     return `<div class="child-list-item" style="cursor:default">
       <div class="avatar">${initials}</div>
       <div class="child-detail">
-        <div class="child-detail-name">${c.name}</div>
+        <div class="child-detail-name">${escapeHtml(c.name)}</div>
         <div class="child-detail-meta">${c.dob ? calcAge(c.dob) : ""}</div>
       </div>
     </div>`;
@@ -3657,9 +3667,9 @@ function journalGradeBadgeHtml(value, gradeType, size) {
     ? '<span style="position:absolute;bottom:-4px;right:-4px;font-size:7px;font-weight:700;line-height:1.3;background:var(--surface);color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:0 3px">дз</span>'
     : "";
   if(size === "sm") {
-    return `<span class="time-badge" style="position:relative;display:inline-block;background:var(--accent);color:#fff;font-weight:700">${value}${mark}</span>`;
+    return `<span class="time-badge" style="position:relative;display:inline-block;background:var(--accent);color:#fff;font-weight:700">${escapeHtml(value)}${mark}</span>`;
   }
-  return `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;flex-shrink:0">${value}${mark}</span>`;
+  return `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 6px;border-radius:13px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;flex-shrink:0">${escapeHtml(value)}${mark}</span>`;
 }
 
 // Отдельная строка "‹ Сегодня ›" отъедала место (жалоба пользователя) — раз
@@ -3913,8 +3923,8 @@ function renderJournalHistoryModal(history) {
         <div style="font-size:7px;font-weight:600;text-transform:uppercase;letter-spacing:.02em;opacity:.85">${months[d.getMonth()]}</div>
       </div>
       <div class="child-detail">
-        <div class="child-detail-name"${h.topic ? "" : ' style="font-weight:500;color:var(--text2)"'}>${h.topic ? h.topic : "без темы"}</div>
-        ${h.homework ? `<div class="child-detail-meta">ДЗ: ${h.homework}</div>` : ""}
+        <div class="child-detail-name"${h.topic ? "" : ' style="font-weight:500;color:var(--text2)"'}>${h.topic ? escapeHtml(h.topic) : "без темы"}</div>
+        ${h.homework ? `<div class="child-detail-meta">ДЗ: ${escapeHtml(h.homework)}</div>` : ""}
       </div>
     </div>`;
   }).join("");
@@ -4066,11 +4076,11 @@ function renderJournalPeriodModal() {
         (g
           ? 'border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff'
           : 'border:1.5px solid var(--border);background:var(--surface2);color:var(--text2)') +
-        `">${g ? g.value : "—"}</button>`;
+        `">${g ? escapeHtml(g.value) : "—"}</button>`;
     return `<div class="child-list-item" style="cursor:default">
       <div class="avatar" style="flex-shrink:0">${initials}</div>
       <div class="child-detail">
-        <div class="child-detail-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
+        <div class="child-detail-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.name)}</div>
         ${avg ? `<div class="child-detail-meta">средний балл ${avg}</div>` : ""}
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">${actionArea}</div>
@@ -4130,7 +4140,7 @@ function renderJournalGrades() {
   // классу), и если ведёт в этом классе больше одного своего предмета,
   // переключаться между ними больше неоткуда, кроме этого списка.
   const subjOptions = journalViewTeacherMode ? options.map(s =>
-    `<option value="${s.id}"${s.id === journalGradesSubjectId ? " selected" : ""}>${s.name}</option>`
+    `<option value="${s.id}"${s.id === journalGradesSubjectId ? " selected" : ""}>${escapeHtml(s.name)}</option>`
   ).join("") : "";
   const subjectSelectHtml = journalViewTeacherMode && options.length > 1
     ? `<select id="journalGradesSubjectSelect" onchange="switchJournalGradesSubject(this.value)"
@@ -4155,7 +4165,7 @@ function renderJournalGrades() {
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тема урока${hasTopic ? "" : " — обязательно"}</div>
         <div style="position:relative">
-          <input id="journalLessonTopicInput" type="text" value="${topicValue.replace(/"/g, "&quot;")}" data-original="${topicValue.replace(/"/g, "&quot;")}"
+          <input id="journalLessonTopicInput" type="text" value="${escapeHtml(topicValue)}" data-original="${escapeHtml(topicValue)}"
             oninput="onJournalTopicInput()" placeholder="Например: Дроби — сложение и вычитание"
             style="width:100%;padding:10px 40px 10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
           ${saveIconBtn("journalTopicSaveBtn", "saveJournalLessonTopic()")}
@@ -4164,7 +4174,7 @@ function renderJournalGrades() {
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Домашнее задание</div>
         <div style="position:relative">
-          <input id="journalHomeworkInput" type="text" value="${homeworkValue.replace(/"/g, "&quot;")}" data-original="${homeworkValue.replace(/"/g, "&quot;")}"
+          <input id="journalHomeworkInput" type="text" value="${escapeHtml(homeworkValue)}" data-original="${escapeHtml(homeworkValue)}"
             oninput="onJournalHomeworkInput()" placeholder="Например: §12, упр. 3-5"
             style="width:100%;padding:10px 40px 10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
           ${saveIconBtn("journalHomeworkSaveBtn", "saveJournalHomework()")}
@@ -4189,7 +4199,7 @@ function renderJournalGrades() {
         <div onclick="openJournalGradeModal(${c.id})" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer">
           <div class="avatar">${initials}</div>
           <div class="child-info">
-            <div class="child-name">${c.name}</div>
+            <div class="child-name">${escapeHtml(c.name)}</div>
             <div class="child-meta">${badges || '<span>нет оценок</span>'}</div>
           </div>
         </div>
@@ -4233,9 +4243,9 @@ function renderJournalGradeModal() {
     const badge = journalGradeBadgeHtml(g.value, g.grade_type);
     if(journalGradesEditingId === g.id) {
       return `<div style="display:flex;flex-direction:column;gap:6px;padding:8px;margin-bottom:6px;border-radius:10px;background:var(--surface2)">
-        <div style="display:flex;align-items:center;gap:8px">${badge}<span style="font-size:11px;color:var(--text2)">${(journalLessonTopic && journalLessonTopic.topic) || ""}</span></div>
+        <div style="display:flex;align-items:center;gap:8px">${badge}<span style="font-size:11px;color:var(--text2)">${escapeHtml((journalLessonTopic && journalLessonTopic.topic) || "")}</span></div>
         <textarea id="journalGradeCommentInput_${g.id}" placeholder="За что оценка — увидят родители"
-          style="width:100%;min-height:50px;padding:8px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box">${g.comment || ""}</textarea>
+          style="width:100%;min-height:50px;padding:8px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box">${escapeHtml(g.comment || "")}</textarea>
         <div style="display:flex;gap:8px">
           <button onclick="saveJournalGradeComment(${g.id})" style="flex:1;padding:6px;border-radius:8px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:12px;cursor:pointer">Сохранить</button>
           <button onclick="deleteJournalGrade(${g.id})" style="flex:1;padding:6px;border-radius:8px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:inherit;font-size:12px;cursor:pointer">Удалить</button>
@@ -4245,7 +4255,7 @@ function renderJournalGradeModal() {
     }
     return `<div onclick="toggleJournalGradeEdit(${g.id})" style="display:flex;align-items:center;gap:8px;padding:5px 2px;cursor:pointer">
       ${badge}
-      <span style="font-size:12px;color:var(--text2);flex:1;min-width:0">${g.comment ? g.comment : "без комментария — нажмите, чтобы добавить"}</span>
+      <span style="font-size:12px;color:var(--text2);flex:1;min-width:0">${g.comment ? escapeHtml(g.comment) : "без комментария — нажмите, чтобы добавить"}</span>
     </div>`;
   }).join("");
 
@@ -4284,7 +4294,7 @@ function renderJournalGradeModal() {
       pillBtn("+", journalGradePendingMod === "+", `pickJournalGradeMod('+')`, !journalGradePendingBase) +
       '</div>' +
       `<textarea id="journalGradePendingComment" oninput="journalGradePendingComment=this.value" placeholder="За что оценка — увидят родители"
-         style="width:100%;min-height:50px;padding:8px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box;margin-bottom:8px">${journalGradePendingComment}</textarea>
+         style="width:100%;min-height:50px;padding:8px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box;margin-bottom:8px">${escapeHtml(journalGradePendingComment)}</textarea>
        <button onclick="saveJournalGradePending(${c.id})" class="btn-primary" style="width:100%${pendingValue ? "" : ";opacity:.4;cursor:default"}"${pendingValue ? "" : " disabled"}>Сохранить</button>`
     : '<div style="font-size:12px;color:var(--text2);font-style:italic">Сначала укажите тему урока</div>';
 
@@ -4569,8 +4579,8 @@ function renderDayRosterModal() {
           if(s.overtime_hours) badges.push(BADGE_PILL(s.overtime_hours + "ч", 20, 9));
           return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--border)">' +
             '<div style="min-width:0">' +
-              '<div style="font-weight:600;font-size:14px">' + s.name + '</div>' +
-              '<div style="font-size:12px;color:var(--text2)">' + (s.position || '') + '</div>' +
+              '<div style="font-weight:600;font-size:14px">' + escapeHtml(s.name) + '</div>' +
+              '<div style="font-size:12px;color:var(--text2)">' + escapeHtml(s.position || '') + '</div>' +
             '</div>' +
             '<div style="display:flex;gap:6px;flex-shrink:0">' + badges.join('') + '</div>' +
           '</div>';
@@ -4586,8 +4596,8 @@ function renderDayRosterModal() {
         ? filtered.map(s =>
             '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--border)">' +
               '<div style="min-width:0">' +
-                '<div style="font-weight:600;font-size:14px">' + s.name + '</div>' +
-                '<div style="font-size:12px;color:var(--text2)">' + (s.position || '') + '</div>' +
+                '<div style="font-weight:600;font-size:14px">' + escapeHtml(s.name) + '</div>' +
+                '<div style="font-size:12px;color:var(--text2)">' + escapeHtml(s.position || '') + '</div>' +
               '</div>' +
               '<button onclick="removeFromSchedule(' + s.id + ')" title="Убрать из плана" ' +
                 'style="border:none;background:none;color:var(--danger);font-size:20px;line-height:1;cursor:pointer;padding:4px 8px;flex-shrink:0">×</button>' +
@@ -4604,7 +4614,7 @@ function renderDayRosterModal() {
         ? candidates.map(s =>
             '<button onclick="addToSchedule(' + s.id + ')" style="display:inline-flex;align-items:center;gap:4px;' +
               'padding:7px 12px;border-radius:20px;border:1.5px dashed var(--border);background:transparent;' +
-              'color:var(--text);font-family:inherit;font-size:13px;cursor:pointer;margin:0 6px 6px 0">+ ' + s.name + '</button>'
+              'color:var(--text);font-family:inherit;font-size:13px;cursor:pointer;margin:0 6px 6px 0">+ ' + escapeHtml(s.name) + '</button>'
           ).join('')
         : '<div style="color:var(--text2);font-size:13px;padding:4px 0">Некого добавлять</div>';
 
@@ -4706,8 +4716,8 @@ function openStaffArchive() {
     `<div onclick="restoreStaffMember('${s.id}')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface2);border-radius:14px;margin-bottom:8px;cursor:pointer">
       <div class="avatar">${s.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
       <div>
-        <div style="font-weight:600;font-size:14px">${s.name}</div>
-        <div style="font-size:12px;color:var(--text2)">${s.position||""}</div>
+        <div style="font-weight:600;font-size:14px">${escapeHtml(s.name)}</div>
+        <div style="font-size:12px;color:var(--text2)">${escapeHtml(s.position||"")}</div>
       </div>
     </div>`
   ).join("") : '<div class="empty">Архив пуст</div>';
@@ -5545,7 +5555,7 @@ function renderStaffCalendarModal() {
   const overtimeHoursTotal = Object.values(window._staffCalOvertimeHours || {}).reduce((sum, h) => sum + h, 0);
 
   document.getElementById("modalContent").innerHTML =
-    (readOnly ? "" : '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + (s.position || "") + '</div>') +
+    (readOnly ? "" : '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + escapeHtml(s.position || "") + '</div>') +
     '<div style="background:var(--surface2);border-radius:12px;padding:12px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
         '<button onclick="prevStaffMonth()" style="border:none;background:var(--surface);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text)">‹</button>' +
