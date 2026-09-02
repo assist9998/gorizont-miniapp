@@ -361,7 +361,7 @@
   </div>
 
   <div id="journalPanel-subjects">
-    <div id="journalSubjectList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+    <div id="journalSubjectList" style="margin-bottom:10px"></div>
     <div style="display:flex;gap:8px;margin-bottom:20px">
       <input id="journalNewSubjectInput" type="text" placeholder="Новый предмет"
         style="flex:1;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
@@ -3164,19 +3164,23 @@ function renderJournalTeacherSelect() {
   sel.value = prev;
 }
 
-// Простые плашки, как и были — тап по названию открывает модалку предмета
-// (переименование + учитель, см. openJournalSubjectModal), "×" удаляет.
-// Раньше тут был инлайн-разворот пилюли в панель прямо в списке — от этого
-// отказались (жалоба пользователя): в режиме редактирования плашки должны
-// выглядеть так же просто, как и без него, а не превращаться в форму.
+// Та же карточка, что и на экране обзора (renderJournalView) — жалоба
+// пользователя: плашки в режиме редактирования должны выглядеть так же, как
+// и без него. Разница только в действии по тапу: здесь — удаление (с
+// подтверждением, см. deleteJournalSubject); назначение учителя — тем же
+// тапом, но на экране обзора (openJournalSubjectModal).
 function renderJournalSubjects() {
-  let html = journalSubjects.map(s => `<div style="display:flex;align-items:center;gap:6px;padding:6px 6px 6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px">
-    <span onclick="openJournalSubjectModal(${s.id})" style="cursor:pointer;display:flex;flex-direction:column;line-height:1.3">
-      <span>${escapeHtml(s.name)}</span>
-      ${s.teacher_name ? `<span style="font-size:11px;color:var(--text2)">${escapeHtml(s.teacher_name)}</span>` : ""}
-    </span>
-    <button onclick="deleteJournalSubject(${s.id})" style="border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px">×</button>
-  </div>`).join("");
+  let html = journalSubjects.map(s => {
+    const initial = s.name.trim().charAt(0).toUpperCase() || "?";
+    return `<div class="child-list-item" onclick="deleteJournalSubject(${s.id})">
+      <div class="avatar">${initial}</div>
+      <div class="child-detail">
+        <div class="child-detail-name">${escapeHtml(s.name)}</div>
+        <div class="child-detail-meta">${s.teacher_name ? escapeHtml(s.teacher_name) : "Учитель не назначен"}</div>
+      </div>
+      <span class="child-arrow" style="color:var(--danger)">×</span>
+    </div>`;
+  }).join("");
   if(!journalSubjects.length) html = '<div class="empty" style="padding:14px 0">Пока нет предметов</div>';
   document.getElementById("journalSubjectList").innerHTML = html;
 
