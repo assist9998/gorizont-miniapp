@@ -3604,9 +3604,11 @@ function renderJournalViewSchedule() {
   document.getElementById("journalViewSchedule").innerHTML = pills + cards;
 }
 
-// Клик по предмету во вкладке "Предметы" — сразу открывает "Оценки" с этим
-// предметом выбранным, вместо отдельного выбора того же предмета из
-// дропдауна на вкладке "Оценки" (было два несвязанных места про предметы).
+// Клик по уроку в "Расписании" по-прежнему ведёт в "Оценки" с предметом
+// этого урока выбранным (единственный путь туда теперь — раньше был ещё
+// клик по предмету во вкладке "Предметы", но это конфликтовало с более
+// логичным поведением "тап по предмету = назначить его учителя", см.
+// openJournalSubjectTeacherEdit ниже).
 function openJournalViewSubjectGrades(id, fromTab) {
   journalViewGradesReturnTab = fromTab || "subjects";
   journalGradesSubjectId = id;
@@ -3624,14 +3626,22 @@ function openJournalScheduleLessonGrades(subjectId) {
   openJournalViewSubjectGrades(subjectId, "schedule");
 }
 
+// Тап по предмету на экране обзора — не про урок (для этого есть
+// "Расписание", см. openJournalScheduleLessonGrades), а про назначение
+// постоянного учителя предмету: переходим в редактирование и сразу
+// открываем мини-панель этого предмета (renderJournalSubjects/
+// startJournalSubjectEdit — та же, что и по тапу на пилюлю на вкладке
+// "Предметы" экрана редактирования).
+function openJournalSubjectTeacherEdit(id) {
+  openJournalClassEdit();
+  startJournalSubjectEdit(id);
+}
+
 function renderJournalView() {
   const subjHtml = journalSubjects.map(s => {
     const initial = s.name.trim().charAt(0).toUpperCase() || "?";
-    // Учитель предмета берётся из расписания (там же назначается) — своего
-    // поля teacher у предмета нет, чтобы не дублировать источник истины.
-    const teacherEntry = journalSchedule.find(e => e.subject_id === s.id && e.teacher_name);
-    const teacherLine = teacherEntry ? teacherEntry.teacher_name : "Учитель не назначен";
-    return `<div class="child-list-item" onclick="openJournalViewSubjectGrades(${s.id})">
+    const teacherLine = s.teacher_name || "Учитель не назначен — нажмите, чтобы назначить";
+    return `<div class="child-list-item" onclick="openJournalSubjectTeacherEdit(${s.id})">
       <div class="avatar">${initial}</div>
       <div class="child-detail">
         <div class="child-detail-name">${escapeHtml(s.name)}</div>
