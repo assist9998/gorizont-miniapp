@@ -2773,11 +2773,8 @@ const JOURNAL_WEEKDAYS_SHORT = {1:"Пн",2:"Вт",3:"Ср",4:"Чт",5:"Пт",6:"
 // реальных данных класса "5 класс" в Дананге, поправили руками при фиксе).
 const JOURNAL_TIME_OPTIONS = (() => {
   const opts = [];
-  for(let h = 9; h <= 15; h++) {
-    for(let m = 0; m < 60; m += 15) {
-      if(h === 15 && m > 0) break;
-      opts.push(String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0"));
-    }
+  for(let mins = 8 * 60 + 30; mins <= 16 * 60; mins += 5) {
+    opts.push(String(Math.floor(mins / 60)).padStart(2,"0") + ":" + String(mins % 60).padStart(2,"0"));
   }
   return opts;
 })();
@@ -3089,6 +3086,7 @@ async function loadJournalClassData() {
     journalSchedule = [];
     journalTeachers = [];
   }
+  sortJournalSubjectsByTime();
   if(journalScheduleDayEdit === null) journalScheduleDayEdit = pickDefaultScheduleDay(journalSchedule);
   if(journalScheduleDayView === null) journalScheduleDayView = journalScheduleDayEdit;
   computeJournalClassStudents();
@@ -3105,6 +3103,28 @@ async function loadJournalClassData() {
 // поэтому имя класса в Журнале стоит называть так же, иначе привязка не
 // сработает (совпадение строк должно быть точным).
 let journalClassStudents = [];
+
+// Бэкенд отдаёт предметы по алфавиту (см. pw_get_journal_subjects) — здесь
+// переупорядочиваем по времени первого урока в расписании, чтобы порядок
+// совпадал с реальным ходом дня (1 урок, 2 урок, ...), а не с алфавитом.
+// Предметы без единой записи в расписании (только что созданные) уходят
+// в конец списка, по алфавиту между собой.
+function sortJournalSubjectsByTime() {
+  const earliest = {};
+  journalSchedule.forEach(e => {
+    if(!e.subject_id || !e.time_start) return;
+    if(!earliest[e.subject_id] || e.time_start < earliest[e.subject_id]) {
+      earliest[e.subject_id] = e.time_start;
+    }
+  });
+  journalSubjects.sort((a, b) => {
+    const ta = earliest[a.id], tb = earliest[b.id];
+    if(ta && tb) return ta < tb ? -1 : ta > tb ? 1 : 0;
+    if(ta) return -1;
+    if(tb) return 1;
+    return a.name.localeCompare(b.name, "ru");
+  });
+}
 
 function computeJournalClassStudents() {
   journalClassStudents = children.filter(c =>
