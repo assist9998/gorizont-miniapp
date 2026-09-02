@@ -655,6 +655,24 @@
   </div>
 </div>
 
+<!-- MODAL: JOURNAL SUBJECT (переименование + учитель "по умолчанию") —
+     вызывается и с плашки предмета на экране обзора, и с плашки на вкладке
+     "Предметы" экрана редактирования, project_gorizont_e_zhurnal. -->
+<div class="modal-overlay" id="journalSubjectModalOverlay" onclick="if(event.target===this) closeJournalSubjectModal()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-name">Предмет</div>
+    <input id="journalSubjectModalNameInput" type="text" placeholder="Название предмета"
+      style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none;margin-bottom:10px;box-sizing:border-box">
+    <select id="journalSubjectModalTeacherSelect"
+      style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px;box-sizing:border-box"></select>
+    <div style="display:flex;gap:8px">
+      <button onclick="saveJournalSubjectModal()" class="filter-btn active" style="flex:1;text-align:center">Сохранить</button>
+      <button onclick="closeJournalSubjectModal()" class="filter-btn" style="flex:1;text-align:center">Отмена</button>
+    </div>
+  </div>
+</div>
+
 <!-- POPOVER: отметка дня сотрудника (пришла/нет + замена + переработка) —
      всплывает у самой ячейки дня в календаре, не полноэкранный модал
      (project_gorizont_payroll, замена тапа по кругу на явный выбор) -->
@@ -2988,7 +3006,7 @@ async function openJournalClass(name) {
   activeJournalClass = name;
   document.getElementById("journalViewTitle").textContent = name;
   document.getElementById("journalClassTitle").textContent = name;
-  editingJournalSubjectId = null;
+  closeJournalSubjectModal();
   cancelJournalScheduleEdit();
   cancelJournalClassRename();
   switchJournalViewTab("schedule");
@@ -3008,7 +3026,7 @@ async function openJournalClass(name) {
 // всегда кидало в "Предметы", даже нажимая из "Расписания") — кроме
 // "Оценки", которой в редактировании нет, туда — на "Предметы" по умолчанию.
 function openJournalClassEdit() {
-  editingJournalSubjectId = null;
+  closeJournalSubjectModal();
   cancelJournalScheduleEdit();
   cancelJournalClassRename();
   const editTab = ["subjects", "schedule", "students"].includes(journalViewActiveTab) ? journalViewActiveTab : "subjects";
@@ -3138,11 +3156,6 @@ function computeJournalClassStudents() {
   );
 }
 
-// editingJournalSubjectId — id предмета, чья пилюля сейчас в режиме
-// переименования (null — ни одна). Только один одновременно, как и с
-// расписанием (editingJournalScheduleId) — проще, чем множественный inline-edit.
-let editingJournalSubjectId = null;
-
 function renderJournalTeacherSelect() {
   const sel = document.getElementById("js_teacher");
   const prev = sel.value;
@@ -3151,36 +3164,19 @@ function renderJournalTeacherSelect() {
   sel.value = prev;
 }
 
-// Мини-панель предмета (открывается тапом по пилюле) — переименование +
-// учитель "по умолчанию" (см. pw_update_journal_subject: при сохранении
-// сразу проставляется всем урокам этого предмета в расписании — обычно
-// у предмета один постоянный учитель, назначать его на каждый урок отдельно
-// через форму расписания было бы избыточно).
+// Простые плашки, как и были — тап по названию открывает модалку предмета
+// (переименование + учитель, см. openJournalSubjectModal), "×" удаляет.
+// Раньше тут был инлайн-разворот пилюли в панель прямо в списке — от этого
+// отказались (жалоба пользователя): в режиме редактирования плашки должны
+// выглядеть так же просто, как и без него, а не превращаться в форму.
 function renderJournalSubjects() {
-  let html = "";
-  journalSubjects.forEach(s => {
-    if(s.id === editingJournalSubjectId) {
-      html += `<div style="display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:16px;border:1.5px solid var(--accent);background:var(--surface2);min-width:200px">
-        <input id="journalSubjectEditInput_${s.id}" type="text" value="${escapeHtml(s.name)}" style="padding:6px 8px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;outline:none">
-        <select id="journalSubjectTeacherSelect_${s.id}" style="padding:6px 8px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:12px">
-          <option value="">Без учителя</option>
-          ${journalTeachers.map(t => `<option value="${t.id}"${s.teacher_staff_id === t.id ? " selected" : ""}>${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("")}
-        </select>
-        <div style="display:flex;gap:6px;justify-content:flex-end">
-          <button onclick="saveJournalSubjectEdit(${s.id})" style="border:none;background:transparent;color:var(--accent);cursor:pointer;font-size:13px;font-weight:600;padding:2px 6px">✓ Сохранить</button>
-          <button onclick="cancelJournalSubjectEdit()" style="border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;padding:2px 6px">Отмена</button>
-        </div>
-      </div>`;
-    } else {
-      html += `<div style="display:flex;align-items:center;gap:6px;padding:6px 6px 6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px">
-        <span onclick="startJournalSubjectEdit(${s.id})" style="cursor:pointer;display:flex;flex-direction:column;line-height:1.3">
-          <span>${escapeHtml(s.name)}</span>
-          ${s.teacher_name ? `<span style="font-size:11px;color:var(--text2)">${escapeHtml(s.teacher_name)}</span>` : ""}
-        </span>
-        <button onclick="deleteJournalSubject(${s.id})" style="border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px">×</button>
-      </div>`;
-    }
-  });
+  let html = journalSubjects.map(s => `<div style="display:flex;align-items:center;gap:6px;padding:6px 6px 6px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);font-size:13px">
+    <span onclick="openJournalSubjectModal(${s.id})" style="cursor:pointer;display:flex;flex-direction:column;line-height:1.3">
+      <span>${escapeHtml(s.name)}</span>
+      ${s.teacher_name ? `<span style="font-size:11px;color:var(--text2)">${escapeHtml(s.teacher_name)}</span>` : ""}
+    </span>
+    <button onclick="deleteJournalSubject(${s.id})" style="border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px">×</button>
+  </div>`).join("");
   if(!journalSubjects.length) html = '<div class="empty" style="padding:14px 0">Пока нет предметов</div>';
   document.getElementById("journalSubjectList").innerHTML = html;
 
@@ -3191,21 +3187,34 @@ function renderJournalSubjects() {
   sel.value = prev;
 }
 
-function startJournalSubjectEdit(id) {
-  editingJournalSubjectId = id;
-  renderJournalSubjects();
-  document.getElementById("journalSubjectEditInput_" + id)?.focus();
+// ── Модалка предмета (переименование + учитель "по умолчанию") — вызывается
+// и с плашки на вкладке "Предметы" экрана редактирования, и с карточки
+// предмета на экране обзора (renderJournalView) — одно и то же окно, без
+// перехода между экранами. Учитель сохраняется на самом предмете и сразу
+// применяется ко всем его урокам в расписании (pw_update_journal_subject).
+let journalSubjectModalId = null;
+
+function openJournalSubjectModal(id) {
+  const s = journalSubjects.find(x => x.id === id);
+  if(!s) return;
+  journalSubjectModalId = id;
+  document.getElementById("journalSubjectModalNameInput").value = s.name;
+  document.getElementById("journalSubjectModalTeacherSelect").innerHTML = '<option value="">Без учителя</option>' +
+    journalTeachers.map(t => `<option value="${t.id}"${s.teacher_staff_id === t.id ? " selected" : ""}>${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
+  document.getElementById("journalSubjectModalOverlay").classList.add("show");
 }
 
-function cancelJournalSubjectEdit() {
-  editingJournalSubjectId = null;
-  renderJournalSubjects();
+function closeJournalSubjectModal() {
+  document.getElementById("journalSubjectModalOverlay").classList.remove("show");
+  journalSubjectModalId = null;
 }
 
-async function saveJournalSubjectEdit(id) {
-  const name = document.getElementById("journalSubjectEditInput_" + id).value.trim();
+async function saveJournalSubjectModal() {
+  const id = journalSubjectModalId;
+  if(!id) return;
+  const name = document.getElementById("journalSubjectModalNameInput").value.trim();
   if(!name) return;
-  const teacherRaw = document.getElementById("journalSubjectTeacherSelect_" + id).value;
+  const teacherRaw = document.getElementById("journalSubjectModalTeacherSelect").value;
   const teacher_staff_id = teacherRaw ? parseInt(teacherRaw, 10) : null;
   try {
     const resp = await fetch(API_URL + "/journal/subjects/" + id, {
@@ -3215,7 +3224,7 @@ async function saveJournalSubjectEdit(id) {
     });
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
-    editingJournalSubjectId = null;
+    closeJournalSubjectModal();
     await loadJournalClassData();
   } catch(e) {
     showToast("Не удалось сохранить предмет", true);
@@ -3608,7 +3617,7 @@ function renderJournalViewSchedule() {
 // этого урока выбранным (единственный путь туда теперь — раньше был ещё
 // клик по предмету во вкладке "Предметы", но это конфликтовало с более
 // логичным поведением "тап по предмету = назначить его учителя", см.
-// openJournalSubjectTeacherEdit ниже).
+// openJournalSubjectModal).
 function openJournalViewSubjectGrades(id, fromTab) {
   journalViewGradesReturnTab = fromTab || "subjects";
   journalGradesSubjectId = id;
@@ -3626,22 +3635,11 @@ function openJournalScheduleLessonGrades(subjectId) {
   openJournalViewSubjectGrades(subjectId, "schedule");
 }
 
-// Тап по предмету на экране обзора — не про урок (для этого есть
-// "Расписание", см. openJournalScheduleLessonGrades), а про назначение
-// постоянного учителя предмету: переходим в редактирование и сразу
-// открываем мини-панель этого предмета (renderJournalSubjects/
-// startJournalSubjectEdit — та же, что и по тапу на пилюлю на вкладке
-// "Предметы" экрана редактирования).
-function openJournalSubjectTeacherEdit(id) {
-  openJournalClassEdit();
-  startJournalSubjectEdit(id);
-}
-
 function renderJournalView() {
   const subjHtml = journalSubjects.map(s => {
     const initial = s.name.trim().charAt(0).toUpperCase() || "?";
     const teacherLine = s.teacher_name || "Учитель не назначен — нажмите, чтобы назначить";
-    return `<div class="child-list-item" onclick="openJournalSubjectTeacherEdit(${s.id})">
+    return `<div class="child-list-item" onclick="openJournalSubjectModal(${s.id})">
       <div class="avatar">${initial}</div>
       <div class="child-detail">
         <div class="child-detail-name">${escapeHtml(s.name)}</div>
