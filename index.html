@@ -1526,7 +1526,7 @@ function renderAttDatePicker() {
 // только свой отдел, без переключателя. У админа/директора остаются оба.
 function allowedChildDepts(depts) {
   if(!staffInfo || isAdminRole(staffInfo.role)) return depts;
-  if(isTeacherRole(staffInfo.role)) return depts.filter(d => d === "Школа");
+  if(isTeacherRole(staffInfo.role) || isZavuchRole(staffInfo.role)) return depts.filter(d => d === "Школа");
   return depts.filter(d => d === "Детский сад");
 }
 
@@ -2075,6 +2075,15 @@ function isDirectorRole(role) {
 function isTeacherRole(role) {
   return (role || "").toLowerCase().includes("учител");
 }
+// Завуч (введено 2026-09-02, project_gorizont_e_zhurnal) — та же
+// классификация по подстроке, что и на бэкенде (_is_zavuch_staff в api.py).
+// В отличие от учителя видит/правит ВЕСЬ журнал школы (все классы,
+// расписание, предметы, оценки — не только свои уроки предметов, где он
+// указан учителем), но НЕ полный админ — "Персонал"/дети по-прежнему скрыты,
+// город по-прежнему только свой (не входит в isDirectorRole).
+function isZavuchRole(role) {
+  return (role || "").toLowerCase().includes("завуч");
+}
 
 // Fail-closed: если staffInfo ещё не загрузился (или вообще не загрузится
 // из-за сетевой ошибки) — считаем НЕ админом, не наоборот. Раньше было
@@ -2097,6 +2106,9 @@ function applyRolePermissions() {
 // меню ("Посещаемость" и "Журнал"), пользователь попросил объединить: одна
 // кнопка "Журнал", развилка по роли внутри.
 // - Учитель (не админ) — сразу список своих предметов, без выбора.
+// - Завуч (не админ) — сразу список ВСЕХ классов школы её города (тот же
+//   экран, что видит админ на вкладке "Школа"), без переключателя Сад — она
+//   не работает с посещаемостью детсада, только с журналом целиком.
 // - Воспитатель/прочий рядовой сотрудник — сразу посещаемость сада, без выбора.
 // - Админ/Директор/developer видят оба направления одного города(ов) —
 //   им нужен явный переключатель Сад/Школа (см. renderEntrySwitcher),
@@ -2106,6 +2118,10 @@ function openMainEntry() {
   if(staffInfo && isTeacherRole(staffInfo.role) && !isAdminRole(staffInfo.role)) {
     goTo("journal-teacher");
     loadJournalMySubjects();
+    return;
+  }
+  if(staffInfo && isZavuchRole(staffInfo.role) && !isAdminRole(staffInfo.role)) {
+    goTo("journal");
     return;
   }
   if(staffInfo && isAdminRole(staffInfo.role)) {
