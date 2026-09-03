@@ -294,6 +294,10 @@
     <div style="display:none;gap:8px" id="journalGradesActionsRow">
       <button onclick="openJournalHistory()" class="filter-btn" id="journalHistoryBtn" style="min-width:132px;text-align:center">История уроков</button>
       <button onclick="openJournalPeriodGrades()" class="filter-btn">Итоговые оценки</button>
+      <!-- Только в учительском режиме (см. openJournalTeacherClass) — доступ к
+           списку/записи учеников класса без доступа к предметам/расписанию,
+           те по-прежнему требуют пенделя-редактирования, скрытого у учителя. -->
+      <button onclick="openJournalTeacherStudents()" class="filter-btn" id="journalTeacherStudentsBtn" style="display:none">Ученики класса</button>
     </div>
   </div>
 
@@ -2998,6 +3002,7 @@ async function openJournalTeacherClass(className) {
   document.getElementById("journalViewTabBar").style.display = "none";
   document.getElementById("journalGradesActionsRow").style.display = "flex";
   document.getElementById("journalGradesSubjectBadge").style.display = "flex";
+  document.getElementById("journalTeacherStudentsBtn").style.display = "";
   ["subjects", "schedule", "students"].forEach(t => {
     const panel = document.getElementById("journalViewPanel-" + t);
     if(panel) panel.style.display = "none";
@@ -3019,6 +3024,7 @@ async function openJournalClass(name) {
   journalViewTeacherMode = false;
   document.getElementById("journalViewEditBtn").style.display = "";
   document.getElementById("journalViewTabBar").style.display = "";
+  document.getElementById("journalTeacherStudentsBtn").style.display = "none";
   activeJournalClass = name;
   document.getElementById("journalViewTitle").textContent = name;
   document.getElementById("journalClassTitle").textContent = name;
@@ -3045,9 +3051,40 @@ function openJournalClassEdit() {
   closeJournalSubjectModal();
   cancelJournalScheduleEdit();
   cancelJournalClassRename();
+  applyJournalClassEditScope(false);
   const editTab = ["subjects", "schedule", "students"].includes(journalViewActiveTab) ? journalViewActiveTab : "subjects";
   switchJournalEditTab(editTab);
   goTo("journal-class");
+}
+
+// Вход учителя в "Дети" своего класса — без доступа к "Предметы"/"Расписание"
+// (те по-прежнему требуют admin/завуч на бэкенде — POST/PUT/DELETE
+// /journal/subjects и /journal/schedule). Учитель попадает сюда с экрана
+// "Оценки" (activeJournalClass/activeJournalCity уже выставлены
+// openJournalTeacherClass), не через карандаш. По просьбе пользователя
+// 2026-09-03: "и учителя и завуч могут записать ребенка в класс" — раньше
+// у учителя вообще не было пути добавить/убрать ученика в свой класс,
+// только общая форма "Дети" без привязки к классу.
+function openJournalTeacherStudents() {
+  closeJournalSubjectModal();
+  cancelJournalScheduleEdit();
+  cancelJournalClassRename();
+  applyJournalClassEditScope(true);
+  document.getElementById("journalClassTitle").textContent = activeJournalClass;
+  switchJournalEditTab("students");
+  goTo("journal-class");
+  computeJournalClassStudents();
+  renderJournalStudents();
+}
+
+// teacherOnly=true — прячет "Расписание"/"Предметы" и переименование класса,
+// оставляя только "Дети". false — восстанавливает полный доступ (админ/завуч).
+function applyJournalClassEditScope(teacherOnly) {
+  document.getElementById("journalTab-schedule").style.display = teacherOnly ? "none" : "";
+  document.getElementById("journalTab-subjects").style.display = teacherOnly ? "none" : "";
+  const title = document.getElementById("journalClassTitle");
+  title.style.cursor = teacherOnly ? "default" : "pointer";
+  title.title = teacherOnly ? "" : "Нажмите, чтобы переименовать класс";
 }
 
 function switchJournalEditTab(tab) {
@@ -3448,6 +3485,7 @@ async function deleteJournalScheduleEntry(id) {
 // поэтому "переименовать класс" = переписать class_name во всех его
 // предметах и уроках расписания (несколько PUT-запросов подряд).
 function startJournalClassRename() {
+  if(staffInfo && isTeacherRole(staffInfo.role) && !isAdminRole(staffInfo.role) && !isZavuchRole(staffInfo.role)) return;
   document.getElementById("journalRenameInput").value = activeJournalClass;
   document.getElementById("journalRenameRow").style.display = "flex";
   document.getElementById("journalRenameInput").focus();
