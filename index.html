@@ -292,11 +292,6 @@
          с вкладкой "Оценки" (или всегда в учительском режиме, где вкладок
          нет вообще) — тогда же карандаш и скрыт, так что ряд не теснится. -->
     <div style="display:none;gap:8px" id="journalGradesActionsRow">
-      <!-- Открывает календарь на любую дату (в т.ч. без записей) — история
-           ниже отдельно, там только дни, где уже есть тема/дз. -->
-      <button onclick="openJournalGradesDatePicker()" title="Выбрать дату" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      </button>
       <button onclick="openJournalHistory()" class="filter-btn" id="journalHistoryBtn" style="min-width:132px;text-align:center">История уроков</button>
       <button onclick="openJournalPeriodGrades()" class="filter-btn">Итоговые оценки</button>
       <!-- Только в учительском режиме (см. openJournalTeacherClass) — доступ к
@@ -715,19 +710,6 @@
     <div class="modal-handle"></div>
     <div class="modal-name">История уроков</div>
     <div id="journalHistoryModalContent"></div>
-  </div>
-</div>
-
-<!-- MODAL: КАЛЕНДАРЬ выбора даты урока на вкладке "Оценки" — до этого дату
-     можно было сменить только через "История уроков" (там только дни, где
-     уже что-то записано), выбрать день заранее/задним числом без записи
-     было нельзя (жалоба пользователя 2026-09-03: "дату нельзя выбрать, там
-     сегодняшняя стоит"). Копия структуры attDateModalOverlay/renderAttDatePicker. -->
-<div class="modal-overlay" id="journalGradesDateModalOverlay" onclick="if(event.target===this) closeJournalGradesDatePicker()">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-name">Выбрать дату</div>
-    <div id="journalGradesDateModalContent"></div>
   </div>
 </div>
 
@@ -4061,81 +4043,6 @@ function jumpToJournalHistoryDate(date) {
   journalGradesDate = date;
   journalGradesEditingId = null;
   loadJournalGrades();
-}
-
-// ── КАЛЕНДАРЬ выбора даты урока — та же структура, что attDatePicker
-// (renderAttDatePicker), но пишет в journalGradesDate и работает на любой
-// день, даже если для него ещё нет ни одной записи (в отличие от "Истории
-// уроков", которая показывает только уже заполненные даты).
-let journalGradesPickerView = null; // {year, month} — 0-indexed, пока открыт пикер
-
-function openJournalGradesDatePicker() {
-  const d = dmyToDate(journalGradesDate || journalGradesToday());
-  journalGradesPickerView = { year: d.getFullYear(), month: d.getMonth() };
-  renderJournalGradesDatePicker();
-  document.getElementById("journalGradesDateModalOverlay").classList.add("show");
-}
-function closeJournalGradesDatePicker() {
-  document.getElementById("journalGradesDateModalOverlay").classList.remove("show");
-}
-function prevJournalGradesPickerMonth() {
-  journalGradesPickerView.month === 0
-    ? (journalGradesPickerView.year--, journalGradesPickerView.month = 11)
-    : journalGradesPickerView.month--;
-  renderJournalGradesDatePicker();
-}
-function nextJournalGradesPickerMonth() {
-  journalGradesPickerView.month === 11
-    ? (journalGradesPickerView.year++, journalGradesPickerView.month = 0)
-    : journalGradesPickerView.month++;
-  renderJournalGradesDatePicker();
-}
-function selectJournalGradesDate(dmy) {
-  if(dmy > dateToDmy(now)) return; // будущее недоступно — ту же логику видит attDatePicker
-  closeJournalGradesDatePicker();
-  journalGradesDate = dmy;
-  journalGradesEditingId = null;
-  loadJournalGrades();
-}
-
-function renderJournalGradesDatePicker() {
-  const { year, month } = journalGradesPickerView;
-  const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
-  const DOW = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
-  const todayDmy = dateToDmy(now);
-
-  let startDow = new Date(year, month, 1).getDay();
-  startDow = startDow === 0 ? 6 : startDow - 1;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  const cells = [];
-  for(let i = 0; i < startDow; i++) cells.push(null);
-  for(let d = 1; d <= daysInMonth; d++) cells.push(d);
-
-  let grid = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px">';
-  DOW.forEach(d => grid += '<div style="text-align:center;font-size:10px;color:var(--text2);font-weight:600">' + d + '</div>');
-  grid += '</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
-
-  cells.forEach(d => {
-    if(d === null) { grid += '<div></div>'; return; }
-    const dmy = dateToDmy(new Date(year, month, d));
-    const isFuture = dmy > todayDmy;
-    const isSelected = dmy === journalGradesDate;
-    const isTodayCell = dmy === todayDmy;
-    const bg = isSelected ? "var(--accent)" : "var(--surface2)";
-    const color = isFuture ? "var(--text2)" : isSelected ? "#fff" : "var(--text)";
-    const border = isTodayCell && !isSelected ? "1.5px solid var(--accent)" : "none";
-    const onclick = isFuture ? "" : `onclick="selectJournalGradesDate('${dmy}')"`;
-    grid += `<div ${onclick} style="aspect-ratio:1;border-radius:8px;background:${bg};color:${color};border:${border};cursor:${isFuture?'default':'pointer'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}</div>`;
-  });
-  grid += '</div>';
-
-  document.getElementById("journalGradesDateModalContent").innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
-      '<button onclick="prevJournalGradesPickerMonth()" style="border:none;background:var(--surface2);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text)">‹</button>' +
-      '<div style="font-weight:700;font-size:13px">' + RU_MONTHS[month] + ' ' + year + '</div>' +
-      '<button onclick="nextJournalGradesPickerMonth()" style="border:none;background:var(--surface2);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text)">›</button>' +
-    '</div>' + grid;
 }
 
 // ── ИТОГОВЫЕ ОЦЕНКИ за период (четверть/год) — одна оценка на ребёнка на
