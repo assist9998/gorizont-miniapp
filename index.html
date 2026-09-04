@@ -1506,7 +1506,7 @@ function renderAttDatePicker() {
   cells.forEach(d => {
     if(d === null) { grid += '<div></div>'; return; }
     const dmy = dateToDmy(new Date(year, month, d));
-    const isFuture = dmy > todayDmy;
+    const isFuture = dmyToDate(dmy) > dmyToDate(todayDmy);
     const isSelected = dmy === attDateStr;
     const isTodayCell = dmy === todayDmy;
     const bg = isSelected ? "var(--accent)" : "var(--surface2)";
@@ -1707,7 +1707,7 @@ window._histPending = window._histPending || new Set();
 
 async function toggleHistDay(dateStr) {
   const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
-  if(dateStr > todayDMY) return; // будущее не редактируем
+  if(dmyToDate(dateStr) > dmyToDate(todayDMY)) return; // будущее не редактируем
   const c = window._currentChildForHistory;
   if(!c) return;
   // Блокируем повторный тап по этому же дню, пока предыдущий запрос ещё не
@@ -1773,7 +1773,7 @@ function renderHistCalendar(history) {
     if(d === null) { grid += '<div></div>'; return; }
     const dateStr = fmtDMY(year, month, d);
     const status = history.days[dateStr];
-    const isFuture = dateStr > todayDMY;
+    const isFuture = dmyToDate(dateStr) > dmyToDate(todayDMY);
     if(status !== undefined) {
       total++;
       if(status === "present") present++; else absent++;
@@ -4638,7 +4638,7 @@ function renderDayRosterModal() {
   cells.forEach(d => {
     if(d === null) { grid += '<div></div>'; return; }
     const dmy = dateToDmy(new Date(year, month, d));
-    const isFuture = dmy > todayDmy;
+    const isFuture = dmyToDate(dmy) > dmyToDate(todayDmy);
     const isSelected = dmy === dayRosterDate;
     const isTodayCell = dmy === todayDmy;
     const bg = isSelected ? "var(--accent)" : "var(--surface2)";
@@ -5095,7 +5095,7 @@ async function toggleFutureSchedule(dateStr) {
 // и раньше (window._staffAttPending).
 function openDayPopover(dateStr, cellEl) {
   const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
-  if(dateStr > todayDMY) return; // будущее не редактируем
+  if(dmyToDate(dateStr) > dmyToDate(todayDMY)) return; // будущее не редактируем
   const s = window._currentStaffForCalendar;
   if(!s) return;
   window._dayPopoverDate = dateStr;
@@ -5277,7 +5277,7 @@ function BADGE_PILL(label, size = 16, font = 7) {
 
 function promptLessonCount(dateStr) {
   const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
-  if(dateStr > todayDMY) return;
+  if(dmyToDate(dateStr) > dmyToDate(todayDMY)) return;
   const s = window._currentStaffForCalendar;
   if(!s) return;
   const prevDetails = window._staffCalLessonDetails[dateStr] || {};
@@ -5552,7 +5552,7 @@ function renderStaffCalendarModal() {
     if(d === null) { grid += '<div></div>'; return; }
     const dateStr = fmtDMY(year, month, d);
     const status = days[dateStr];
-    const isFuture = dateStr > todayDMY;
+    const isFuture = dmyToDate(dateStr) > dmyToDate(todayDMY);
     const isWknd = (() => { const dow = new Date(year, month, d).getDay(); return dow === 0 || dow === 6; })();
     if(status === "present") present++;
     const isSub = status === "present" && subs.has(dateStr);
