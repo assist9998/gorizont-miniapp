@@ -3251,8 +3251,16 @@ function computeJournalClassStudents() {
 function renderJournalTeacherSelect() {
   const sel = document.getElementById("js_teacher");
   const prev = sel.value;
+  // journalTeachers — весь /payroll/staff города (воспитатели и няни тоже),
+  // в выпадающем списке "кто ведёт предмет" им делать нечего (жалоба
+  // пользователя 2026-09-07) — оставляем только учителя/завуча, та же
+  // подстрочная классификация, что и в isTeacherRole/isZavuchRole.
+  const teachingStaff = journalTeachers.filter(t => {
+    const p = (t.position || "").toLowerCase();
+    return p.includes("учител") || p.includes("завуч");
+  });
   sel.innerHTML = '<option value="">Без учителя</option>' +
-    journalTeachers.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
+    teachingStaff.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
   sel.value = prev;
 }
 
