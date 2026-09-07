@@ -1043,7 +1043,7 @@ async function loadChildren() {
     const cities = [...new Set(children.map(c => c.city))];
     activeCity = cities[0] || "";
     activeChildCity = cities[0] || "";
-    const depts = [...new Set(children.filter(c => c.city === activeCity).map(c => c.dept))];
+    const depts = [...new Set(children.filter(c => c.city === activeCity && c.dept !== "Школа").map(c => c.dept))];
     activeDept = depts[0] || "";
     console.log("Loaded:", children.length, "children");
 
@@ -1246,7 +1246,11 @@ function renderHome() {
     filterCity = homeCity;
   }
 
-  const filtered = filterCity ? children.filter(c => c.city === filterCity) : children;
+  // Школа отмечается по-урочно в Журнале (решение пользователя 2026-09-07),
+  // старая посещаемость по дню — только садик, иначе школьники вечно висели
+  // бы тут "не отмечены".
+  const filtered = (filterCity ? children.filter(c => c.city === filterCity) : children)
+    .filter(c => c.dept !== "Школа");
 
   const total = filtered.length;
   const present = filtered.filter(c => attendance[c.id] === true).length;
@@ -1306,10 +1310,12 @@ function setHomeCity(city) {
 }
 
 // ── ATTENDANCE ────────────────────────────────────────────────────
+// Школа сюда не попадает вообще — отмечается по-урочно в Журнале (решение
+// пользователя 2026-09-07), эта посещаемость по дню только для садика.
 function renderAttFilters() {
   renderEntrySwitcher("entrySwitcherAtt");
   const cities = [...new Set(children.map(c => c.city))];
-  const depts = [...new Set(children.filter(c => c.city === activeCity).map(c => c.dept))];
+  const depts = [...new Set(children.filter(c => c.city === activeCity && c.dept !== "Школа").map(c => c.dept))];
   const groups = ["Все группы", ...new Set(children.filter(c => c.city === activeCity && c.dept === activeDept).map(c => c.group || "Без группы"))];
   const bar = document.getElementById("attFilters");
   bar.innerHTML = "";
@@ -1320,7 +1326,7 @@ function renderAttFilters() {
     btn.textContent = (city === "Дананг" ? "" : "") + city;
     btn.onclick = () => {
       activeCity = city;
-      const d = [...new Set(children.filter(c => c.city === city).map(c => c.dept))];
+      const d = [...new Set(children.filter(c => c.city === city && c.dept !== "Школа").map(c => c.dept))];
       activeDept = d[0] || "";
       activeGroup = "Все группы";
       renderAttFilters();
@@ -1983,9 +1989,10 @@ function renderNotifications() {
         color:"var(--danger)"});
     }
 
-    // Не отмечен сегодня (только если сейчас после 10:00)
+    // Не отмечен сегодня (только если сейчас после 10:00) — только садик,
+    // школа отмечается по-урочно в Журнале, а не по дню целиком.
     const hour = new Date().getHours();
-    if(hour >= 10 && attendance[c.id] === null) {
+    if(hour >= 10 && c.dept !== "Школа" && attendance[c.id] === null) {
       notifications.push({type:"attendance", priority:3, child_id:c.id,
         icon:"–", title:"Не отмечен сегодня",
         text: c.name + " · " + c.group,
