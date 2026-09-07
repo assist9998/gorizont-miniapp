@@ -298,6 +298,11 @@
            списку/записи учеников класса без доступа к предметам/расписанию,
            те по-прежнему требуют пенделя-редактирования, скрытого у учителя. -->
       <button onclick="openJournalTeacherStudents()" class="filter-btn" id="journalTeacherStudentsBtn" style="display:none">Ученики класса</button>
+      <!-- Полное расписание дня, на просмотр — запрос пользователя 2026-09-07:
+           "думаю учителю надо видеть полное расписание" (не только свой
+           предмет). Бэкенд отдаёт его только для класса, где учитель реально
+           преподаёт (journal.teacher_owns_class), редактировать нельзя. -->
+      <button onclick="openJournalTeacherSchedule()" class="filter-btn" id="journalTeacherScheduleBtn" style="display:none">Расписание</button>
     </div>
   </div>
 
@@ -3041,12 +3046,14 @@ async function openJournalTeacherClass(className) {
   journalGradesSubjectId = null;
   journalGrades = [];
   journalGradeModalChildId = null;
+  journalTeacherScheduleOpen = false;
   document.getElementById("journalViewTitle").textContent = className;
   document.getElementById("journalViewEditBtn").style.display = "none";
   document.getElementById("journalViewTabBar").style.display = "none";
   document.getElementById("journalGradesActionsRow").style.display = "flex";
   document.getElementById("journalGradesSubjectBadge").style.display = "flex";
   document.getElementById("journalTeacherStudentsBtn").style.display = "";
+  document.getElementById("journalTeacherScheduleBtn").style.display = "";
   ["subjects", "schedule", "students"].forEach(t => {
     const panel = document.getElementById("journalViewPanel-" + t);
     if(panel) panel.style.display = "none";
@@ -3055,6 +3062,35 @@ async function openJournalTeacherClass(className) {
   computeJournalClassStudents();
   goTo("journal-view");
   await loadJournalGrades();
+}
+
+// Полное расписание дня (просмотр) в учительском режиме — своя пара функций,
+// а не switchJournalViewTab (та управляет вкладками админского режима, где
+// journalViewTabBar видима; здесь она всегда скрыта, конфликтовало бы).
+let journalTeacherScheduleOpen = false;
+
+async function openJournalTeacherSchedule() {
+  try {
+    const resp = await fetch(API_URL + "/journal/schedule?city=" + encodeURIComponent(activeJournalCity) + "&class=" + encodeURIComponent(activeJournalClass), {headers: authHeaders()});
+    const d = await resp.json();
+    journalSchedule = d.ok ? d.schedule : [];
+  } catch(e) {
+    console.error("openJournalTeacherSchedule error:", e);
+    journalSchedule = [];
+  }
+  journalTeacherScheduleOpen = true;
+  journalScheduleDayView = null;
+  document.getElementById("journalViewPanel-grades").style.display = "none";
+  document.getElementById("journalGradesSubjectBadge").style.display = "none";
+  document.getElementById("journalViewPanel-schedule").style.display = "";
+  renderJournalViewSchedule();
+}
+
+function closeJournalTeacherSchedule() {
+  journalTeacherScheduleOpen = false;
+  document.getElementById("journalViewPanel-schedule").style.display = "none";
+  document.getElementById("journalViewPanel-grades").style.display = "";
+  document.getElementById("journalGradesSubjectBadge").style.display = "flex";
 }
 
 function openNewJournalClass() {
@@ -3069,6 +3105,7 @@ async function openJournalClass(name) {
   document.getElementById("journalViewEditBtn").style.display = "";
   document.getElementById("journalViewTabBar").style.display = "";
   document.getElementById("journalTeacherStudentsBtn").style.display = "none";
+  document.getElementById("journalTeacherScheduleBtn").style.display = "none";
   activeJournalClass = name;
   document.getElementById("journalViewTitle").textContent = name;
   document.getElementById("journalClassTitle").textContent = name;
@@ -3176,6 +3213,10 @@ function switchJournalViewTab(tab) {
 let journalViewGradesReturnTab = "subjects";
 
 function journalViewBack() {
+  if(journalViewTeacherMode && journalTeacherScheduleOpen) {
+    closeJournalTeacherSchedule();
+    return;
+  }
   const gradesPanel = document.getElementById("journalViewPanel-grades");
   if(!journalViewTeacherMode && gradesPanel.style.display !== "none") {
     switchJournalViewTab(journalViewGradesReturnTab);
@@ -3777,6 +3818,18 @@ function openJournalViewSubjectGrades(id, fromTab) {
 // в Предметы, откуда урок не открывали.
 function openJournalScheduleLessonGrades(subjectId) {
   journalGradesDate = journalGradesToday();
+  // В учительском режиме бэкенд отдаёт оценки только по СВОЕМУ предмету
+  // (_grade_access) — чужой урок в расписании кликабелен для просмотра
+  // времени, но не должен вести на 403.
+  if(journalViewTeacherMode) {
+    const mine = journalMySubjects.some(s => s.class_name === activeJournalClass && s.subject_id === subjectId);
+    if(!mine) { showToast("Это не ваш предмет", true); return; }
+    journalGradesSubjectId = subjectId;
+    journalGradesEditingId = null;
+    closeJournalTeacherSchedule();
+    loadJournalGrades();
+    return;
+  }
   openJournalViewSubjectGrades(subjectId, "schedule");
 }
 
