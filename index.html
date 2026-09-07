@@ -294,15 +294,6 @@
     <div style="display:none;gap:8px" id="journalGradesActionsRow">
       <button onclick="openJournalHistory()" class="filter-btn" id="journalHistoryBtn" style="min-width:132px;text-align:center">История уроков</button>
       <button onclick="openJournalPeriodGrades()" class="filter-btn">Итоговые оценки</button>
-      <!-- Только в учительском режиме (см. openJournalTeacherClass) — доступ к
-           списку/записи учеников класса без доступа к предметам/расписанию,
-           те по-прежнему требуют пенделя-редактирования, скрытого у учителя. -->
-      <button onclick="openJournalTeacherStudents()" class="filter-btn" id="journalTeacherStudentsBtn" style="display:none">Ученики класса</button>
-      <!-- Полное расписание дня, на просмотр — запрос пользователя 2026-09-07:
-           "думаю учителю надо видеть полное расписание" (не только свой
-           предмет). Бэкенд отдаёт его только для класса, где учитель реально
-           преподаёт (journal.teacher_owns_class), редактировать нельзя. -->
-      <button onclick="openJournalTeacherSchedule()" class="filter-btn" id="journalTeacherScheduleBtn" style="display:none">Расписание</button>
     </div>
   </div>
 
@@ -3034,63 +3025,28 @@ function renderJournalMySubjects() {
     html || '<div class="empty">Вы пока не назначены учителем ни на один урок — обратитесь к администратору</div>';
 }
 
+// Учитель попадает в ту же панель, что и админ/завуч (Расписание/Предметы/
+// Дети) — запрос пользователя 2026-09-07: "чтоб у всех все было одинаково".
+// Единственная разница — карандаш скрыт (редактирование недоступно совсем:
+// бэкенд теперь блокирует и структуру расписания/предметов, и добавление/
+// изменение учеников для обычного учителя), плюс точечные ограничения кликов
+// внутри панели (renderJournalView — предметы не назначаются; openJournal-
+// ScheduleLessonGrades — только свой урок).
 async function openJournalTeacherClass(className) {
   journalViewTeacherMode = true;
   activeJournalCity = staffInfo.city;
   activeJournalClass = className;
+  document.getElementById("journalViewTitle").textContent = className;
+  document.getElementById("journalClassTitle").textContent = className;
+  document.getElementById("journalViewEditBtn").style.display = "none";
+  switchJournalViewTab("schedule");
+  journalScheduleDayView = null;
   journalGradesDate = null;
-  // subjectId не передаём — если в этом классе у учителя больше одного
-  // своего предмета, loadJournalGrades сам возьмёт первый из
-  // journalGradesSubjectOptions (уже отфильтрован по классу+учителю), а
-  // переключение между ними — тот же выпадающий список, что видит админ.
   journalGradesSubjectId = null;
   journalGrades = [];
   journalGradeModalChildId = null;
-  journalTeacherScheduleOpen = false;
-  document.getElementById("journalViewTitle").textContent = className;
-  document.getElementById("journalViewEditBtn").style.display = "none";
-  document.getElementById("journalViewTabBar").style.display = "none";
-  document.getElementById("journalGradesActionsRow").style.display = "flex";
-  document.getElementById("journalGradesSubjectBadge").style.display = "flex";
-  document.getElementById("journalTeacherStudentsBtn").style.display = "";
-  document.getElementById("journalTeacherScheduleBtn").style.display = "";
-  ["subjects", "schedule", "students"].forEach(t => {
-    const panel = document.getElementById("journalViewPanel-" + t);
-    if(panel) panel.style.display = "none";
-  });
-  document.getElementById("journalViewPanel-grades").style.display = "";
-  computeJournalClassStudents();
   goTo("journal-view");
-  await loadJournalGrades();
-}
-
-// Полное расписание дня (просмотр) в учительском режиме — своя пара функций,
-// а не switchJournalViewTab (та управляет вкладками админского режима, где
-// journalViewTabBar видима; здесь она всегда скрыта, конфликтовало бы).
-let journalTeacherScheduleOpen = false;
-
-async function openJournalTeacherSchedule() {
-  try {
-    const resp = await fetch(API_URL + "/journal/schedule?city=" + encodeURIComponent(activeJournalCity) + "&class=" + encodeURIComponent(activeJournalClass), {headers: authHeaders()});
-    const d = await resp.json();
-    journalSchedule = d.ok ? d.schedule : [];
-  } catch(e) {
-    console.error("openJournalTeacherSchedule error:", e);
-    journalSchedule = [];
-  }
-  journalTeacherScheduleOpen = true;
-  journalScheduleDayView = null;
-  document.getElementById("journalViewPanel-grades").style.display = "none";
-  document.getElementById("journalGradesSubjectBadge").style.display = "none";
-  document.getElementById("journalViewPanel-schedule").style.display = "";
-  renderJournalViewSchedule();
-}
-
-function closeJournalTeacherSchedule() {
-  journalTeacherScheduleOpen = false;
-  document.getElementById("journalViewPanel-schedule").style.display = "none";
-  document.getElementById("journalViewPanel-grades").style.display = "";
-  document.getElementById("journalGradesSubjectBadge").style.display = "flex";
+  await loadJournalClassData();
 }
 
 function openNewJournalClass() {
@@ -3104,8 +3060,6 @@ async function openJournalClass(name) {
   journalViewTeacherMode = false;
   document.getElementById("journalViewEditBtn").style.display = "";
   document.getElementById("journalViewTabBar").style.display = "";
-  document.getElementById("journalTeacherStudentsBtn").style.display = "none";
-  document.getElementById("journalTeacherScheduleBtn").style.display = "none";
   activeJournalClass = name;
   document.getElementById("journalViewTitle").textContent = name;
   document.getElementById("journalClassTitle").textContent = name;
@@ -3138,28 +3092,11 @@ function openJournalClassEdit() {
   goTo("journal-class");
 }
 
-// Вход учителя в "Дети" своего класса — без доступа к "Предметы"/"Расписание"
-// (те по-прежнему требуют admin/завуч на бэкенде — POST/PUT/DELETE
-// /journal/subjects и /journal/schedule). Учитель попадает сюда с экрана
-// "Оценки" (activeJournalClass/activeJournalCity уже выставлены
-// openJournalTeacherClass), не через карандаш. По просьбе пользователя
-// 2026-09-03: "и учителя и завуч могут записать ребенка в класс" — раньше
-// у учителя вообще не было пути добавить/убрать ученика в свой класс,
-// только общая форма "Дети" без привязки к классу.
-function openJournalTeacherStudents() {
-  closeJournalSubjectModal();
-  cancelJournalScheduleEdit();
-  cancelJournalClassRename();
-  applyJournalClassEditScope(true);
-  document.getElementById("journalClassTitle").textContent = activeJournalClass;
-  switchJournalEditTab("students");
-  goTo("journal-class");
-  computeJournalClassStudents();
-  renderJournalStudents();
-}
-
 // teacherOnly=true — прячет "Расписание"/"Предметы" и переименование класса,
-// оставляя только "Дети". false — восстанавливает полный доступ (админ/завуч).
+// оставляя только "Дети". Сейчас всегда вызывается с false (openJournalClassEdit,
+// admin/завуч) — обычный учитель до экрана редактирования не доходит вовсе
+// (карандаш скрыт, см. openJournalTeacherClass), параметр оставлен на случай
+// частичного доступа завучу в будущем.
 function applyJournalClassEditScope(teacherOnly) {
   document.getElementById("journalTab-schedule").style.display = teacherOnly ? "none" : "";
   document.getElementById("journalTab-subjects").style.display = teacherOnly ? "none" : "";
@@ -3213,12 +3150,8 @@ function switchJournalViewTab(tab) {
 let journalViewGradesReturnTab = "subjects";
 
 function journalViewBack() {
-  if(journalViewTeacherMode && journalTeacherScheduleOpen) {
-    closeJournalTeacherSchedule();
-    return;
-  }
   const gradesPanel = document.getElementById("journalViewPanel-grades");
-  if(!journalViewTeacherMode && gradesPanel.style.display !== "none") {
+  if(gradesPanel.style.display !== "none") {
     switchJournalViewTab(journalViewGradesReturnTab);
     return;
   }
@@ -3821,29 +3754,30 @@ function openJournalScheduleLessonGrades(subjectId) {
   // В учительском режиме бэкенд отдаёт оценки только по СВОЕМУ предмету
   // (_grade_access) — чужой урок в расписании кликабелен для просмотра
   // времени, но не должен вести на 403.
-  if(journalViewTeacherMode) {
-    const mine = journalMySubjects.some(s => s.class_name === activeJournalClass && s.subject_id === subjectId);
-    if(!mine) { showToast("Это не ваш предмет", true); return; }
-    journalGradesSubjectId = subjectId;
-    journalGradesEditingId = null;
-    closeJournalTeacherSchedule();
-    loadJournalGrades();
+  if(journalViewTeacherMode && !journalMySubjects.some(s => s.class_name === activeJournalClass && s.subject_id === subjectId)) {
+    showToast("Это не ваш предмет", true);
     return;
   }
   openJournalViewSubjectGrades(subjectId, "schedule");
 }
 
 function renderJournalView() {
+  // Назначение учителя предмету — структурная настройка, не для обычного
+  // учителя (запрос пользователя 2026-09-07: журнал только на просмотр).
   const subjHtml = journalSubjects.map(s => {
     const initial = s.name.trim().charAt(0).toUpperCase() || "?";
-    const teacherLine = s.teacher_name || "Учитель не назначен — нажмите, чтобы назначить";
-    return `<div class="child-list-item" onclick="openJournalSubjectModal(${s.id})">
+    const teacherLine = journalViewTeacherMode
+      ? (s.teacher_name || "Учитель не назначен")
+      : (s.teacher_name || "Учитель не назначен — нажмите, чтобы назначить");
+    const clickAttr = journalViewTeacherMode ? ' style="cursor:default"' : ` onclick="openJournalSubjectModal(${s.id})"`;
+    const arrow = journalViewTeacherMode ? "" : '<span class="child-arrow">&#8250;</span>';
+    return `<div class="child-list-item"${clickAttr}>
       <div class="avatar">${initial}</div>
       <div class="child-detail">
         <div class="child-detail-name">${escapeHtml(s.name)}</div>
         <div class="child-detail-meta">${escapeHtml(teacherLine)}</div>
       </div>
-      <span class="child-arrow">&#8250;</span>
+      ${arrow}
     </div>`;
   }).join("");
   document.getElementById("journalViewSubjects").innerHTML = subjHtml || '<div class="empty" style="padding:14px 0">Пока нет предметов</div>';
