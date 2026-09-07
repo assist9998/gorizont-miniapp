@@ -547,6 +547,10 @@
     </div>
   </div>
   <div style="margin-bottom:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Отчество</div>
+    <input id="s_patronymic" type="text" placeholder="Петровна" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+  </div>
+  <div style="margin-bottom:12px">
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Город *</div>
     <select id="s_city" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
       <option value="Дананг">Дананг</option>
@@ -2552,6 +2556,18 @@ async function restoreChild(id) {
 function splitFullName(fullName) {
   const parts = (fullName || "").trim().split(/\s+/);
   return { name: parts[0] || "", surname: parts.slice(1).join(" ") };
+}
+
+// Для сотрудников имя хранится как "Имя [Фамилия [Отчество]]" (см.
+// submitStaffForm) — если слов 3 и больше, последнее слово считаем
+// отчеством, а всё между первым и последним — фамилией (обычно одно
+// слово, но так корректно и для редких двойных фамилий).
+function splitStaffFullName(fullName) {
+  const parts = (fullName || "").trim().split(/\s+/).filter(Boolean);
+  if(parts.length >= 3) {
+    return { name: parts[0], surname: parts.slice(1, -1).join(" "), patronymic: parts[parts.length - 1] };
+  }
+  return { name: parts[0] || "", surname: parts.slice(1).join(" "), patronymic: "" };
 }
 
 function openEditForm(id) {
@@ -4776,9 +4792,10 @@ function openEditStaffForm(id) {
   document.getElementById("staffSubmitBtn").textContent = "Сохранить изменения";
   document.getElementById("staffDeleteBtn").style.display = "block";
   document.getElementById("staffArchiveBtn").style.display = "none";
-  const nameParts = splitFullName(s.name);
+  const nameParts = splitStaffFullName(s.name);
   document.getElementById("s_name").value = nameParts.name;
   document.getElementById("s_surname").value = nameParts.surname;
+  document.getElementById("s_patronymic").value = nameParts.patronymic;
   document.getElementById("s_city").value = s.city || "Дананг";
   document.getElementById("s_position").value = s.position || "";
   document.getElementById("s_phone").value = s.phone || "";
@@ -4811,7 +4828,7 @@ function updatePayTypeLabel() {
 }
 
 function clearStaffForm() {
-  ["s_name","s_surname","s_position","s_phone","s_contract_end","s_monthly_rate","s_telegram","s_lesson_rate","s_extended_day_rate","s_overtime_rate","s_work_start","s_work_end"].forEach(id => {
+  ["s_name","s_surname","s_patronymic","s_position","s_phone","s_contract_end","s_monthly_rate","s_telegram","s_lesson_rate","s_extended_day_rate","s_overtime_rate","s_work_start","s_work_end"].forEach(id => {
     document.getElementById(id).value = "";
   });
   document.getElementById("s_pay_type").value = "monthly_fixed";
@@ -4871,7 +4888,8 @@ async function restoreStaffMember(id) {
 async function submitStaffForm() {
   const firstName = document.getElementById("s_name").value.trim();
   const surname = document.getElementById("s_surname").value.trim();
-  const name = surname ? `${firstName} ${surname}` : firstName;
+  const patronymic = document.getElementById("s_patronymic").value.trim();
+  const name = [firstName, surname, patronymic].filter(Boolean).join(" ");
   if(!firstName) { showToast("Введите имя сотрудника", true); return; }
 
   const payType = document.getElementById("s_pay_type").value;
