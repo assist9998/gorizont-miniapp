@@ -377,6 +377,10 @@
     <div id="journalScheduleList" style="margin-bottom:16px"></div>
     <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:14px;margin-bottom:80px">
       <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:10px" id="journalScheduleFormTitle">Добавить урок</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:13px;color:var(--text2);cursor:pointer">
+        <input type="checkbox" id="js_is_break" onchange="toggleJournalScheduleBreak()">
+        Это перерыв (завтрак/обед), не урок
+      </label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
         <select id="js_weekday" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
           <option value="1">Понедельник</option>
@@ -387,6 +391,7 @@
         </select>
         <select id="js_subject" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
         </select>
+        <input id="js_break_label" type="text" placeholder="Например, Обед" style="display:none;width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
         <select id="js_time_start" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px"></select>
@@ -3373,15 +3378,30 @@ function journalLessonCardsHtml(schedule, selectedDay, editable) {
   if(!entries.length) {
     return `<div class="empty" style="padding:14px 0">Уроков нет — ${JOURNAL_WEEKDAYS[selectedDay].toLowerCase()}</div>`;
   }
-  return entries.map((e, i) => {
+  let lessonNumber = 0;
+  return entries.map((e) => {
     const time = [e.time_start, e.time_end].filter(Boolean).join("–");
+    // Перерыв — не урок: без номера, без учителя, не проваливается в оценки
+    // ни в каком режиме, тапом в режиме редактирования можно поправить время/подпись.
+    if(e.is_break) {
+      const editAttr = editable ? ` onclick="startJournalScheduleEdit(${e.id})" style="cursor:pointer"` : ' style="cursor:default"';
+      const delBtn = editable ? `<button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>` : "";
+      return `<div class="child-list-item" style="background:var(--surface2);opacity:.8"${editAttr}>
+        <div class="child-detail">
+          <div class="child-detail-name" style="font-size:12px;color:var(--text2)">${escapeHtml(e.break_label || "Перерыв")}</div>
+          <div class="child-detail-meta">${escapeHtml(time || "Время не указано")}</div>
+        </div>
+        ${delBtn}
+      </div>`;
+    }
+    lessonNumber++;
     const meta = escapeHtml([time, e.teacher_name].filter(Boolean).join(" · "));
     const clickAttr = editable
       ? ` onclick="startJournalScheduleEdit(${e.id})"`
       : e.subject_id ? ` onclick="openJournalScheduleLessonGrades(${e.subject_id})"` : ' style="cursor:default"';
     const delBtn = editable ? `<button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>` : "";
     return `<div class="child-list-item"${clickAttr}>
-        <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${i + 1}</div>
+        <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${lessonNumber}</div>
         <div class="child-detail">
           <div class="child-detail-name">${e.subject_name ? escapeHtml(e.subject_name) : "Предмет не указан"}</div>
           <div class="child-detail-meta">${meta || "Время не указано"}</div>
@@ -3445,12 +3465,25 @@ async function deleteJournalSubject(id) {
   }
 }
 
+// Перерыв (завтрак/обед) — не предмет: прячем select предмета/учителя,
+// показываем текстовую подпись вместо них (жалоба пользователя 2026-09-07,
+// раньше "Завтрак"/"Обед" были обычными предметами и лезли в "Оценки").
+function toggleJournalScheduleBreak() {
+  const isBreak = document.getElementById("js_is_break").checked;
+  document.getElementById("js_subject").style.display = isBreak ? "none" : "";
+  document.getElementById("js_break_label").style.display = isBreak ? "" : "none";
+  document.getElementById("js_teacher").style.display = isBreak ? "none" : "";
+}
+
 function startJournalScheduleEdit(id) {
   const e = journalSchedule.find(x => x.id === id);
   if(!e) return;
   editingJournalScheduleId = id;
   document.getElementById("js_weekday").value = e.weekday;
   document.getElementById("js_subject").value = e.subject_id || "";
+  document.getElementById("js_break_label").value = e.break_label || "";
+  document.getElementById("js_is_break").checked = !!e.is_break;
+  toggleJournalScheduleBreak();
   document.getElementById("js_time_start").value = e.time_start || "";
   document.getElementById("js_time_end").value = e.time_end || "";
   document.getElementById("js_teacher").value = e.teacher_staff_id || "";
@@ -3466,6 +3499,9 @@ function cancelJournalScheduleEdit() {
   document.getElementById("js_time_end").value = "";
   document.getElementById("js_teacher").value = "";
   document.getElementById("js_subject").value = "";
+  document.getElementById("js_break_label").value = "";
+  document.getElementById("js_is_break").checked = false;
+  toggleJournalScheduleBreak();
   document.getElementById("journalScheduleFormTitle").textContent = "Добавить урок";
   document.getElementById("journalScheduleSubmitBtn").textContent = "Добавить урок";
   document.getElementById("journalScheduleCancelBtn").style.display = "none";
@@ -3476,15 +3512,19 @@ async function submitJournalScheduleForm() {
   if(journalPending.has(lockKey)) return;
   journalPending.add(lockKey);
   const weekday = parseInt(document.getElementById("js_weekday").value, 10);
+  const isBreak = document.getElementById("js_is_break").checked;
   const subjectId = document.getElementById("js_subject").value;
+  const breakLabel = document.getElementById("js_break_label").value.trim();
   const timeStart = document.getElementById("js_time_start").value.trim();
   const timeEnd = document.getElementById("js_time_end").value.trim();
   const teacherId = document.getElementById("js_teacher").value;
-  const payload = {
-    weekday, time_start: timeStart, time_end: timeEnd,
-    subject_id: subjectId ? parseInt(subjectId, 10) : null,
-    teacher_staff_id: teacherId ? parseInt(teacherId, 10) : null,
-  };
+  const payload = isBreak
+    ? { weekday, time_start: timeStart, time_end: timeEnd,
+        subject_id: null, teacher_staff_id: null, is_break: true, break_label: breakLabel }
+    : { weekday, time_start: timeStart, time_end: timeEnd,
+        subject_id: subjectId ? parseInt(subjectId, 10) : null,
+        teacher_staff_id: teacherId ? parseInt(teacherId, 10) : null,
+        is_break: false, break_label: null };
   try {
     let resp;
     if(editingJournalScheduleId) {
