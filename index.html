@@ -1044,6 +1044,14 @@ async function loadChildren() {
       children = children.filter(c => c.city === staffInfo.city);
     }
 
+    // Учителю детсад видеть не нужно вообще (просьба пользователя
+    // 2026-09-07) — остальные школьные классы (не только свой) остаются
+    // видны, ограничиваем только отдел. Ничего не убираем на сервере —
+    // просто не даём этим данным попасть в состояние приложения учителя.
+    if(staffInfo && isTeacherRole(staffInfo.role) && !isAdminRole(staffInfo.role) && !isZavuchRole(staffInfo.role)) {
+      children = children.filter(c => c.dept !== "Детский сад");
+    }
+
     const cities = [...new Set(children.map(c => c.city))];
     activeCity = cities[0] || "";
     activeChildCity = cities[0] || "";
