@@ -451,9 +451,12 @@
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Имя *</div>
         <input id="f_name" type="text" placeholder="Иван" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
       </div>
-      <div>
+      <div style="position:relative">
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Фамилия</div>
-        <input id="f_surname" type="text" placeholder="Иванов" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+        <input id="f_surname" type="text" placeholder="Иванов" oninput="onArchiveSurnameInput()" autocomplete="off"
+          onblur="setTimeout(()=>{document.getElementById('archiveSurnameSuggestions').style.display='none'},150)"
+          style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+        <div id="archiveSurnameSuggestions" style="display:none;position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.15);z-index:20;max-height:220px;overflow-y:auto"></div>
       </div>
     </div>
     <div style="margin-bottom:12px">
@@ -2557,6 +2560,46 @@ async function refreshArchiveBadge() {
   } catch(e) { btn.style.display = "none"; }
 }
 
+// Подсказка "такой ребёнок уже есть в архиве" при вводе фамилии в форме
+// добавления — чтобы не заводить дубликат карточки, если ребёнок раньше
+// уже был зачислен и выбыл (просьба пользователя 2026-09-09). Ждём паузу
+// в наборе (2 сек), а не ищем на каждую букву — иначе список будет мигать
+// на каждое нажатие клавиши. Архивных детей достаточно тех, что уже
+// подгружены в refreshArchiveBadge() при открытии формы — отдельный
+// запрос не нужен.
+let archiveSurnameTimer = null;
+function onArchiveSurnameInput() {
+  clearTimeout(archiveSurnameTimer);
+  document.getElementById("archiveSurnameSuggestions").style.display = "none";
+  const q = document.getElementById("f_surname").value.trim();
+  if(q.length < 2) return;
+  archiveSurnameTimer = setTimeout(() => showArchiveSurnameSuggestions(q), 2000);
+}
+
+function showArchiveSurnameSuggestions(q) {
+  // Пока ждали — фамилию могли дописать/стереть, проверяем, что запрос
+  // ещё актуален, чтобы не показать подсказку по уже неверному вводу.
+  if(document.getElementById("f_surname").value.trim() !== q) return;
+  const qLower = q.toLowerCase();
+  const matches = (window._archivedChildren || [])
+    .filter(c => splitFullName(c.name).surname.toLowerCase().startsWith(qLower))
+    .slice(0, 6);
+  const box = document.getElementById("archiveSurnameSuggestions");
+  if(!matches.length) { box.style.display = "none"; return; }
+  box.innerHTML = matches.map(c => `<div onclick="pickArchiveSurnameSuggestion('${c.id}')" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)">
+      <div style="font-weight:600">${escapeHtml(c.name)}</div>
+      <div style="font-size:11px;color:var(--text2)">${escapeHtml(c.city)} · ${escapeHtml(c.group||"")} — в архиве</div>
+    </div>`).join("");
+  box.style.display = "block";
+}
+
+async function pickArchiveSurnameSuggestion(id) {
+  document.getElementById("archiveSurnameSuggestions").style.display = "none";
+  if(!confirm("Похоже, такой ребёнок уже есть в архиве — восстановить его карточку вместо новой?")) return;
+  await restoreChild(id);
+  openEditForm(id);
+}
+
 function openArchive() {
   const list = window._archivedChildren || [];
   document.getElementById("archiveModalContent").innerHTML = list.length ? list.map(c =>
@@ -2669,6 +2712,8 @@ function clearForm() {
     document.getElementById(id).value = "";
   });
   updateGroupOptions();
+  clearTimeout(archiveSurnameTimer);
+  document.getElementById("archiveSurnameSuggestions").style.display = "none";
 }
 
 function switchFormTab(tab) {
