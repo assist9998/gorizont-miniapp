@@ -1074,11 +1074,17 @@ async function loadChildren() {
       children = children.filter(c => c.dept !== "Детский сад");
     }
 
+    // Сохраняем текущий выбор города/отдела при перезагрузке (архивация
+    // карточки, любое обновление данных) — раньше сбрасывались на "первый
+    // по списку" всегда, из-за чего после архивации ребёнка в Дананге
+    // экран мог молча перескочить на Нячанг (жалоба пользователя 2026-09-09).
+    // На "первый по списку" переключаем только если текущий выбор вообще
+    // пропал из данных (например, был единственный город и его удалили).
     const cities = [...new Set(children.map(c => c.city))];
-    activeCity = cities[0] || "";
-    activeChildCity = cities[0] || "";
+    if(!cities.includes(activeCity)) activeCity = cities[0] || "";
+    if(!cities.includes(activeChildCity)) activeChildCity = cities[0] || "";
     const depts = [...new Set(children.filter(c => c.city === activeCity && c.dept !== "Школа").map(c => c.dept))];
-    activeDept = depts[0] || "";
+    if(!depts.includes(activeDept)) activeDept = depts[0] || "";
     console.log("Loaded:", children.length, "children");
 
     // Загружаем сегодняшние отметки из таблицы
