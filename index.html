@@ -63,6 +63,9 @@
   .filters::-webkit-scrollbar{display:none}
   .filter-btn{flex-shrink:0;padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:'Geologica',sans-serif;font-size:13px;cursor:pointer;transition:all .2s;white-space:nowrap}
   .filter-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .filter-btn-day{padding:6px 9px}
+  .week-arrow-btn{flex-shrink:0;width:26px;height:26px;border-radius:50%;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+  .week-range-label{flex-shrink:0;font-size:11px;color:var(--text2);white-space:nowrap;padding:0 1px}
   .att-stats{display:flex;gap:10px;margin-bottom:12px}
   .att-stat{flex:1;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;text-align:center}
   .att-stat-num{font-size:20px;font-weight:700}
@@ -678,6 +681,22 @@
     <div style="display:flex;gap:8px">
       <button onclick="saveJournalSubjectModal()" class="filter-btn active" style="flex:1;text-align:center">Сохранить</button>
       <button onclick="closeJournalSubjectModal()" class="filter-btn" style="flex:1;text-align:center">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: SUBSTITUTION — замена учителя на конкретную дату (не на весь
+     предмет/расписание), обсуждение фичи 2026-09-09. -->
+<div class="modal-overlay" id="substitutionModalOverlay" onclick="if(event.target===this) closeSubstitutionModal()">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-name">Замена учителя</div>
+    <div style="font-size:13px;color:var(--text2);margin-top:-8px;margin-bottom:14px" id="substitutionModalInfo"></div>
+    <select id="substitutionModalTeacherSelect"
+      style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px;box-sizing:border-box"></select>
+    <div style="display:flex;gap:8px">
+      <button onclick="saveSubstitutionModal()" class="filter-btn active" style="flex:1;text-align:center">Сохранить</button>
+      <button onclick="closeSubstitutionModal()" class="filter-btn" style="flex:1;text-align:center">Отмена</button>
     </div>
   </div>
 </div>
@@ -2891,6 +2910,16 @@ const journalPending = new Set();
 // в одном, не сбивая позицию в другом.
 let journalScheduleDayView = null;
 let journalScheduleDayEdit = null;
+// Смещение недели от текущей (0 = эта неделя, 1 = следующая, -1 = прошлая) —
+// нужно, чтобы кнопка "замена" на уроке знала точную календарную дату, а не
+// просто день недели (иначе непонятно, на какую именно среду ставится замена,
+// см. обсуждение фичи "замена учителя"). Отдельно для экрана просмотра и
+// редактирования, как и journalScheduleDay*.
+let journalScheduleWeekView = 0;
+let journalScheduleWeekEdit = 0;
+// {schedule_id: {teacher_staff_id, teacher_name}} — замены на КОНКРЕТНУЮ
+// дату текущего выбранного дня (перезагружается при смене дня/недели).
+let journalSubstitutions = {};
 
 // Оценки — своя дата (не день недели расписания, а конкретный календарный
 // день) и свой выбранный предмет. null = ещё не выбраны, подставятся при
@@ -3046,6 +3075,7 @@ async function openJournalTeacherClass(className) {
   document.getElementById("journalViewEditBtn").style.display = "none";
   switchJournalViewTab("schedule");
   journalScheduleDayView = null;
+  journalScheduleWeekView = 0;
   journalGradesDate = null;
   journalGradesSubjectId = null;
   journalGrades = [];
@@ -3074,6 +3104,8 @@ async function openJournalClass(name) {
   switchJournalViewTab("schedule");
   journalScheduleDayView = null;
   journalScheduleDayEdit = null;
+  journalScheduleWeekView = 0;
+  journalScheduleWeekEdit = 0;
   journalGradesDate = null;
   journalGradesSubjectId = null;
   journalGrades = [];
@@ -3319,6 +3351,53 @@ async function saveJournalSubjectModal() {
   }
 }
 
+// Замена учителя на конкретную дату — точечное исключение поверх обычного
+// расписания (journal_schedule_substitutions), не трогает журнал_schedule/
+// журнал_subjects (см. обсуждение фичи "замена учителя" 2026-09-09).
+let substitutionModalScheduleId = null;
+let substitutionModalDate = null;
+
+function openSubstitutionModal(scheduleId, dateStr) {
+  const e = journalSchedule.find(x => x.id === scheduleId);
+  if(!e) return;
+  substitutionModalScheduleId = scheduleId;
+  substitutionModalDate = dateStr;
+  document.getElementById("substitutionModalInfo").textContent =
+    (e.subject_name || "Предмет") + " · " + dateStr + " · обычно ведёт: " + (e.teacher_name || "не назначен");
+  const sub = journalSubstitutions[scheduleId];
+  document.getElementById("substitutionModalTeacherSelect").innerHTML =
+    '<option value="">Без замены (обычный учитель)</option>' +
+    journalTeachers.map(t => `<option value="${t.id}"${sub && sub.teacher_staff_id === t.id ? " selected" : ""}>${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
+  document.getElementById("substitutionModalOverlay").classList.add("show");
+}
+
+function closeSubstitutionModal() {
+  document.getElementById("substitutionModalOverlay").classList.remove("show");
+  substitutionModalScheduleId = null;
+  substitutionModalDate = null;
+}
+
+async function saveSubstitutionModal() {
+  const scheduleId = substitutionModalScheduleId;
+  const date = substitutionModalDate;
+  if(!scheduleId || !date) return;
+  const raw = document.getElementById("substitutionModalTeacherSelect").value;
+  const teacher_staff_id = raw ? parseInt(raw, 10) : null;
+  try {
+    const resp = await fetch(API_URL + "/journal/substitutions", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({schedule_id: scheduleId, date, teacher_staff_id}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    closeSubstitutionModal();
+    renderJournalSchedule();
+  } catch(e) {
+    showToast("Не удалось сохранить замену", true);
+  }
+}
+
 // editingJournalScheduleId — id урока, который сейчас редактируется через
 // нижнюю форму (null — форма в режиме добавления нового урока).
 let editingJournalScheduleId = null;
@@ -3333,23 +3412,65 @@ function pickDefaultScheduleDay(schedule) {
   return isoToday <= 5 ? isoToday : 1;
 }
 
+// Понедельник текущей недели + смещение в неделях — точка отсчёта для
+// вычисления реальной календарной даты выбранного дня расписания (нужно
+// для замен: "замена" ставится на конкретное число, а не просто на "среду",
+// см. обсуждение фичи "замена учителя").
+function journalWeekMonday(weekOffset) {
+  const d = new Date();
+  const jsDay = d.getDay();
+  const isoToday = jsDay === 0 ? 7 : jsDay;
+  d.setDate(d.getDate() - (isoToday - 1) + weekOffset * 7);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function journalDateForWeekday(weekday, weekOffset) {
+  const monday = journalWeekMonday(weekOffset);
+  monday.setDate(monday.getDate() + (weekday - 1));
+  return monday;
+}
+
+function fmtDDMM(d) {
+  return String(d.getDate()).padStart(2,'0') + "." + String(d.getMonth()+1).padStart(2,'0');
+}
+
+// "ДД.ММ.ГГГГ" — тот же формат дат, что и везде в журнале (темы уроков, ДЗ,
+// посещаемость), чтобы дата замены была совместима с остальными таблицами.
+function journalDateStrForWeekday(weekday, weekOffset) {
+  const d = journalDateForWeekday(weekday, weekOffset);
+  return String(d.getDate()).padStart(2,'0') + "." + String(d.getMonth()+1).padStart(2,'0') + "." + d.getFullYear();
+}
+
+function journalWeekRangeLabel(weekOffset) {
+  const mon = journalWeekMonday(weekOffset);
+  const fri = new Date(mon); fri.setDate(fri.getDate() + 4);
+  return fmtDDMM(mon) + "–" + fmtDDMM(fri);
+}
+
 // Пилюли-дни недели (как переключатель дат в школьном дневнике), Пн..Пт —
 // в школе нет уроков по сб/вс. Дни без уроков остаются кликабельными, но
 // приглушены — на них тоже можно переключиться, чтобы добавить первый урок.
-function journalDayPillsHtml(schedule, selectedDay, onClickFn) {
-  let html = '<div class="filters">';
+// Стрелки по краям строки переключают неделю целиком (onWeekFn), между
+// левой стрелкой и днями — диапазон дат текущей недели, чтобы было видно,
+// на какую именно неделю сейчас смотрим.
+function journalDayPillsHtml(schedule, selectedDay, onClickFn, weekOffset, onWeekFn) {
+  let html = '<div class="filters" style="align-items:center">';
+  html += `<button class="week-arrow-btn" onclick="${onWeekFn}(${weekOffset - 1})">‹</button>`;
+  html += `<span class="week-range-label">${journalWeekRangeLabel(weekOffset)}</span>`;
   for(let wd = 1; wd <= 5; wd++) {
     const has = schedule.some(e => e.weekday === wd);
     const active = wd === selectedDay;
-    html += `<button class="filter-btn${active ? " active" : ""}" style="${has || active ? "" : "opacity:.5"}" onclick="${onClickFn}(${wd})">${JOURNAL_WEEKDAYS_SHORT[wd]}</button>`;
+    html += `<button class="filter-btn filter-btn-day${active ? " active" : ""}" style="${has || active ? "" : "opacity:.5"}" onclick="${onClickFn}(${wd})">${JOURNAL_WEEKDAYS_SHORT[wd]}</button>`;
   }
+  html += `<button class="week-arrow-btn" onclick="${onWeekFn}(${weekOffset + 1})">›</button>`;
   html += "</div>";
   return html;
 }
 
 // Пронумерованные карточки уроков одного дня, отсортированные по времени
 // начала (номер урока = порядок, как "1-й урок, 2-й урок" в дневнике).
-function journalLessonCardsHtml(schedule, selectedDay, editable) {
+function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
   const entries = schedule
     .filter(e => e.weekday === selectedDay)
     .slice()
@@ -3357,6 +3478,7 @@ function journalLessonCardsHtml(schedule, selectedDay, editable) {
   if(!entries.length) {
     return `<div class="empty" style="padding:14px 0">Уроков нет — ${JOURNAL_WEEKDAYS[selectedDay].toLowerCase()}</div>`;
   }
+  const dateStr = journalDateStrForWeekday(selectedDay, weekOffset);
   let lessonNumber = 0;
   return entries.map((e) => {
     const time = [e.time_start, e.time_end].filter(Boolean).join("–");
@@ -3374,20 +3496,38 @@ function journalLessonCardsHtml(schedule, selectedDay, editable) {
       </div>`;
     }
     lessonNumber++;
-    const meta = escapeHtml([time, e.teacher_name].filter(Boolean).join(" · "));
+    // Замена на ЭТУ дату (journalSubstitutions, ключ — id урока расписания)
+    // подменяет отображаемого учителя, не трогая обычную привязку в БД.
+    const sub = journalSubstitutions[e.id];
+    const teacherLabel = sub ? (sub.teacher_name || "?") + " (замена)" : e.teacher_name;
+    const meta = escapeHtml([time, teacherLabel].filter(Boolean).join(" · "));
     const clickAttr = editable
       ? ` onclick="startJournalScheduleEdit(${e.id})"`
       : e.subject_id ? ` onclick="openJournalScheduleLessonGrades(${e.subject_id})"` : ' style="cursor:default"';
     const delBtn = editable ? `<button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>` : "";
+    const subBtn = editable ? `<button onclick="event.stopPropagation();openSubstitutionModal(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${sub ? "var(--accent)" : "var(--border)"};background:transparent;color:${sub ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:4px">замена</button>` : "";
     return `<div class="child-list-item"${clickAttr}>
         <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${lessonNumber}</div>
         <div class="child-detail">
           <div class="child-detail-name">${e.subject_name ? escapeHtml(e.subject_name) : "Предмет не указан"}</div>
           <div class="child-detail-meta">${meta || "Время не указано"}</div>
         </div>
-        ${delBtn}
+        ${subBtn}${delBtn}
       </div>`;
   }).join("");
+}
+
+// Замены на выбранную дату — {schedule_id: {teacher_staff_id, teacher_name}}.
+async function loadJournalSubstitutionsForDate(dateStr) {
+  try {
+    const resp = await fetch(API_URL + "/journal/substitutions?city=" + encodeURIComponent(activeJournalCity) +
+      "&class=" + encodeURIComponent(activeJournalClass) + "&date=" + encodeURIComponent(dateStr), {headers: authHeaders()});
+    const d = await resp.json();
+    journalSubstitutions = {};
+    (d.substitutions || []).forEach(s => { journalSubstitutions[s.schedule_id] = s; });
+  } catch(e) {
+    journalSubstitutions = {};
+  }
 }
 
 function switchJournalScheduleDay(wd) {
@@ -3395,11 +3535,20 @@ function switchJournalScheduleDay(wd) {
   renderJournalSchedule();
 }
 
+function switchJournalScheduleWeek(offset) {
+  journalScheduleWeekEdit = offset;
+  renderJournalSchedule();
+}
+
 function renderJournalSchedule() {
   if(journalScheduleDayEdit === null) journalScheduleDayEdit = pickDefaultScheduleDay(journalSchedule);
-  const pills = journalDayPillsHtml(journalSchedule, journalScheduleDayEdit, "switchJournalScheduleDay");
-  const cards = journalLessonCardsHtml(journalSchedule, journalScheduleDayEdit, true);
-  document.getElementById("journalScheduleList").innerHTML = pills + cards;
+  const draw = () => {
+    const pills = journalDayPillsHtml(journalSchedule, journalScheduleDayEdit, "switchJournalScheduleDay", journalScheduleWeekEdit, "switchJournalScheduleWeek");
+    const cards = journalLessonCardsHtml(journalSchedule, journalScheduleDayEdit, true, journalScheduleWeekEdit);
+    document.getElementById("journalScheduleList").innerHTML = pills + cards;
+  };
+  draw();
+  loadJournalSubstitutionsForDate(journalDateStrForWeekday(journalScheduleDayEdit, journalScheduleWeekEdit)).then(draw);
 }
 
 async function addJournalSubject() {
@@ -3730,11 +3879,20 @@ function switchJournalViewScheduleDay(wd) {
   renderJournalViewSchedule();
 }
 
+function switchJournalViewScheduleWeek(offset) {
+  journalScheduleWeekView = offset;
+  renderJournalViewSchedule();
+}
+
 function renderJournalViewSchedule() {
   if(journalScheduleDayView === null) journalScheduleDayView = pickDefaultScheduleDay(journalSchedule);
-  const pills = journalDayPillsHtml(journalSchedule, journalScheduleDayView, "switchJournalViewScheduleDay");
-  const cards = journalLessonCardsHtml(journalSchedule, journalScheduleDayView, false);
-  document.getElementById("journalViewSchedule").innerHTML = pills + cards;
+  const draw = () => {
+    const pills = journalDayPillsHtml(journalSchedule, journalScheduleDayView, "switchJournalViewScheduleDay", journalScheduleWeekView, "switchJournalViewScheduleWeek");
+    const cards = journalLessonCardsHtml(journalSchedule, journalScheduleDayView, false, journalScheduleWeekView);
+    document.getElementById("journalViewSchedule").innerHTML = pills + cards;
+  };
+  draw();
+  loadJournalSubstitutionsForDate(journalDateStrForWeekday(journalScheduleDayView, journalScheduleWeekView)).then(draw);
 }
 
 // Клик по уроку в "Расписании" по-прежнему ведёт в "Оценки" с предметом
