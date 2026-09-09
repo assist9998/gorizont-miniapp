@@ -3449,6 +3449,42 @@ function journalWeekRangeLabel(weekOffset) {
   return fmtDDMM(mon) + "–" + fmtDDMM(fri);
 }
 
+// Учебный год 26/27 и каникулы (картинка "Календарь на 26/27 учебный год",
+// прислана пользователем 2026-09-09) — те же границы, что и триместры
+// (JOURNAL_QUARTER_RANGES), плюс сами перерывы между ними. Ограничивает
+// стрелки недели в Расписании: без этого можно было улистать в август
+// (до начала учёбы) или на каникулы и случайно проставить туда урок/замену.
+const SCHOOL_YEAR_START = dmyToDate("01.09.2026");
+const SCHOOL_YEAR_END = dmyToDate("25.05.2027");
+const SCHOOL_HOLIDAYS = [
+  [dmyToDate("23.11.2026"), dmyToDate("29.11.2026")],
+  [dmyToDate("30.12.2026"), dmyToDate("10.01.2027")],
+  [dmyToDate("08.03.2027"), dmyToDate("14.03.2027")],
+];
+
+function isSchoolWeek(weekOffset) {
+  const mon = journalWeekMonday(weekOffset);
+  const fri = new Date(mon); fri.setDate(fri.getDate() + 4);
+  if(fri < SCHOOL_YEAR_START || mon > SCHOOL_YEAR_END) return false;
+  return !SCHOOL_HOLIDAYS.some(([from, to]) => mon <= to && fri >= from);
+}
+
+// Следующая (в направлении direction: -1 назад/+1 вперёд) неделя, где есть
+// учёба — перепрыгивает каникулы; null, если в эту сторону учебных недель
+// больше нет вовсе (конец/начало учебного года) — тогда стрелка отключается.
+function nextValidWeekOffset(weekOffset, direction) {
+  let w = weekOffset;
+  for(let i = 0; i < 80; i++) {
+    w += direction;
+    const mon = journalWeekMonday(w);
+    const fri = new Date(mon); fri.setDate(fri.getDate() + 4);
+    if(direction < 0 && fri < SCHOOL_YEAR_START) return null;
+    if(direction > 0 && mon > SCHOOL_YEAR_END) return null;
+    if(isSchoolWeek(w)) return w;
+  }
+  return null;
+}
+
 // Пилюли-дни недели (как переключатель дат в школьном дневнике), Пн..Пт —
 // в школе нет уроков по сб/вс. Дни без уроков остаются кликабельными, но
 // приглушены — на них тоже можно переключиться, чтобы добавить первый урок.
@@ -3457,14 +3493,20 @@ function journalWeekRangeLabel(weekOffset) {
 // отдельным бейджиком над списком уроков (journalWeekBadgeHtml), не в этой
 // строке — там он был тесно и некрасиво (правка 2026-09-09).
 function journalDayPillsHtml(schedule, selectedDay, onClickFn, weekOffset, onWeekFn) {
+  const prevWeek = nextValidWeekOffset(weekOffset, -1);
+  const nextWeek = nextValidWeekOffset(weekOffset, 1);
   let html = '<div class="filters" style="align-items:center">';
-  html += `<button class="week-arrow-btn" onclick="${onWeekFn}(${weekOffset - 1})">‹</button>`;
+  html += prevWeek === null
+    ? `<button class="week-arrow-btn" disabled style="opacity:.35;cursor:default">‹</button>`
+    : `<button class="week-arrow-btn" onclick="${onWeekFn}(${prevWeek})">‹</button>`;
   for(let wd = 1; wd <= 5; wd++) {
     const has = schedule.some(e => e.weekday === wd);
     const active = wd === selectedDay;
     html += `<button class="filter-btn filter-btn-day${active ? " active" : ""}" style="${has || active ? "" : "opacity:.5"}" onclick="${onClickFn}(${wd})">${JOURNAL_WEEKDAYS_SHORT[wd]}</button>`;
   }
-  html += `<button class="week-arrow-btn" onclick="${onWeekFn}(${weekOffset + 1})">›</button>`;
+  html += nextWeek === null
+    ? `<button class="week-arrow-btn" disabled style="opacity:.35;cursor:default">›</button>`
+    : `<button class="week-arrow-btn" onclick="${onWeekFn}(${nextWeek})">›</button>`;
   html += "</div>";
   return html;
 }
@@ -3547,6 +3589,7 @@ function switchJournalScheduleWeek(offset) {
 
 function renderJournalSchedule() {
   if(journalScheduleDayEdit === null) journalScheduleDayEdit = pickDefaultScheduleDay(journalSchedule);
+  if(!isSchoolWeek(journalScheduleWeekEdit)) journalScheduleWeekEdit = nextValidWeekOffset(journalScheduleWeekEdit, 1) ?? journalScheduleWeekEdit;
   const draw = () => {
     const pills = journalDayPillsHtml(journalSchedule, journalScheduleDayEdit, "switchJournalScheduleDay", journalScheduleWeekEdit, "switchJournalScheduleWeek");
     const badge = journalWeekBadgeHtml(journalScheduleWeekEdit);
@@ -3892,6 +3935,7 @@ function switchJournalViewScheduleWeek(offset) {
 
 function renderJournalViewSchedule() {
   if(journalScheduleDayView === null) journalScheduleDayView = pickDefaultScheduleDay(journalSchedule);
+  if(!isSchoolWeek(journalScheduleWeekView)) journalScheduleWeekView = nextValidWeekOffset(journalScheduleWeekView, 1) ?? journalScheduleWeekView;
   const draw = () => {
     const pills = journalDayPillsHtml(journalSchedule, journalScheduleDayView, "switchJournalViewScheduleDay", journalScheduleWeekView, "switchJournalViewScheduleWeek");
     const badge = journalWeekBadgeHtml(journalScheduleWeekView);
