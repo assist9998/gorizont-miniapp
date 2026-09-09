@@ -524,6 +524,18 @@
         <input id="f_telegram" type="text" placeholder="@username" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
       </div>
     </div>
+    <div id="secondParentGroup" style="display:none;margin-bottom:12px;padding-top:8px;border-top:1px dashed var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase">Второй родитель</div>
+        <button type="button" onclick="removeSecondParent()" style="border:none;background:transparent;color:var(--danger);font-size:11px;cursor:pointer">убрать</button>
+      </div>
+      <input id="f_parent2" type="text" placeholder="Имя родителя" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none;margin-bottom:10px;box-sizing:border-box">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <input id="f_phone2" type="text" placeholder="+7 999..." style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none;box-sizing:border-box">
+        <input id="f_telegram2" type="text" placeholder="@username" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none;box-sizing:border-box">
+      </div>
+    </div>
+    <button type="button" id="addSecondParentBtn" onclick="showSecondParent()" style="width:100%;padding:8px 14px;border-radius:10px;border:1.5px dashed var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer;margin-bottom:12px">+ Добавить второго родителя</button>
     <div id="parentLinkRow" style="display:none;margin-bottom:20px">
       <button type="button" onclick="generateParentLinkCode()" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">👪 Привязать родителя (отдельное read-only приложение)</button>
     </div>
@@ -1864,8 +1876,33 @@ function renderCalendarModal(c, history) {
 // Карточка ребёнка (вкладка "Дети") — только контакты/аллергии, без календаря
 // посещаемости: календарь релевантен только на экране "Посещаемость" (см.
 // openAttCalendar/renderCalendarModal), тут он был лишним.
+// Несколько родителей — отдельные блоки, разделённые "\n" в c.parent (не
+// склеены через ";" в одну строку, как раньше) — каждый блок "Имя|Телефон|
+// Telegram", как и при одном родителе. У каждого блока со своим Telegram —
+// своя кнопка "Привязать" (автопривязка, см. autoLinkParent), т.к. привязка
+// всегда идёт на конкретного человека, а не на карточку в целом.
+function parentBlockHtml(c, block, idx, total) {
+  const parts = block.split("|").map(p => p.trim());
+  const name = parts[0] || "";
+  const phone = parts[1] || "";
+  const telegram = parts[2] || "";
+  const label = total > 1 ? `Родитель ${idx + 1}` : "Родитель";
+  const canLink = c.dept === "Школа" && telegram;
+  return '<div style="border-top:1px solid var(--border);padding:9px 0">' +
+      '<div style="display:flex;justify-content:space-between;font-size:13px">' +
+        '<span style="color:var(--text2)">' + label + '</span>' +
+        '<span style="font-weight:500">' + escapeHtml(name || "—") + '</span>' +
+      '</div>' +
+      (phone ? '<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:6px">' +
+        '<span style="color:var(--text2)">Телефон</span><span style="font-weight:500">' + escapeHtml(phone) + '</span></div>' : '') +
+      (telegram ? '<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:6px">' +
+        '<span style="color:var(--text2)">Telegram</span><span style="font-weight:500;color:var(--accent)">' + escapeHtml(telegram) + '</span></div>' : '') +
+      (canLink ? '<button onclick="autoLinkParent(' + c.id + ',' + idx + ')" id="linkBtn_' + c.id + '_' + idx + '" style="margin-top:8px;width:100%;padding:8px;border-radius:8px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:12px;font-weight:500;cursor:pointer">👪 Привязать</button>' : '') +
+    '</div>';
+}
+
 function renderModal(c) {
-  const parts = (c.parent || "").split("|");
+  const blocks = (c.parent || "").split("\n").map(b => b.trim()).filter(Boolean);
   const hasAllergy = c.allergy && c.allergy !== "Нет";
   const age = c.dob ? calcAge(c.dob) : "—";
   // Тип/до какого времени — только у сада, у школы этих полей нет вообще
@@ -1882,18 +1919,9 @@ function renderModal(c) {
         '<span style="color:var(--text2)">Дата рождения</span>' +
         '<span style="font-weight:500">' + escapeHtml(c.dob) + '</span>' +
       '</div>' : "") +
-    '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
-      '<span style="color:var(--text2)">Родитель</span>' +
-      '<span style="font-weight:500">' + escapeHtml((parts[0]||"—").trim()) + '</span>' +
-    '</div>' +
-    '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
-      '<span style="color:var(--text2)">Телефон</span>' +
-      '<span style="font-weight:500">' + escapeHtml((parts[1]||"—").trim()) + '</span>' +
-    '</div>' +
-    '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
-      '<span style="color:var(--text2)">Telegram</span>' +
-      '<span style="font-weight:500;color:var(--accent)">' + escapeHtml((parts[2]||"—").trim()) + '</span>' +
-    '</div>' +
+    (blocks.length
+      ? blocks.map((b, i) => parentBlockHtml(c, b, i, blocks.length)).join("")
+      : '<div style="border-top:1px solid var(--border);padding:9px 0;font-size:13px;color:var(--text2)">Родитель не указан</div>') +
     (hasAllergy ?
       '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;align-items:center;font-size:13px">' +
         '<span style="color:var(--text2)">Особенности</span>' +
@@ -2676,16 +2704,79 @@ function openEditForm(id) {
   updateGroupOptions(c.group || "");
   document.getElementById("f_type").value = c.type || "Полный";
   document.getElementById("f_until").value = c.until || "";
-  const parts = (c.parent || "").split("|");
-  document.getElementById("f_parent").value = (parts[0]||"").trim();
-  document.getElementById("f_phone").value = (parts[1]||"").trim();
-  document.getElementById("f_telegram").value = (parts[2]||"").trim();
+  // Родители — отдельные блоки через "\n" (см. renderModal/parentBlockHtml),
+  // не склеены через ";" в одну строку. Форма редактирует максимум двух —
+  // третий и далее в реальных случаях не встречается, а не ограниченный по
+  // числу список — заметно больше UI-работы ради очень редкого случая.
+  const blocks = (c.parent || "").split("\n").map(b => b.trim()).filter(Boolean);
+  const p1 = (blocks[0] || "").split("|").map(s => s.trim());
+  document.getElementById("f_parent").value = p1[0] || "";
+  document.getElementById("f_phone").value = p1[1] || "";
+  document.getElementById("f_telegram").value = p1[2] || "";
+  if(blocks[1]) {
+    const p2 = blocks[1].split("|").map(s => s.trim());
+    document.getElementById("f_parent2").value = p2[0] || "";
+    document.getElementById("f_phone2").value = p2[1] || "";
+    document.getElementById("f_telegram2").value = p2[2] || "";
+    document.getElementById("secondParentGroup").style.display = "block";
+    document.getElementById("addSecondParentBtn").style.display = "none";
+  } else {
+    removeSecondParent();
+  }
   document.getElementById("f_allergy").value = (c.allergy && c.allergy !== "Нет") ? c.allergy : "";
   goTo("form");
 }
 
+function showSecondParent() {
+  document.getElementById("secondParentGroup").style.display = "block";
+  document.getElementById("addSecondParentBtn").style.display = "none";
+}
+
+function removeSecondParent() {
+  ["f_parent2","f_phone2","f_telegram2"].forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("secondParentGroup").style.display = "none";
+  document.getElementById("addSecondParentBtn").style.display = "block";
+}
+
 // Код привязки родителя — открывает read-only приложение parent.html
 // (отдельное от этого, staff-версии), см. api.py /children/{id}/parent-link.
+// Автопривязка (кнопка "👪 Привязать" под конкретным родителем в карточке,
+// см. parentBlockHtml) — если этот ник уже писал боту раньше, бот сам
+// присылает ему приглашение с кнопкой, без ручного кода (см. api.py
+// handle_auto_link_parent). Если не найден — просим сначала попросить
+// родителя открыть бота; ручной код (generateParentLinkCode) остаётся
+// запасным путём в форме редактирования.
+async function autoLinkParent(childId, idx) {
+  const c = children.find(x => x.id == childId);
+  if(!c) return;
+  const blocks = (c.parent || "").split("\n").map(b => b.trim()).filter(Boolean);
+  const block = blocks[idx];
+  const telegram = block ? (block.split("|")[2] || "").trim() : "";
+  if(!telegram) return;
+  const btn = document.getElementById("linkBtn_" + childId + "_" + idx);
+  const prevText = btn ? btn.textContent : "";
+  if(btn) { btn.disabled = true; btn.textContent = "Ищем..."; }
+  try {
+    const resp = await fetch(API_URL + "/children/" + childId + "/parent-link-auto", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({telegram}),
+    });
+    const d = await resp.json();
+    if(d.ok) {
+      showToast("Сообщение отправлено родителю в Telegram");
+    } else if(d.error === "not_found") {
+      showToast("Родитель ещё не писал боту — попросите его открыть бота, затем нажмите ещё раз", true);
+    } else {
+      showToast("Не удалось отправить — попробуйте код вручную из формы редактирования", true);
+    }
+  } catch(e) {
+    showToast("Ошибка сети", true);
+  } finally {
+    if(btn) { btn.disabled = false; btn.textContent = prevText; }
+  }
+}
+
 async function generateParentLinkCode() {
   if(!editChildId) return;
   try {
@@ -2712,6 +2803,7 @@ function clearForm() {
     document.getElementById(id).value = "";
   });
   updateGroupOptions();
+  removeSecondParent();
   clearTimeout(archiveSurnameTimer);
   document.getElementById("archiveSurnameSuggestions").style.display = "none";
 }
@@ -2765,6 +2857,25 @@ function fillFromTrial(idx) {
   showToast("Данные заполнены");
 }
 
+function buildParentBlock(name, phone, telegram) {
+  if(!name && !phone && !telegram) return "";
+  return `${name} | ${phone} | ${telegram}`;
+}
+
+function buildParentField() {
+  const block1 = buildParentBlock(
+    document.getElementById("f_parent").value.trim(),
+    document.getElementById("f_phone").value.trim(),
+    document.getElementById("f_telegram").value.trim(),
+  );
+  const block2 = buildParentBlock(
+    document.getElementById("f_parent2").value.trim(),
+    document.getElementById("f_phone2").value.trim(),
+    document.getElementById("f_telegram2").value.trim(),
+  );
+  return [block1, block2].filter(Boolean).join("\n");
+}
+
 async function submitForm() {
   const firstName = document.getElementById("f_name").value.trim();
   const surname = document.getElementById("f_surname").value.trim();
@@ -2782,9 +2893,13 @@ async function submitForm() {
     dept,
     type: isSchool ? "" : document.getElementById("f_type").value,
     until: isSchool ? "" : document.getElementById("f_until").value,
-    parent: document.getElementById("f_parent").value.trim(),
-    phone: document.getElementById("f_phone").value.trim(),
-    telegram: document.getElementById("f_telegram").value.trim(),
+    // Второй родитель (если добавлен) — отдельный блок через "\n" внутри
+    // того же поля "parent" (см. openEditForm/parentBlockHtml), backend
+    // просто дописывает phone/telegram к концу строки и .strip(" |") их
+    // затирает, если пустые — поэтому здесь phone/telegram намеренно "".
+    parent: buildParentField(),
+    phone: "",
+    telegram: "",
     allergy: document.getElementById("f_allergy").value.trim() || "Нет",
     status: "Активный",
   };
