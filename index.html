@@ -64,8 +64,9 @@
   .filter-btn{flex-shrink:0;padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:'Geologica',sans-serif;font-size:13px;cursor:pointer;transition:all .2s;white-space:nowrap}
   .filter-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
   .filter-btn-day{padding:6px 9px}
-  .week-arrow-btn{flex-shrink:0;width:26px;height:26px;border-radius:50%;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
-  .week-range-label{flex-shrink:0;font-size:11px;color:var(--text2);white-space:nowrap;padding:0 1px}
+  .week-arrow-btn{flex-shrink:0;padding:6px 12px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:'Geologica',sans-serif;font-size:13px;line-height:1;cursor:pointer}
+  .week-range-badge{display:flex;justify-content:flex-end;margin:-4px 0 10px}
+  .week-range-badge span{font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:3px 10px}
   .att-stats{display:flex;gap:10px;margin-bottom:12px}
   .att-stat{flex:1;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;text-align:center}
   .att-stat-num{font-size:20px;font-weight:700}
@@ -3451,13 +3452,13 @@ function journalWeekRangeLabel(weekOffset) {
 // Пилюли-дни недели (как переключатель дат в школьном дневнике), Пн..Пт —
 // в школе нет уроков по сб/вс. Дни без уроков остаются кликабельными, но
 // приглушены — на них тоже можно переключиться, чтобы добавить первый урок.
-// Стрелки по краям строки переключают неделю целиком (onWeekFn), между
-// левой стрелкой и днями — диапазон дат текущей недели, чтобы было видно,
-// на какую именно неделю сейчас смотрим.
+// Стрелки по краям строки переключают неделю целиком (onWeekFn), той же
+// пилюльной формы, что и дни — диапазон дат текущей недели показывается
+// отдельным бейджиком над списком уроков (journalWeekBadgeHtml), не в этой
+// строке — там он был тесно и некрасиво (правка 2026-09-09).
 function journalDayPillsHtml(schedule, selectedDay, onClickFn, weekOffset, onWeekFn) {
   let html = '<div class="filters" style="align-items:center">';
   html += `<button class="week-arrow-btn" onclick="${onWeekFn}(${weekOffset - 1})">‹</button>`;
-  html += `<span class="week-range-label">${journalWeekRangeLabel(weekOffset)}</span>`;
   for(let wd = 1; wd <= 5; wd++) {
     const has = schedule.some(e => e.weekday === wd);
     const active = wd === selectedDay;
@@ -3466,6 +3467,10 @@ function journalDayPillsHtml(schedule, selectedDay, onClickFn, weekOffset, onWee
   html += `<button class="week-arrow-btn" onclick="${onWeekFn}(${weekOffset + 1})">›</button>`;
   html += "</div>";
   return html;
+}
+
+function journalWeekBadgeHtml(weekOffset) {
+  return `<div class="week-range-badge"><span>${journalWeekRangeLabel(weekOffset)}</span></div>`;
 }
 
 // Пронумерованные карточки уроков одного дня, отсортированные по времени
@@ -3544,8 +3549,9 @@ function renderJournalSchedule() {
   if(journalScheduleDayEdit === null) journalScheduleDayEdit = pickDefaultScheduleDay(journalSchedule);
   const draw = () => {
     const pills = journalDayPillsHtml(journalSchedule, journalScheduleDayEdit, "switchJournalScheduleDay", journalScheduleWeekEdit, "switchJournalScheduleWeek");
+    const badge = journalWeekBadgeHtml(journalScheduleWeekEdit);
     const cards = journalLessonCardsHtml(journalSchedule, journalScheduleDayEdit, true, journalScheduleWeekEdit);
-    document.getElementById("journalScheduleList").innerHTML = pills + cards;
+    document.getElementById("journalScheduleList").innerHTML = pills + badge + cards;
   };
   draw();
   loadJournalSubstitutionsForDate(journalDateStrForWeekday(journalScheduleDayEdit, journalScheduleWeekEdit)).then(draw);
@@ -3888,8 +3894,9 @@ function renderJournalViewSchedule() {
   if(journalScheduleDayView === null) journalScheduleDayView = pickDefaultScheduleDay(journalSchedule);
   const draw = () => {
     const pills = journalDayPillsHtml(journalSchedule, journalScheduleDayView, "switchJournalViewScheduleDay", journalScheduleWeekView, "switchJournalViewScheduleWeek");
+    const badge = journalWeekBadgeHtml(journalScheduleWeekView);
     const cards = journalLessonCardsHtml(journalSchedule, journalScheduleDayView, false, journalScheduleWeekView);
-    document.getElementById("journalViewSchedule").innerHTML = pills + cards;
+    document.getElementById("journalViewSchedule").innerHTML = pills + badge + cards;
   };
   draw();
   loadJournalSubstitutionsForDate(journalDateStrForWeekday(journalScheduleDayView, journalScheduleWeekView)).then(draw);
