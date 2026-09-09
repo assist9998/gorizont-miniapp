@@ -1847,6 +1847,11 @@ function renderModal(c) {
     // Subtitle
     '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + subtitleParts.join(" · ") + '</div>' +
     // Rows
+    (c.dob ?
+      '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
+        '<span style="color:var(--text2)">Дата рождения</span>' +
+        '<span style="font-weight:500">' + escapeHtml(c.dob) + '</span>' +
+      '</div>' : "") +
     '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
       '<span style="color:var(--text2)">Родитель</span>' +
       '<span style="font-weight:500">' + escapeHtml((parts[0]||"—").trim()) + '</span>' +
