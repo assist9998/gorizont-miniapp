@@ -3508,7 +3508,7 @@ function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
     const meta = escapeHtml([time, teacherLabel].filter(Boolean).join(" · "));
     const clickAttr = editable
       ? ` onclick="startJournalScheduleEdit(${e.id})"`
-      : e.subject_id ? ` onclick="openJournalScheduleLessonGrades(${e.subject_id})"` : ' style="cursor:default"';
+      : e.subject_id ? ` onclick="openJournalScheduleLessonGrades(${e.subject_id},${selectedDay},${weekOffset})"` : ' style="cursor:default"';
     const delBtn = editable ? `<button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>` : "";
     const subBtn = editable ? `<button onclick="event.stopPropagation();openSubstitutionModal(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${sub ? "var(--accent)" : "var(--border)"};background:transparent;color:${sub ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:4px">замена</button>` : "";
     return `<div class="child-list-item"${clickAttr}>
@@ -3914,13 +3914,18 @@ function openJournalViewSubjectGrades(id, fromTab) {
   switchJournalViewTab("grades");
 }
 
-// Клик по уроку в сегодняшнем расписании — тот же переход в "Оценки", но
-// дата принудительно сбрасывается на сегодня (расписание всегда про "что
-// сейчас идёт", а не про дату, которая могла остаться выбранной с
-// прошлого визита в Оценки), и "Назад" ведёт обратно в Расписание, а не
-// в Предметы, откуда урок не открывали.
-function openJournalScheduleLessonGrades(subjectId) {
-  journalGradesDate = journalGradesToday();
+// Клик по уроку в расписании ведёт в "Оценки" с датой ИМЕННО этого урока
+// (день недели + неделя, на которые сейчас смотрит учитель в Расписании),
+// а не всегда на сегодня — раньше дата принудительно сбрасывалась на
+// journalGradesToday(), из-за чего темы/оценки двух разных дней с одним
+// предметом (например, Алгебра по Пн и по Ср) молча писались в одну и ту
+// же запись "на сегодня": правка темы на одном дне тут же "утекала" на
+// другой (баг, найден Ольгой 2026-09-09). weekday/weekOffset — опциональные,
+// если их нет (старые вызовы), падаем обратно на "сегодня".
+function openJournalScheduleLessonGrades(subjectId, weekday, weekOffset) {
+  journalGradesDate = (typeof weekday === "number" && typeof weekOffset === "number")
+    ? journalDateStrForWeekday(weekday, weekOffset)
+    : journalGradesToday();
   // В учительском режиме бэкенд отдаёт оценки только по СВОЕМУ предмету
   // (_grade_access) — чужой урок в расписании кликабелен для просмотра
   // времени, но не должен вести на 403.
