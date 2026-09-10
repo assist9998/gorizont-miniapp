@@ -584,6 +584,7 @@
       <option value="Воспитатель (подготовительная группа)">Воспитатель (подготовительная группа)</option>
       <option value="Няня">Няня</option>
       <option value="Учитель">Учитель</option>
+      <option value="Завуч">Завуч</option>
       <option value="Администратор">Администратор</option>
       <option value="Директор">Директор</option>
     </select>
@@ -5217,7 +5218,15 @@ function openEditStaffForm(id) {
   document.getElementById("s_surname").value = nameParts.surname;
   document.getElementById("s_patronymic").value = nameParts.patronymic;
   document.getElementById("s_city").value = s.city || "Дананг";
-  document.getElementById("s_position").value = s.position || "";
+  // Если должность не входит в список опций (например, заведена напрямую в
+  // БД, как "Завуч" изначально) — .value молча остаётся пустым и следующее
+  // же "Сохранить" стирает должность в базе (реальный инцидент 2026-09-10).
+  // Добавляем недостающий пункт на лету, а не просто падаем на пустую строку.
+  const posSelect = document.getElementById("s_position");
+  if(s.position && ![...posSelect.options].some(o => o.value === s.position)) {
+    posSelect.appendChild(new Option(s.position, s.position));
+  }
+  posSelect.value = s.position || "";
   document.getElementById("s_phone").value = s.phone || "";
   document.getElementById("s_contract_end").value = s.contract_end || "";
   document.getElementById("s_pay_type").value = s.pay_type || "monthly_fixed";
