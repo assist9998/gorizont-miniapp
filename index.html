@@ -3932,23 +3932,18 @@ async function saveJournalClassRename() {
   const newName = document.getElementById("journalRenameInput").value.trim();
   if(!newName || newName === activeJournalClass) { cancelJournalClassRename(); return; }
   try {
-    await Promise.all([
-      ...journalSubjects.map(s => fetch(API_URL + "/journal/subjects/" + s.id, {
-        method: "PUT", headers: authHeaders({"Content-Type": "application/json"}),
-        body: JSON.stringify({class_name: newName}),
-      })),
-      ...journalSchedule.map(e => fetch(API_URL + "/journal/schedule/" + e.id, {
-        method: "PUT", headers: authHeaders({"Content-Type": "application/json"}),
-        body: JSON.stringify({class_name: newName}),
-      })),
-      // Ученики привязаны по children.group (см. computeJournalClassStudents) —
-      // без этого переименование класса "отвязало" бы их (group остался бы
-      // со старым именем, а activeJournalClass уже новый — совпадение сломается).
-      ...journalClassStudents.map(c => fetch(API_URL + "/children/" + c.id, {
-        method: "PUT", headers: authHeaders({"Content-Type": "application/json"}),
-        body: JSON.stringify({group: newName}),
-      })),
-    ]);
+    // Один запрос на сервере вместо серии PUT — сервер сам переименовывает
+    // class_name во всех таблицах журнала разом (subjects/schedule/grades/
+    // attendance/period_grades/lesson_topics/homework/children), одной
+    // транзакцией. Раньше отдельные PUT по subjects/schedule/children не
+    // трогали уже выставленные оценки/посещаемость/дз — они оставались со
+    // старым именем класса и пропадали из журнала (баг, найден 2026-09-10).
+    const resp = await fetch(API_URL + "/journal/class-rename", {
+      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({city: activeJournalCity, old_name: activeJournalClass, new_name: newName}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
     journalClassStudents.forEach(c => { c.group = newName; });
     activeJournalClass = newName;
     document.getElementById("journalClassTitle").textContent = newName;
