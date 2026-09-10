@@ -1741,7 +1741,8 @@ async function openAttCalendar(id) {
   let history = {current:{present:0,absent:0,total:0}, prev:{present:0,absent:0,total:0}, days:{}};
   try {
     history = await withRetry(async () => {
-      const resp = await fetch(API_URL + "/history?name=" + encodeURIComponent(c.name) + "&city=" + encodeURIComponent(c.city), {
+      const resp = await fetch(API_URL + "/history?name=" + encodeURIComponent(c.name) + "&city=" + encodeURIComponent(c.city) +
+        "&dept=" + encodeURIComponent(c.dept || "") + "&group=" + encodeURIComponent(c.group || ""), {
         headers: authHeaders()
       });
       if(!resp.ok) throw new Error("HTTP " + resp.status);
