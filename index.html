@@ -1154,7 +1154,13 @@ async function loadAttendanceForDate(dateStr) {
       return d;
     });
     data.records.forEach(r => {
-      const child = children.find(c => c.name === r.name && c.city === r.city);
+      // Совпадение только по имени+городу путало детей-тёзок (два "Леон" в
+      // разных группах садика Нячанга — жалоба 2026-09-10): отметка одного
+      // "слетала" на другого, потому что find() всегда возвращал первого
+      // тёзку из children независимо от того, чья это на самом деле запись.
+      // dept/group у записи и у ребёнка должны совпадать тоже.
+      const child = children.find(c => c.name === r.name && c.city === r.city &&
+        c.dept === r.dept && (c.group || "") === (r.group || ""));
       if(child) map[child.id] = r.status === "present";
     });
     console.log("Loaded attendance for", dateStr, ":", data.records.length, "records");
