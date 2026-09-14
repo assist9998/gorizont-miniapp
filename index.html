@@ -4806,7 +4806,42 @@ function renderJournalPeriodModal() {
     </div>`;
   }).join("");
 
-  document.getElementById("journalPeriodModalContent").innerHTML = periodSelect + avgNav + rows;
+  const downloadBtn = `<button onclick="downloadJournalGradeSheet()" style="width:100%;margin-top:12px;padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer">Скачать сводку за ${escapeHtml(journalPeriod)}</button>`;
+
+  document.getElementById("journalPeriodModalContent").innerHTML = periodSelect + avgNav + rows + downloadBtn;
+}
+
+// Сводка-ведомость (xlsx) по предмету/классу за выбранный триместр —
+// строки дети, столбцы даты уроков, тема/дз/комментарий по наведению
+// (см. handle_get_journal_grade_sheet). Тот же паттерн скачивания, что
+// и у downloadReportCard — файл, не JSON, нужны authHeaders.
+async function downloadJournalGradeSheet() {
+  const range = JOURNAL_QUARTER_RANGES[journalPeriod];
+  if(!range) { showToast("Для этого периода нет диапазона дат", true); return; }
+  try {
+    const resp = await fetch(
+      API_URL + "/journal/grade-sheet?city=" + encodeURIComponent(activeJournalCity) +
+      "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
+      "&period=" + encodeURIComponent(journalPeriod) +
+      "&date_from=" + range.from + "&date_to=" + range.to,
+      {headers: authHeaders()},
+    );
+    if(!resp.ok) {
+      const d = await resp.json().catch(() => ({}));
+      throw new Error(d.error || "Ошибка загрузки");
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Сводка ${activeJournalClass} ${journalPeriod}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    showToast(e.message || "Не удалось скачать сводку", true);
+  }
 }
 
 async function setJournalPeriodGrade(childId, value) {
