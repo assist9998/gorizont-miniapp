@@ -4151,16 +4151,26 @@ function jsAttrEscape(s) {
 
 // Скачивание файла из blob (xlsx-ответы бэкенда, requires authHeaders,
 // поэтому нельзя просто открыть ссылку) — iOS Safari/WKWebView (Telegram
-// Mini App внутри Telegram на iPhone) не уважает <a download>: клик по
-// такой ссылке молча ничего не делает, файл не сохраняется (жалоба
-// пользователя 2026-09-14, "Сводка по триместру" на iPhone). Открываем
-// blob в новой вкладке — там нативное "Поделиться"/сохранить, работает и
-// на iOS, и на Android/десктопе; <a download> — запасной путь, только
-// если попап заблокирован (тогда window.open вернёт null/undefined).
-function triggerFileDownload(blob, filename) {
+// Mini App внутри Telegram на iPhone) не уважает <a download> (клик молча
+// ничего не делает), а window.open(blobUrl) ПОСЛЕ await — пустое окно
+// (жалоба пользователя 2026-09-14): к моменту, когда blob готов, "жест
+// пользователя" в глазах WebKit уже не считается свежим, попап либо
+// блокируется, либо открывается, но никогда не догружает содержимое.
+// Фикс — открывать окно СИНХРОННО в обработчике клика (openDownloadWindow,
+// до всякого await), а уже потом, когда файл готов, просто подставить в
+// то же самое окно blob-URL (triggerFileDownload) — у него сохраняется
+// opener-связь с документом, где этот blob создан, поэтому URL открывается.
+function openDownloadWindow() {
+  const w = window.open("", "_blank");
+  if(w) { try { w.document.write("Готовим файл…"); } catch(e) {} }
+  return w;
+}
+
+function triggerFileDownload(blob, filename, popup) {
   const url = URL.createObjectURL(blob);
-  const opened = window.open(url, "_blank");
-  if(!opened) {
+  if(popup && !popup.closed) {
+    popup.location.href = url;
+  } else {
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
@@ -4173,6 +4183,7 @@ function triggerFileDownload(blob, filename) {
 
 // Ведомость успеваемости (xlsx) — для перевода ребёнка в другую школу.
 async function downloadReportCard(id, name) {
+  const popup = openDownloadWindow();
   try {
     const resp = await fetch(API_URL + "/journal/report-card?child_id=" + id, {headers: authHeaders()});
     if(!resp.ok) {
@@ -4180,8 +4191,9 @@ async function downloadReportCard(id, name) {
       throw new Error(d.error || "Ошибка загрузки");
     }
     const blob = await resp.blob();
-    triggerFileDownload(blob, `Ведомость ${name}.xlsx`);
+    triggerFileDownload(blob, `Ведомость ${name}.xlsx`, popup);
   } catch(e) {
+    if(popup && !popup.closed) popup.close();
     showToast(e.message || "Не удалось скачать ведомость", true);
   }
 }
@@ -4837,6 +4849,7 @@ function renderJournalPeriodModal() {
 async function downloadJournalGradeSheet() {
   const range = JOURNAL_QUARTER_RANGES[journalPeriod];
   if(!range) { showToast("Для этого периода нет диапазона дат", true); return; }
+  const popup = openDownloadWindow();
   try {
     const resp = await fetch(
       API_URL + "/journal/grade-sheet?city=" + encodeURIComponent(activeJournalCity) +
@@ -4850,8 +4863,9 @@ async function downloadJournalGradeSheet() {
       throw new Error(d.error || "Ошибка загрузки");
     }
     const blob = await resp.blob();
-    triggerFileDownload(blob, `Сводка ${activeJournalClass} ${journalPeriod}.xlsx`);
+    triggerFileDownload(blob, `Сводка ${activeJournalClass} ${journalPeriod}.xlsx`, popup);
   } catch(e) {
+    if(popup && !popup.closed) popup.close();
     showToast(e.message || "Не удалось скачать сводку", true);
   }
 }
