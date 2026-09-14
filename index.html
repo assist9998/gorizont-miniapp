@@ -4149,10 +4149,29 @@ function jsAttrEscape(s) {
     .replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Скачивание файла из blob (xlsx-ответы бэкенда, requires authHeaders,
+// поэтому нельзя просто открыть ссылку) — iOS Safari/WKWebView (Telegram
+// Mini App внутри Telegram на iPhone) не уважает <a download>: клик по
+// такой ссылке молча ничего не делает, файл не сохраняется (жалоба
+// пользователя 2026-09-14, "Сводка по триместру" на iPhone). Открываем
+// blob в новой вкладке — там нативное "Поделиться"/сохранить, работает и
+// на iOS, и на Android/десктопе; <a download> — запасной путь, только
+// если попап заблокирован (тогда window.open вернёт null/undefined).
+function triggerFileDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const opened = window.open(url, "_blank");
+  if(!opened) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
 // Ведомость успеваемости (xlsx) — для перевода ребёнка в другую школу.
-// Бэкенд отдаёт файл напрямую (не JSON), поэтому нельзя открыть ссылку
-// напрямую (нужны authHeaders) — качаем через fetch+blob и триггерим
-// сохранение через временную <a download>.
 async function downloadReportCard(id, name) {
   try {
     const resp = await fetch(API_URL + "/journal/report-card?child_id=" + id, {headers: authHeaders()});
@@ -4161,14 +4180,7 @@ async function downloadReportCard(id, name) {
       throw new Error(d.error || "Ошибка загрузки");
     }
     const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Ведомость ${name}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    triggerFileDownload(blob, `Ведомость ${name}.xlsx`);
   } catch(e) {
     showToast(e.message || "Не удалось скачать ведомость", true);
   }
@@ -4838,14 +4850,7 @@ async function downloadJournalGradeSheet() {
       throw new Error(d.error || "Ошибка загрузки");
     }
     const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Сводка ${activeJournalClass} ${journalPeriod}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    triggerFileDownload(blob, `Сводка ${activeJournalClass} ${journalPeriod}.xlsx`);
   } catch(e) {
     showToast(e.message || "Не удалось скачать сводку", true);
   }
