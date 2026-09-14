@@ -3078,11 +3078,18 @@ function renderSalarySummaryModal() {
   if(!rows.length) {
     list = '<div style="padding:20px 0;text-align:center;color:var(--text2);font-size:13px">Нет активных сотрудников</div>';
   } else {
+    // Тап по строке — тот же календарь ЗП/посещаемости, что и в обычном
+    // списке "Персонала" (openStaffCalendar ищет по id в staffList, а он
+    // грузится без city-фильтра, так что учитель другого города там тоже
+    // есть, даже если сейчас выбрана другая вкладка города).
     list = rows.map(r =>
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">' +
+      '<div onclick="openStaffCalendar(' + r.id + ')" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer">' +
         '<div><div style="font-size:13.5px;font-weight:500">' + escapeHtml(r.name) + '</div>' +
         '<div style="font-size:11px;color:var(--text2)">' + escapeHtml([r.city, r.position].filter(Boolean).join(" · ")) + '</div></div>' +
-        '<div style="font-size:13.5px;font-weight:600;white-space:nowrap;margin-left:10px">' + r.salary.toLocaleString('ru-RU') + ' ₫</div>' +
+        '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:10px">' +
+          '<div style="font-size:13.5px;font-weight:600;white-space:nowrap">' + r.salary.toLocaleString('ru-RU') + ' ₫</div>' +
+          '<span class="child-arrow">›</span>' +
+        '</div>' +
       '</div>'
     ).join("");
   }
