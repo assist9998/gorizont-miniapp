@@ -2271,6 +2271,7 @@ async function initStaff(){
       console.log("Staff:", staffInfo);
       if(isAdminRole(staffInfo.role) || !staffInfo.payroll_staff_id) hideAppGate();
       initSelfAttendance();
+      showPendingAnnouncement();
     } else {
       hideAppGate();
     }
@@ -2280,6 +2281,37 @@ async function initStaff(){
   } finally {
     applyRolePermissions();
   }
+}
+
+// ── ONE-TIME ANNOUNCEMENTS (попап один раз на сотрудника, см. handle_get_staff
+// pending_announcement / handle_mark_announcement_seen) — отмечаем прочитанным
+// сразу при показе (не по кнопке), чтобы гарантированно не всплывало снова,
+// как бы человек ни закрыл модалку (кнопка, тап по фону).
+const ANNOUNCEMENT_TEXTS = {
+  lesson_autocalc_2026_09: [
+    "Добрый день! Хотим рассказать про небольшое изменение в учёте уроков.",
+    "Раньше вы сами отмечали в приложении, сколько уроков провели за день. Теперь это делать не придётся — урок будет засчитываться сам, если в этот день вы заполнили и тему урока, и посещаемость детей. Если что-то одно из двух не заполнено, урок пока не попадёт в подсчёт, так что постарайтесь заполнять оба пункта в день урока.",
+    "Заполнить можно только свои уроки по расписанию, это без изменений.",
+    "И если вдруг замещаете чей-то урок, дайте знать администратору, чтобы он отметил замену в приложении, тогда урок корректно засчитается вам.",
+    "Спасибо, что помогаете держать журнал в порядке!",
+  ],
+};
+
+function showPendingAnnouncement() {
+  const key = staffInfo && staffInfo.pending_announcement;
+  const paragraphs = key && ANNOUNCEMENT_TEXTS[key];
+  if(!paragraphs) return;
+  document.getElementById("modalName").textContent = "Важно";
+  document.getElementById("modalContent").innerHTML =
+    paragraphs.map(p => '<p style="margin:0 0 12px;line-height:1.5;font-size:13.5px">' + escapeHtml(p) + '</p>').join("") +
+    '<button onclick="document.getElementById(\'modalOverlay\').classList.remove(\'show\')" class="btn-primary" style="width:100%;margin-top:4px">Понятно</button>';
+  document.getElementById("modalOverlay").classList.add("show");
+  staffInfo.pending_announcement = null;
+  fetch(API_URL + "/staff/announcement-seen", {
+    method: "POST",
+    headers: authHeaders({"Content-Type": "application/json"}),
+    body: JSON.stringify({key}),
+  }).catch(e => console.error("announcement-seen:", e));
 }
 
 // ── SELF ATTENDANCE (сотрудник отмечает сам себя, marked_by берёт
