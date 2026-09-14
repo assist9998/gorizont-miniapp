@@ -255,16 +255,15 @@
     <button onclick="openDayRoster()" title="Кто работал в этот день" style="flex-shrink:0;margin-left:8px;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     </button>
-    <!-- Сводка по всем зарплатам сразу — только Директор/developer, не рядовой
-         Администратор (project_gorizont_payroll, просьба пользователя 2026-09-14:
-         Ольга хочет видеть общую картину и итог за месяц, но не хочет, чтобы
-         это видел любой админ города). Видимость переключается в applyRolePermissions. -->
-    <button onclick="openSalarySummary()" id="salarySummaryBtn" title="Сводка по зарплатам" style="display:none;flex-shrink:0;margin-left:8px;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-    </button>
     <button onclick="openAddStaffForm()" style="flex-shrink:0;margin-left:8px;padding:6px 14px;border-radius:20px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">+ Добавить</button>
   </div>
   <div id="staffListEl"></div>
+  <!-- Сводка по всем зарплатам сразу — только Директор/developer, не рядовой
+       Администратор (project_gorizont_payroll, просьба пользователя 2026-09-14:
+       Ольга хочет видеть общую картину и итог за месяц, но не хочет, чтобы
+       это видел любой админ города). Строится в renderStaffList — под списком,
+       не в шапке (просьба пользователя, кнопка в шапке "не нравилась"). -->
+  <div id="salarySummaryBtnWrap"></div>
 </div>
 
 <!-- SCREEN: JOURNAL (электронный журнал / расписание и предметы, Этап 1) -->
@@ -2199,8 +2198,6 @@ function applyRolePermissions() {
   const admin = !!staffInfo && isAdminRole(staffInfo.role);
   const navStaff = document.getElementById("nav-staff");
   if(navStaff) navStaff.style.display = admin ? "" : "none";
-  const salaryBtn = document.getElementById("salarySummaryBtn");
-  if(salaryBtn) salaryBtn.style.display = (!!staffInfo && isDirectorRole(staffInfo.role)) ? "flex" : "none";
   // nav-journal сама кнопка видна всем всегда — она теперь единая точка
   // входа и в посещаемость (сад/воспитатель), и в журнал (школа/учитель),
   // просто ведёт в разные экраны по роли (см. openMainEntry).
@@ -3155,6 +3152,13 @@ function renderStaffList() {
   });
   if(!filtered.length) html = '<div class="empty">Нет сотрудников</div>';
   document.getElementById("staffListEl").innerHTML = html;
+
+  const summaryWrap = document.getElementById("salarySummaryBtnWrap");
+  if(summaryWrap) {
+    summaryWrap.innerHTML = (!!staffInfo && isDirectorRole(staffInfo.role))
+      ? '<button onclick="openSalarySummary()" style="width:100%;margin-top:10px;padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer">Сводка по зарплатам</button>'
+      : "";
+  }
 }
 
 // ── ЭЛЕКТРОННЫЙ ЖУРНАЛ, Этап 1 (расписание и предметы) ──────────────
