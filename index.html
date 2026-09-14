@@ -4149,17 +4149,19 @@ function jsAttrEscape(s) {
     .replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// Скачивание файла из blob (xlsx-ответы бэкенда, requires authHeaders,
-// поэтому нельзя просто открыть ссылку) — iOS Safari/WKWebView (Telegram
-// Mini App внутри Telegram на iPhone) не уважает <a download> (клик молча
-// ничего не делает), а window.open(blobUrl) ПОСЛЕ await — пустое окно
-// (жалоба пользователя 2026-09-14): к моменту, когда blob готов, "жест
-// пользователя" в глазах WebKit уже не считается свежим, попап либо
-// блокируется, либо открывается, но никогда не догружает содержимое.
-// Фикс — открывать окно СИНХРОННО в обработчике клика (openDownloadWindow,
-// до всякого await), а уже потом, когда файл готов, просто подставить в
-// то же самое окно blob-URL (triggerFileDownload) — у него сохраняется
-// opener-связь с документом, где этот blob создан, поэтому URL открывается.
+// Скачивание файла (xlsx-ответы бэкенда, требуют authHeaders — поэтому
+// нельзя просто открыть ссылку). История: <a download> не работает в
+// Safari/WKWebView на iPhone (клик молча ничего не делает); попытка
+// открыть blob-URL в новом окне после await открывала пустое окно, а то
+// и пустой файл (жалобы пользователя 2026-09-14) — к моменту, когда blob
+// готов, "жест пользователя" в глазах WebKit уже не свежий, попап либо
+// блокируется, либо не догружает содержимое. Настоящее решение —
+// Telegram.WebApp.downloadFile (Bot API 8.0+): сам клиент Telegram
+// запрашивает URL и предлагает системное сохранение, без блобов и окон
+// вообще. Он делает запрос сам, поэтому авторизация — не заголовком,
+// а initData параметром прямо в URL (сервер принимает оба варианта, см.
+// get_verified_tg_id в api.py). Старый способ (окно+blob) остаётся
+// запасным на случай древнего клиента Telegram без downloadFile.
 function openDownloadWindow() {
   const w = window.open("", "_blank");
   if(w) { try { w.document.write("Готовим файл…"); } catch(e) {} }
@@ -4181,21 +4183,36 @@ function triggerFileDownload(blob, filename, popup) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
-// Ведомость успеваемости (xlsx) — для перевода ребёнка в другую школу.
-async function downloadReportCard(id, name) {
+async function downloadFileBlobFallback(url, filename, errorMsg) {
   const popup = openDownloadWindow();
   try {
-    const resp = await fetch(API_URL + "/journal/report-card?child_id=" + id, {headers: authHeaders()});
+    const resp = await fetch(url, {headers: authHeaders()});
     if(!resp.ok) {
       const d = await resp.json().catch(() => ({}));
       throw new Error(d.error || "Ошибка загрузки");
     }
     const blob = await resp.blob();
-    triggerFileDownload(blob, `Ведомость ${name}.xlsx`, popup);
+    triggerFileDownload(blob, filename, popup);
   } catch(e) {
     if(popup && !popup.closed) popup.close();
-    showToast(e.message || "Не удалось скачать ведомость", true);
+    showToast(e.message || errorMsg, true);
   }
+}
+
+async function downloadFile(url, filename, errorMsg) {
+  if(tg && typeof tg.downloadFile === "function") {
+    const nativeUrl = url + (url.includes("?") ? "&" : "?") + "init_data=" + encodeURIComponent(tg.initData || "");
+    tg.downloadFile({url: nativeUrl, file_name: filename}, (accepted) => {
+      if(!accepted) downloadFileBlobFallback(url, filename, errorMsg);
+    });
+    return;
+  }
+  await downloadFileBlobFallback(url, filename, errorMsg);
+}
+
+// Ведомость успеваемости (xlsx) — для перевода ребёнка в другую школу.
+async function downloadReportCard(id, name) {
+  await downloadFile(API_URL + "/journal/report-card?child_id=" + id, `Ведомость ${name}.xlsx`, "Не удалось скачать ведомость");
 }
 
 function renderJournalAssignSelect() {
@@ -4849,25 +4866,11 @@ function renderJournalPeriodModal() {
 async function downloadJournalGradeSheet() {
   const range = JOURNAL_QUARTER_RANGES[journalPeriod];
   if(!range) { showToast("Для этого периода нет диапазона дат", true); return; }
-  const popup = openDownloadWindow();
-  try {
-    const resp = await fetch(
-      API_URL + "/journal/grade-sheet?city=" + encodeURIComponent(activeJournalCity) +
-      "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
-      "&period=" + encodeURIComponent(journalPeriod) +
-      "&date_from=" + range.from + "&date_to=" + range.to,
-      {headers: authHeaders()},
-    );
-    if(!resp.ok) {
-      const d = await resp.json().catch(() => ({}));
-      throw new Error(d.error || "Ошибка загрузки");
-    }
-    const blob = await resp.blob();
-    triggerFileDownload(blob, `Сводка ${activeJournalClass} ${journalPeriod}.xlsx`, popup);
-  } catch(e) {
-    if(popup && !popup.closed) popup.close();
-    showToast(e.message || "Не удалось скачать сводку", true);
-  }
+  const url = API_URL + "/journal/grade-sheet?city=" + encodeURIComponent(activeJournalCity) +
+    "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
+    "&period=" + encodeURIComponent(journalPeriod) +
+    "&date_from=" + range.from + "&date_to=" + range.to;
+  await downloadFile(url, `Сводка ${activeJournalClass} ${journalPeriod}.xlsx`, "Не удалось скачать сводку");
 }
 
 async function setJournalPeriodGrade(childId, value) {
