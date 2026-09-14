@@ -3536,6 +3536,15 @@ let substitutionModalDate = null;
 function openSubstitutionModal(scheduleId, dateStr) {
   const e = journalSchedule.find(x => x.id === scheduleId);
   if(!e) return;
+  // "Урока не было" и замена — взаимоисключающие состояния одной и той же
+  // строки в БД (см. toggleNoLesson). Если открыть эту модалку поверх
+  // "не было" не разобравшись, сохранение без изменений молча снимет
+  // отметку "не было" (форма не знает про неё вообще) — проще потребовать
+  // сначала явно снять галочку кнопкой в карточке урока.
+  if(journalSubstitutions[scheduleId] && journalSubstitutions[scheduleId].no_lesson) {
+    showToast("Сначала снимите отметку «урока не было»", true);
+    return;
+  }
   substitutionModalScheduleId = scheduleId;
   substitutionModalDate = dateStr;
   document.getElementById("substitutionModalInfo").textContent =
@@ -3543,7 +3552,8 @@ function openSubstitutionModal(scheduleId, dateStr) {
   const sub = journalSubstitutions[scheduleId];
   document.getElementById("substitutionModalTeacherSelect").innerHTML =
     '<option value="">Без замены (обычный учитель)</option>' +
-    journalTeachers.map(t => `<option value="${t.id}"${sub && sub.teacher_staff_id === t.id ? " selected" : ""}>${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
+    `<option value="external"${sub && sub.external ? " selected" : ""}>🚫 Внешняя замена (не из системы, ЗП никому)</option>` +
+    journalTeachers.map(t => `<option value="${t.id}"${sub && !sub.external && sub.teacher_staff_id === t.id ? " selected" : ""}>${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
   document.getElementById("substitutionModalOverlay").classList.add("show");
 }
 
@@ -3558,12 +3568,13 @@ async function saveSubstitutionModal() {
   const date = substitutionModalDate;
   if(!scheduleId || !date) return;
   const raw = document.getElementById("substitutionModalTeacherSelect").value;
-  const teacher_staff_id = raw ? parseInt(raw, 10) : null;
+  const external = raw === "external";
+  const teacher_staff_id = (raw && !external) ? parseInt(raw, 10) : null;
   try {
     const resp = await fetch(API_URL + "/journal/substitutions", {
       method: "POST",
       headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({schedule_id: scheduleId, date, teacher_staff_id}),
+      body: JSON.stringify({schedule_id: scheduleId, date, teacher_staff_id, external}),
     });
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
@@ -3571,6 +3582,26 @@ async function saveSubstitutionModal() {
     renderJournalSchedule();
   } catch(e) {
     showToast("Не удалось сохранить замену", true);
+  }
+}
+
+// "Урока не было" (отмена/каникулы и т.п.) — переключатель прямо в карточке
+// урока, без модалки: тап включает, повторный тап снимает отметку (та же
+// строка в БД, что и замена, teacher_staff_id=NULL — см. pw_set_journal_substitution).
+async function toggleNoLesson(scheduleId, dateStr) {
+  const sub = journalSubstitutions[scheduleId];
+  const nextNoLesson = !(sub && sub.no_lesson);
+  try {
+    const resp = await fetch(API_URL + "/journal/substitutions", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({schedule_id: scheduleId, date: dateStr, teacher_staff_id: null, external: false, no_lesson: nextNoLesson}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    renderJournalSchedule();
+  } catch(e) {
+    showToast("Не удалось сохранить", true);
   }
 }
 
@@ -3714,21 +3745,27 @@ function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
     lessonNumber++;
     // Замена на ЭТУ дату (journalSubstitutions, ключ — id урока расписания)
     // подменяет отображаемого учителя, не трогая обычную привязку в БД.
+    // no_lesson — соседнее по смыслу, но другое состояние: урока в этот день
+    // просто не было (отмена/каникулы и т.п.), а не кто-то другой его вёл.
+    // Оба хранятся в одной строке (teacher_staff_id=NULL) — на ЗП эффект
+    // одинаковый (никому не засчитано), разница только смысловая/визуальная.
     const sub = journalSubstitutions[e.id];
-    const teacherLabel = sub ? (sub.teacher_name || "?") + " (замена)" : e.teacher_name;
+    const teacherLabel = sub && sub.no_lesson ? "Урока не было" : sub ? (sub.external ? "Внешняя замена" : (sub.teacher_name || "?") + " (замена)") : e.teacher_name;
     const meta = escapeHtml([time, teacherLabel].filter(Boolean).join(" · "));
     const clickAttr = editable
       ? ` onclick="startJournalScheduleEdit(${e.id})"`
-      : e.subject_id ? ` onclick="openJournalScheduleLessonGrades(${e.subject_id},${selectedDay},${weekOffset})"` : ' style="cursor:default"';
+      : e.subject_id ? ` onclick="openJournalScheduleLessonGrades(${e.subject_id},${selectedDay},${weekOffset})"` : "";
+    const rowStyle = ` style="cursor:${editable || e.subject_id ? "pointer" : "default"};${sub && sub.no_lesson ? "opacity:.45" : ""}"`;
     const delBtn = editable ? `<button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>` : "";
-    const subBtn = editable ? `<button onclick="event.stopPropagation();openSubstitutionModal(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${sub ? "var(--accent)" : "var(--border)"};background:transparent;color:${sub ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:4px">замена</button>` : "";
-    return `<div class="child-list-item"${clickAttr}>
+    const subBtn = editable ? `<button onclick="event.stopPropagation();openSubstitutionModal(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${sub && !sub.no_lesson ? "var(--accent)" : "var(--border)"};background:transparent;color:${sub && !sub.no_lesson ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:4px">замена</button>` : "";
+    const noLessonBtn = editable ? `<button onclick="event.stopPropagation();toggleNoLesson(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${sub && sub.no_lesson ? "var(--accent)" : "var(--border)"};background:transparent;color:${sub && sub.no_lesson ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:4px">урока не было</button>` : "";
+    return `<div class="child-list-item"${clickAttr}${rowStyle}>
         <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${lessonNumber}</div>
         <div class="child-detail">
           <div class="child-detail-name">${e.subject_name ? escapeHtml(e.subject_name) : "Предмет не указан"}</div>
           <div class="child-detail-meta">${meta || "Время не указано"}</div>
         </div>
-        ${subBtn}${delBtn}
+        ${noLessonBtn}${subBtn}${delBtn}
       </div>`;
   }).join("");
 }
@@ -5727,7 +5764,7 @@ async function saveDayAttendance(overrides) {
 // уроков кнопками-цифрами и/или переключатель продлёнки. Бейджи в самом
 // календаре (число уроков, "П") — чисто информационные, весь ввод идёт
 // только отсюда.
-const LESSON_COUNT_OPTIONS = [0, 1, 2, 3, 4, 5];
+const LESSON_COUNT_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7];
 
 // Тот же значок-пилюля, что на бейджах в клетках календаря ("Nу" / "Пр"),
 // для сводки уроков/продлёнки за месяц — визуально одна и та же метка.
@@ -5749,7 +5786,7 @@ function promptLessonCount(dateStr) {
   window._lessonModalCount = prevDetails.lessons_count ?? null;
   window._lessonModalExt = prevDetails.worked_extended_day || false;
   const isToday = dateStr === todayDMY;
-  document.getElementById("lessonModalTitle").textContent = s.lesson_rate
+  document.getElementById("lessonModalTitle").textContent = (s.lesson_rate && !s.is_journal_teacher)
     ? (isToday ? "Сколько уроков было сегодня?" : "Сколько уроков было проведено?")
     : "Была продлёнка?";
   document.getElementById("lessonModalDate").textContent = isToday ? "Сегодня, " + dateStr : dateStr;
@@ -5778,10 +5815,17 @@ function renderLessonModal() {
 
   // Заголовок модалки уже озвучивает вопрос ("Сколько уроков было...?"),
   // отдельная подпись-капс над кнопками была бы дублем — убрана.
-  const countRow = s.lesson_rate
-    ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">' +
+  // Учителям, у которых уроки уже считаются автоматически по журналу
+  // (is_journal_teacher — см. GET /payroll/staff), ручные кнопки "сколько
+  // уроков" не показываем — на ЗП они больше не влияют, оставлять было бы
+  // просто обманом (project_gorizont_payroll, автосчёт по журналу).
+  const journalNote = (s.lesson_rate && s.is_journal_teacher)
+    ? '<div style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:16px">Уроки считаются автоматически по журналу (тема + посещаемость) — отмечать их здесь больше не нужно.</div>'
+    : "";
+  const countRow = (s.lesson_rate && !s.is_journal_teacher)
+    ? '<div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:space-between;margin-bottom:18px">' +
       LESSON_COUNT_OPTIONS.map(n =>
-        `<button onclick="pickLessonCount(${n})" style="width:44px;height:44px;border-radius:50%;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;` +
+        `<button onclick="pickLessonCount(${n})" style="width:35px;height:35px;flex-shrink:0;border-radius:50%;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;` +
         (count === n
           ? 'border:none;background:linear-gradient(135deg,var(--grad1) 55%,var(--grad2));color:#fff'
           : 'border:1.5px solid var(--border);background:var(--surface2);color:var(--text)') +
@@ -5803,7 +5847,7 @@ function renderLessonModal() {
     : "";
 
   document.getElementById("lessonModalContent").innerHTML =
-    countRow + extRow +
+    journalNote + countRow + extRow +
     '<button onclick="saveLessonDay()" class="btn-primary" style="width:100%">Сохранить</button>';
 }
 
@@ -5814,7 +5858,7 @@ async function saveLessonDay() {
   const lockKey = s.id + "|" + dateStr;
   if(window._staffAttPending.has(lockKey)) return;
 
-  const count = s.lesson_rate ? (window._lessonModalCount ?? 0) : 0;
+  const count = (s.lesson_rate && !s.is_journal_teacher) ? (window._lessonModalCount ?? 0) : 0;
   const extToday = s.extended_day_rate ? window._lessonModalExt : false;
   const nextStatus = (count > 0 || extToday) ? "present" : "absent";
 
