@@ -15,6 +15,12 @@
     /* Отдельные (более тёмные) цвета для больших градиентных заливок —
        на тёмном фоне яркий accent/accent2 выглядит слишком кислотно. */
     --grad1:#3f6fd1;--grad2:#22a37e;
+    /* Цвет по значению оценки (5..2) — для инлайн-просмотра дневника
+       ребёнка, те же токены, что и в parent.html. */
+    --g5:#38d9a9;--g5-bg:rgba(56,217,169,.16);
+    --g4:#4f8ef7;--g4-bg:rgba(79,142,247,.16);
+    --g3:#ffd43b;--g3-bg:rgba(255,212,59,.14);
+    --g2:#ff6b6b;--g2-bg:rgba(255,107,107,.16);
   }
   /* Светлая тема — меняется только фон/поверхности/текст/границы,
      акцентные цвета (accent/accent2/danger/warning) те же, что в тёмной.
@@ -24,6 +30,10 @@
     --bg:#f4f5f9;--surface:#ffffff;--surface2:#eef0f6;
     --text:#1a1d27;--text2:#6b7086;--border:#e2e4ee;
     --grad1:#4f8ef7;--grad2:#38d9a9;
+    --g5:#0d966e;--g5-bg:rgba(13,150,110,.12);
+    --g4:#3672d9;--g4-bg:rgba(79,142,247,.14);
+    --g3:#a26e00;--g3-bg:rgba(217,157,0,.14);
+    --g2:#d93636;--g2-bg:rgba(224,54,54,.12);
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{font-family:'Geologica',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom))}
@@ -125,6 +135,42 @@
   .modal-label{color:var(--text2);min-width:80px}
   .modal-value{font-weight:500;text-align:right;max-width:65%;word-break:break-word}
   .allergy-chip{background:rgba(255,212,59,.15);color:var(--warning);border:1px solid rgba(255,212,59,.3);padding:2px 8px;border-radius:8px;font-size:11px}
+
+  /* Дневник ребёнка внутри карточки (openChildDiary) — то же самое, что видит
+     родитель в parent.html (календарь + карточки уроков), 1-в-1 те же классы,
+     чтобы не поддерживать два разных дизайна одного и того же экрана. */
+  .cal-wrap{background:var(--surface2);border-radius:12px;padding:12px;margin-bottom:16px}
+  .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .cal-nav button{border:none;background:var(--surface);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text);font-size:15px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .cal-dow{text-align:center;font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px}
+  .cal-cell{aspect-ratio:1;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:12px;font-weight:600}
+  .cal-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
+  .cal-legend{display:flex;gap:12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap}
+  .cal-legend-item{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text2)}
+  .cal-legend-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+
+  .lesson-card{background:var(--surface);border-radius:14px;padding:12px 13px 12px 14px;margin-bottom:8px;border-left:4px solid var(--border)}
+  .lesson-card.tier-5{border-left-color:var(--g5)}
+  .lesson-card.tier-4{border-left-color:var(--g4)}
+  .lesson-card.tier-3{border-left-color:var(--g3)}
+  .lesson-card.tier-2{border-left-color:var(--g2)}
+  .lesson-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .lesson-subject{font-size:14px;font-weight:600}
+  .lesson-meta{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
+  .att-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .att-dot.on{background:var(--g5)}
+  .att-dot.off{background:var(--text2);opacity:.55}
+  .lesson-grades{display:flex;gap:5px;flex-shrink:0}
+  .grade-badge{width:26px;height:26px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0}
+  .grade-badge.tier-5{background:var(--g5-bg);color:var(--g5)}
+  .grade-badge.tier-4{background:var(--g4-bg);color:var(--g4)}
+  .grade-badge.tier-3{background:var(--g3-bg);color:var(--g3)}
+  .grade-badge.tier-2{background:var(--g2-bg);color:var(--g2)}
+  .lesson-topic{font-size:12.5px;color:var(--text);margin-top:8px;line-height:1.4}
+  .lesson-hw{display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:3px 9px 3px 8px;border-radius:8px;background:var(--surface2);font-size:11px;color:var(--text2)}
+  .lesson-hw b{color:var(--text);font-weight:600}
+  .lesson-comment{margin-top:7px;padding-top:7px;border-top:1px dashed var(--border);font-size:11.5px;color:var(--text2);font-style:italic;line-height:1.4}
 
   /* BOTTOM BAR */
   .bottom-action{position:fixed;bottom:var(--nav-h);left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:10px 16px;display:flex;gap:10px;z-index:150}
@@ -926,7 +972,6 @@ window.addEventListener("focus", guardedUpdateCheck);
 setInterval(() => { if (document.visibilityState === "visible") guardedUpdateCheck(); }, 5 * 60 * 1000);
 
 const API_URL = "https://y95h81n2pl7zlyb6hfca50s2.95.179.188.141.sslip.io";
-const PARENT_MINIAPP_URL = "https://assist9998.github.io/gorizont-miniapp/parent.html";
 const tg = window.Telegram?.WebApp;
 
 // Подписанная строка initData добавляется на каждый запрос — бэкенд проверяет
@@ -1931,13 +1976,16 @@ function renderModal(c) {
     isAdminRole(staffInfo.role) || isTeacherRole(staffInfo.role) || isZavuchRole(staffInfo.role));
 
   document.getElementById("modalContent").innerHTML =
-    // Subtitle + компактная пилюля "Дневник" рядом, а не отдельной большой
-    // кнопкой снизу (жалоба пользователя — визуально спорило с "Привязать").
-    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px">' +
-      '<div style="font-size:12px;color:var(--text2)">' + subtitleParts.join(" · ") + '</div>' +
-      (canSeeDiary ? '<button onclick="openChildDiary(' + c.id + ')" style="flex-shrink:0;display:flex;align-items:center;gap:4px;padding:5px 11px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:11.5px;font-weight:500;cursor:pointer">📔 Дневник</button>' : "") +
-    '</div>' +
-    // Rows
+    // Subtitle
+    '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + subtitleParts.join(" · ") + '</div>' +
+    // Rows — "Дневник" оформлен такой же строкой, как остальные поля карточки
+    // (не отдельной кнопкой/пилюлей — жалоба пользователя, что кнопка
+    // выбивалась из дизайна), кликабельна, со стрелкой как у пунктов списка.
+    (canSeeDiary ?
+      '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;align-items:center;font-size:13px;cursor:pointer" onclick="openChildDiary(' + c.id + ')">' +
+        '<span style="color:var(--text2)">📔 Дневник</span>' +
+        '<span class="child-arrow">›</span>' +
+      '</div>' : "") +
     (c.dob ?
       '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
         '<span style="color:var(--text2)">Дата рождения</span>' +
@@ -2854,12 +2902,19 @@ async function generateParentLinkCode() {
   }
 }
 
-// "Посмотреть дневник" в карточке ребёнка — то же read-only приложение
-// (parent.html), что видит родитель, доступно и учителям, не только
-// админам (просьба пользователя). Mini App не умеет открыть другой Mini
-// App с передачей своей сессии, поэтому tg.openLink() ведёт во внешний
-// браузер по короткоживущему токену вместо initData (см. api.py).
+// "Дневник" в карточке ребёнка — тот же календарь+карточки уроков, что видит
+// родитель в parent.html, но отрисован ПРЯМО в этом модальном окне (просьба
+// пользователя: открытие во внешнем браузере через tg.openLink рвёт
+// консистентность приложения). Данные тянутся через тот же короткоживущий
+// токен (/children/{id}/diary-preview-token → /parent/*?preview_token=) —
+// технически это то же самое превью для персонала, просто рендерится
+// здесь, а не на отдельной странице.
+let _diaryState = null;
+
 async function openChildDiary(childId) {
+  const c = children.find(x => x.id == childId);
+  document.getElementById("modalName").textContent = c ? c.name : "Дневник";
+  document.getElementById("modalContent").innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем дневник...</div>';
   try {
     const resp = await fetch(API_URL + "/children/" + childId + "/diary-preview-token", {
       method: "POST",
@@ -2867,12 +2922,161 @@ async function openChildDiary(childId) {
     });
     const data = await resp.json();
     if(!data.ok) throw new Error(data.error || "failed");
-    const url = PARENT_MINIAPP_URL + "?child_id=" + childId + "&preview_token=" + encodeURIComponent(data.token);
-    if(tg && typeof tg.openLink === "function") tg.openLink(url);
-    else window.open(url, "_blank");
+    const n = new Date();
+    _diaryState = {
+      childId, token: data.token,
+      subjects: [], schedule: [], feedByDate: {},
+      calView: {year: n.getFullYear(), month: n.getMonth()},
+      selectedDate: null,
+    };
+    await loadDiaryData();
+    renderDiaryCalendar();
   } catch(e) {
-    showToast(e.message || "Не удалось открыть дневник", true);
+    document.getElementById("modalContent").innerHTML = '<div style="padding:20px;text-align:center;color:var(--danger)">Не удалось открыть дневник</div>';
   }
+}
+
+function diaryUrl(path) {
+  return API_URL + path + (path.includes("?") ? "&" : "?") + "preview_token=" + encodeURIComponent(_diaryState.token);
+}
+
+async function loadDiaryData() {
+  const s = _diaryState;
+  try {
+    const resp = await fetch(diaryUrl("/parent/subjects?child_id=" + s.childId), {headers: authHeaders()});
+    const data = await resp.json();
+    s.subjects = data.ok ? data.subjects : [];
+  } catch(e) { console.error("diary subjects error:", e); }
+  try {
+    const resp = await fetch(diaryUrl("/parent/schedule?child_id=" + s.childId), {headers: authHeaders()});
+    const data = await resp.json();
+    s.schedule = data.ok ? data.schedule : [];
+  } catch(e) { console.error("diary schedule error:", e); }
+  await Promise.all(s.subjects.map(async sub => {
+    try {
+      const resp = await fetch(diaryUrl("/parent/subject-feed?child_id=" + s.childId + "&subject_id=" + sub.id), {headers: authHeaders()});
+      const data = await resp.json();
+      (data.ok ? data.feed : []).forEach(item => {
+        (s.feedByDate[item.date] = s.feedByDate[item.date] || [])
+          .push(Object.assign({subject_id: sub.id, subject_name: sub.name}, item));
+      });
+    } catch(e) { console.error("diary subject-feed error:", e); }
+  }));
+}
+
+function diaryBack() { openModal(_diaryState.childId); }
+function prevDiaryMonth() { const v = _diaryState.calView; v.month === 0 ? (v.year--, v.month = 11) : v.month--; renderDiaryCalendar(); }
+function nextDiaryMonth() { const v = _diaryState.calView; v.month === 11 ? (v.year++, v.month = 0) : v.month++; renderDiaryCalendar(); }
+function selectDiaryDate(dateStr) { _diaryState.selectedDate = _diaryState.selectedDate === dateStr ? null : dateStr; renderDiaryCalendar(); }
+
+function renderDiaryCalendar() {
+  const s = _diaryState;
+  const { year, month } = s.calView;
+  const DOW = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+  const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  const weekdays = new Set(s.schedule.map(e => e.weekday));
+
+  let startDow = new Date(year, month, 1).getDay();
+  startDow = startDow === 0 ? 6 : startDow - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  let anyGrade = false;
+  let grid = DOW.map(d => `<div class="cal-dow">${d}</div>`).join("");
+  grid = `<div class="cal-grid" style="margin-bottom:4px">${grid}</div><div class="cal-grid">`;
+  for(let i = 0; i < startDow; i++) grid += "<div></div>";
+  for(let d = 1; d <= daysInMonth; d++) {
+    const dateStr = fmtDMY(year, month, d);
+    const jsDow = new Date(year, month, d).getDay();
+    const isoDow = jsDow === 0 ? 7 : jsDow;
+    const hasLessons = weekdays.has(isoDow);
+    const entries = s.feedByDate[dateStr] || [];
+    const selected = dateStr === s.selectedDate;
+    const worstGrade = entries.reduce((min, e) => {
+      (e.grades || []).forEach(g => { const v = parseInt(g.value, 10); if(!isNaN(v) && (min === null || v < min)) min = v; });
+      return min;
+    }, null);
+    if(worstGrade !== null) anyGrade = true;
+    const bg = selected ? "var(--accent)" : entries.length ? "rgba(79,142,247,.18)" : "var(--surface)";
+    const color = selected ? "#fff" : hasLessons ? "var(--text)" : "var(--text2)";
+    const clickAttr = hasLessons ? ` onclick="selectDiaryDate('${dateStr}')"` : "";
+    const dotColor = selected ? "#fff" : worstGrade !== null ? `var(--g${worstGrade})` : "transparent";
+    grid += `<div class="cal-cell"${clickAttr} style="background:${bg};color:${color};${hasLessons ? "cursor:pointer" : "opacity:.4"}">
+      <span>${d}</span><span class="cal-dot" style="background:${dotColor}"></span>
+    </div>`;
+  }
+  grid += "</div>";
+
+  const legend = anyGrade
+    ? `<div class="cal-legend">
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--g5)"></span>5</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--g4)"></span>4</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--g3)"></span>3</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--g2)"></span>2</div>
+      </div>`
+    : "";
+
+  document.getElementById("modalContent").innerHTML =
+    '<button onclick="diaryBack()" style="margin-bottom:12px;padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>' +
+    `<div class="cal-wrap">
+      <div class="cal-nav">
+        <button onclick="prevDiaryMonth()">&lsaquo;</button>
+        <div style="font-weight:700;font-size:13px">${RU_MONTHS[month]} ${year}</div>
+        <button onclick="nextDiaryMonth()">&rsaquo;</button>
+      </div>
+      ${grid}
+      ${legend}
+    </div>` +
+    (s.selectedDate ? diaryDayDetailHtml(s.selectedDate) : "");
+}
+
+function diaryDayDetailHtml(dateStr) {
+  const s = _diaryState;
+  const RU_MONTHS_SHORT = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
+  const d = dmyToDate(dateStr);
+  const jsDow = d.getDay();
+  const isoDow = jsDow === 0 ? 7 : jsDow;
+  const lessons = s.schedule.filter(e => e.weekday === isoDow).slice()
+    .sort((a, b) => (a.time_start || "").localeCompare(b.time_start || ""));
+
+  const feedBySubject = {};
+  (s.feedByDate[dateStr] || []).forEach(item => { feedBySubject[item.subject_id] = item; });
+
+  const head = `<div class="avatar" style="flex-direction:column;gap:0;background:var(--accent);color:#fff;margin-bottom:12px;width:36px;height:36px;border-radius:11px">
+    <div style="font-size:12.5px;font-weight:700;line-height:1">${d.getDate()}</div>
+    <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;opacity:.85;margin-top:1px">${RU_MONTHS_SHORT[d.getMonth()]}</div>
+  </div>`;
+
+  if(!lessons.length) return head + '<div class="empty">Уроков нет</div>';
+
+  const rows = lessons.map(e => {
+    const item = feedBySubject[e.subject_id];
+    const time = [e.time_start, e.time_end].filter(Boolean).join("–");
+    const gradeItems = (item && item.grades) || [];
+    const worstGrade = gradeItems.reduce((min, g) => {
+      const v = parseInt(g.value, 10);
+      return !isNaN(v) && (min === null || v < min) ? v : min;
+    }, null);
+    const gradeBadges = gradeItems.map(g => `<div class="grade-badge tier-${escapeHtml(g.value)}">${escapeHtml(g.value)}</div>`).join("");
+    const gradeComments = gradeItems.filter(g => g.comment)
+      .map(g => `<div class="lesson-comment">«${escapeHtml(g.comment)}»</div>`).join("");
+    const attendanceMarked = item && item.attendance;
+    const present = item && item.attendance === "present";
+    const attDot = attendanceMarked ? `<span class="att-dot ${present ? "on" : "off"}"></span>${present ? "Был" : "Не был"} · ` : "";
+    return `<div class="lesson-card${worstGrade !== null ? ` tier-${worstGrade}` : ""}">
+      <div class="lesson-top">
+        <div>
+          <div class="lesson-subject">${escapeHtml(e.subject_name || "Предмет")}</div>
+          <div class="lesson-meta">${attDot}${time || "Время не указано"}</div>
+        </div>
+        ${gradeBadges ? `<div class="lesson-grades">${gradeBadges}</div>` : ""}
+      </div>
+      ${item && item.topic ? `<div class="lesson-topic">${escapeHtml(item.topic)}</div>` : ""}
+      ${item && item.homework ? `<div class="lesson-hw">ДЗ: <b>${escapeHtml(item.homework)}</b></div>` : ""}
+      ${gradeComments}
+    </div>`;
+  }).join("");
+
+  return head + rows;
 }
 
 function clearForm() {
