@@ -12,10 +12,21 @@
     --accent:#4f8ef7;--accent2:#38d9a9;--danger:#ff6b6b;--warning:#ffd43b;
     --text:#e8eaf0;--text2:#8b90a8;--border:#2d3250;
     --radius:16px;--radius-sm:10px;
+    /* Цвет по значению оценки (5..2) — общий язык для календаря и карточки
+       урока, чтобы день с плохой оценкой был виден уже на календаре, не
+       только внутри раскрытого дня. */
+    --g5:#38d9a9;--g5-bg:rgba(56,217,169,.16);
+    --g4:#4f8ef7;--g4-bg:rgba(79,142,247,.16);
+    --g3:#ffd43b;--g3-bg:rgba(255,212,59,.14);
+    --g2:#ff6b6b;--g2-bg:rgba(255,107,107,.16);
   }
   html[data-theme="light"] {
     --bg:#f4f5f9;--surface:#ffffff;--surface2:#eef0f6;
     --text:#1a1d27;--text2:#6b7086;--border:#e2e4ee;
+    --g5:#0d966e;--g5-bg:rgba(13,150,110,.12);
+    --g4:#3672d9;--g4-bg:rgba(79,142,247,.14);
+    --g3:#a26e00;--g3-bg:rgba(217,157,0,.14);
+    --g2:#d93636;--g2-bg:rgba(224,54,54,.12);
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{font-family:'Geologica',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
@@ -35,15 +46,43 @@
   .child-detail-name{font-size:14px;font-weight:600;margin-bottom:2px}
   .child-detail-meta{font-size:12px;color:var(--text2)}
 
-  .grade-chip{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--accent);color:#fff;font-size:12px;font-weight:700}
-
   .cal-wrap{background:var(--surface2);border-radius:12px;padding:12px;margin-bottom:16px}
   .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
   .cal-nav button{border:none;background:var(--surface);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text);font-size:15px}
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
   .cal-dow{text-align:center;font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px}
-  .cal-cell{aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
-  .cal-legend{display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text2)}
+  .cal-cell{aspect-ratio:1;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:12px;font-weight:600}
+  .cal-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
+  .cal-legend{display:flex;gap:12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap}
+  .cal-legend-item{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text2)}
+  .cal-legend-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+
+  /* ── Карточка урока в дневнике (день раскрыт) — полоса слева цветом
+     худшей оценки за урок, сама оценка отдельным квадратом-плашкой,
+     посещаемость точкой в строке времени, а не мелкой иконкой сбоку —
+     иначе на телефоне всё сливалось в один серый блок (жалоба родителя,
+     см. feedback от 2026-09-16). ── */
+  .lesson-card{background:var(--surface);border-radius:14px;padding:12px 13px 12px 14px;margin-bottom:8px;border-left:4px solid var(--border)}
+  .lesson-card.tier-5{border-left-color:var(--g5)}
+  .lesson-card.tier-4{border-left-color:var(--g4)}
+  .lesson-card.tier-3{border-left-color:var(--g3)}
+  .lesson-card.tier-2{border-left-color:var(--g2)}
+  .lesson-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .lesson-subject{font-size:14px;font-weight:600}
+  .lesson-meta{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
+  .att-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .att-dot.on{background:var(--g5)}
+  .att-dot.off{background:var(--text2);opacity:.55}
+  .lesson-grades{display:flex;gap:5px;flex-shrink:0}
+  .grade-badge{width:26px;height:26px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0}
+  .grade-badge.tier-5{background:var(--g5-bg);color:var(--g5)}
+  .grade-badge.tier-4{background:var(--g4-bg);color:var(--g4)}
+  .grade-badge.tier-3{background:var(--g3-bg);color:var(--g3)}
+  .grade-badge.tier-2{background:var(--g2-bg);color:var(--g2)}
+  .lesson-topic{font-size:12.5px;color:var(--text);margin-top:8px;line-height:1.4}
+  .lesson-hw{display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:3px 9px 3px 8px;border-radius:8px;background:var(--surface2);font-size:11px;color:var(--text2)}
+  .lesson-hw b{color:var(--text);font-weight:600}
+  .lesson-comment{margin-top:7px;padding-top:7px;border-top:1px dashed var(--border);font-size:11.5px;color:var(--text2);font-style:italic;line-height:1.4}
 </style>
 </head>
 <body>
@@ -110,14 +149,6 @@ function dmyToDate(dmy) {
   const [d, m, y] = dmy.split(".").map(Number);
   return new Date(y, m - 1, d);
 }
-
-// Тот же значок отметки посещаемости, что и в index.html (CHECKIN_ICON) —
-// там кликабельный тумблер, здесь просто индикатор (родитель ничего не
-// меняет), цвет как там же: зелёный (--accent2) = был, серый = не был.
-const CHECKIN_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
-  '<circle cx="12" cy="12" r="10"/>' +
-  '<polyline points="7.5 12.5 10.5 15.5 16.5 8.5"/>' +
-  '</svg>';
 
 // ── Навигация — простой стек экранов (без нижнего таб-бара, только drill-down).
 // Верхний .header статичный (лого+"Горизонт", как в index.html) — заголовок
@@ -294,6 +325,7 @@ function renderSchoolCalendar() {
   for(let i = 0; i < startDow; i++) cells.push(null);
   for(let d = 1; d <= daysInMonth; d++) cells.push(d);
 
+  let anyGradeThisMonth = false;
   let grid = DOW.map(d => `<div class="cal-dow">${d}</div>`).join("");
   grid = `<div class="cal-grid" style="margin-bottom:4px">${grid}</div><div class="cal-grid">`;
   cells.forEach(d => {
@@ -304,12 +336,35 @@ function renderSchoolCalendar() {
     const hasLessons = schoolWeekdays.has(isoDow);
     const entries = schoolCache.feedByDate[dateStr] || [];
     const selected = dateStr === schoolSelectedDate;
+    // Худшая (наименьшая) оценка за день — она же определяет цвет точки под
+    // числом, чтобы день с плохой оценкой было видно уже на календаре, не
+    // только внутри раскрытого дня.
+    const worstGrade = entries.reduce((min, e) => {
+      (e.grades || []).forEach(g => {
+        const v = parseInt(g.value, 10);
+        if(!isNaN(v) && (min === null || v < min)) min = v;
+      });
+      return min;
+    }, null);
+    if(worstGrade !== null) anyGradeThisMonth = true;
     const bg = selected ? "var(--accent)" : entries.length ? "rgba(79,142,247,.18)" : "var(--surface)";
     const color = selected ? "#fff" : hasLessons ? "var(--text)" : "var(--text2)";
     const clickAttr = hasLessons ? ` onclick="selectSchoolDate('${dateStr}')"` : "";
-    grid += `<div class="cal-cell"${clickAttr} style="background:${bg};color:${color};${hasLessons ? "cursor:pointer" : "opacity:.4"}">${d}</div>`;
+    const dotColor = selected ? "#fff" : worstGrade !== null ? `var(--g${worstGrade})` : "transparent";
+    grid += `<div class="cal-cell"${clickAttr} style="background:${bg};color:${color};${hasLessons ? "cursor:pointer" : "opacity:.4"}">
+      <span>${d}</span><span class="cal-dot" style="background:${dotColor}"></span>
+    </div>`;
   });
   grid += "</div>";
+
+  const legend = anyGradeThisMonth
+    ? `<div class="cal-legend">
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--g5)"></span>5</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--g4)"></span>4</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--g3)"></span>3</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--g2)"></span>2</div>
+      </div>`
+    : "";
 
   document.getElementById("childBody").innerHTML = `<div class="cal-wrap">
     <div class="cal-nav">
@@ -318,6 +373,7 @@ function renderSchoolCalendar() {
       <button onclick="nextSchoolMonth()">&rsaquo;</button>
     </div>
     ${grid}
+    ${legend}
   </div>` + (schoolSelectedDate ? schoolDayDetailHtml(schoolSelectedDate) : "");
 }
 
@@ -346,25 +402,34 @@ function schoolDayDetailHtml(dateStr) {
     const item = feedBySubject[e.subject_id];
     const time = [e.time_start, e.time_end].filter(Boolean).join("–");
     const gradeItems = (item && item.grades) || [];
-    const grades = gradeItems.map(g => `<span class="grade-chip">${escapeHtml(g.value)}</span>`).join(" ");
-    const gradeComments = gradeItems.filter(g => g.comment)
-      .map(g => `<div style="font-size:12px;color:var(--text2);margin-top:2px">${escapeHtml(g.value)}: ${escapeHtml(g.comment)}</div>`)
+    // Полоса слева карточки красится в цвет худшей оценки за урок — тревожный
+    // сигнал важнее хорошего, если оценок несколько.
+    const worstGrade = gradeItems.reduce((min, g) => {
+      const v = parseInt(g.value, 10);
+      return !isNaN(v) && (min === null || v < min) ? v : min;
+    }, null);
+    const gradeBadges = gradeItems
+      .map(g => `<div class="grade-badge tier-${escapeHtml(g.value)}">${escapeHtml(g.value)}</div>`)
       .join("");
+    const gradeComments = gradeItems.filter(g => g.comment)
+      .map(g => `<div class="lesson-comment">«${escapeHtml(g.comment)}»</div>`)
+      .join("");
+    const attendanceMarked = item && item.attendance;
     const present = item && item.attendance === "present";
-    const attIcon = item && item.attendance
-      ? `<span style="flex-shrink:0;margin-top:2px;color:${present ? "var(--accent2)" : "var(--text2)"};display:flex" title="${present ? "Был на уроке" : "Не был на уроке"}">${CHECKIN_ICON}</span>`
+    const attDot = attendanceMarked
+      ? `<span class="att-dot ${present ? "on" : "off"}"></span>${present ? "Был" : "Не был"} · `
       : "";
-    return `<div class="child-list-item" style="cursor:default;align-items:flex-start">
-      <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;margin-top:2px">${i + 1}</div>
-      <div class="child-detail">
-        <div class="child-detail-name">${escapeHtml(e.subject_name || "Предмет")}</div>
-        <div class="child-detail-meta">${time || "Время не указано"}</div>
-        ${item && item.topic ? `<div style="font-size:13px;margin-top:4px">${escapeHtml(item.topic)}</div>` : ""}
-        ${item && item.homework ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">ДЗ: ${escapeHtml(item.homework)}</div>` : ""}
-        ${grades ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${grades}</div>` : ""}
-        ${gradeComments}
+    return `<div class="lesson-card${worstGrade !== null ? ` tier-${worstGrade}` : ""}">
+      <div class="lesson-top">
+        <div>
+          <div class="lesson-subject">${escapeHtml(e.subject_name || "Предмет")}</div>
+          <div class="lesson-meta">${attDot}${time || "Время не указано"}</div>
+        </div>
+        ${gradeBadges ? `<div class="lesson-grades">${gradeBadges}</div>` : ""}
       </div>
-      ${attIcon}
+      ${item && item.topic ? `<div class="lesson-topic">${escapeHtml(item.topic)}</div>` : ""}
+      ${item && item.homework ? `<div class="lesson-hw">ДЗ: <b>${escapeHtml(item.homework)}</b></div>` : ""}
+      ${gradeComments}
     </div>`;
   }).join("");
 
