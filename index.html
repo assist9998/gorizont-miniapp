@@ -4718,11 +4718,6 @@ function journalGradesSubjectOptions() {
 let journalAttendance = {};
 
 async function loadJournalGrades() {
-  // Дата/предмет могли смениться (переход по истории, другой урок) с
-  // непогашенным автосохранением по старому полю — иначе оно бы сработало
-  // уже после перехода и молча переотправило значение в новый контекст.
-  clearTimeout(journalTopicSaveTimer);
-  clearTimeout(journalHomeworkSaveTimer);
   if(journalGradesDate === null) journalGradesDate = journalGradesToday();
   const options = journalGradesSubjectOptions();
   if(journalGradesSubjectId === null && options.length) journalGradesSubjectId = options[0].id;
@@ -4792,44 +4787,46 @@ async function toggleJournalAttendance(childId) {
   }
 }
 
-// Кнопка (кружок-галочка поверх поля) — только индикатор несохранённых
-// изменений и запасной способ сохранить сразу, тапом. Основной путь —
-// автосохранение через 3с после того, как перестали печатать (просьба
-// пользователя, чтобы не тыкать кнопку руками), тост "сохранено" сам
-// подтверждает результат. data-original обновляется заново при каждом
-// рендере (после сохранения экран перерисовывается целиком через
-// loadJournalGrades) — оттуда же и кнопка гаснет, отдельно её прятать не
-// нужно.
-function updateJournalFieldSaveBtn(inputId, btnId) {
-  const input = document.getElementById(inputId);
-  const btn = document.getElementById(btnId);
-  if(!input || !btn) return false;
-  const dirty = input.value.trim() !== (input.dataset.original || "").trim();
-  btn.style.opacity = dirty ? "1" : "0";
-  btn.style.pointerEvents = dirty ? "auto" : "none";
-  btn.style.transform = "translateY(-50%) scale(" + (dirty ? "1" : ".5") + ")";
-  return dirty;
+// Сохранение по потере фокуса поля (не по паузе в наборе — просьба
+// пользователя 2026-09-16: 3-секундный debounce всё равно срабатывал
+// посреди раздумья над формулировкой темы). Без кружка-индикатора и тоста
+// "сохранено" — просто тихо сохраняется, когда учитель ушёл из поля. Тост
+// оставлен только на реальную ошибку сети — это единственное, о чём
+// учителю действительно нужно знать.
+//
+// Тема урока дополнительно имеет плейсхолдер-значение "Без темы" (его
+// подставляет бэкенд сам, как только отмечена посещаемость, см.
+// pw_upsert_journal_attendance) — тап в поле стирает его сразу, чтобы не
+// нужно было выделять/удалять вручную (onJournalTopicFocus).
+function onJournalTopicFocus() {
+  const el = document.getElementById("journalLessonTopicInput");
+  if(el && el.value === "Без темы") el.value = "";
 }
 
-let journalTopicSaveTimer = null;
-function onJournalTopicInput() {
-  const dirty = updateJournalFieldSaveBtn("journalLessonTopicInput", "journalTopicSaveBtn");
-  clearTimeout(journalTopicSaveTimer);
-  journalTopicSaveTimer = dirty ? setTimeout(saveJournalLessonTopic, 3000) : null;
+function onJournalTopicBlur() {
+  const el = document.getElementById("journalLessonTopicInput");
+  if(!el) return;
+  const value = el.value.trim();
+  const original = (el.dataset.original || "").trim();
+  if(!value) { el.value = original; return; }
+  if(value === original) return;
+  saveJournalLessonTopic();
 }
 
-let journalHomeworkSaveTimer = null;
-function onJournalHomeworkInput() {
-  const dirty = updateJournalFieldSaveBtn("journalHomeworkInput", "journalHomeworkSaveBtn");
-  clearTimeout(journalHomeworkSaveTimer);
-  journalHomeworkSaveTimer = dirty ? setTimeout(saveJournalHomework, 3000) : null;
+function onJournalHomeworkBlur() {
+  const el = document.getElementById("journalHomeworkInput");
+  if(!el) return;
+  const value = el.value.trim();
+  const original = (el.dataset.original || "").trim();
+  if(!value) { el.value = original; return; }
+  if(value === original) return;
+  saveJournalHomework();
 }
 
 async function saveJournalLessonTopic() {
-  clearTimeout(journalTopicSaveTimer);
   const el = document.getElementById("journalLessonTopicInput");
   const topic = el ? el.value.trim() : "";
-  if(!topic) { showToast("Введите тему урока", true); return; }
+  if(!topic) return;
   const lockKey = "topic:save";
   if(journalPending.has(lockKey)) return;
   journalPending.add(lockKey);
@@ -4844,7 +4841,6 @@ async function saveJournalLessonTopic() {
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
     await loadJournalGrades();
-    showToast("Тема урока сохранена");
   } catch(e) {
     showToast("Не удалось сохранить тему урока", true);
   } finally {
@@ -4853,10 +4849,9 @@ async function saveJournalLessonTopic() {
 }
 
 async function saveJournalHomework() {
-  clearTimeout(journalHomeworkSaveTimer);
   const el = document.getElementById("journalHomeworkInput");
   const text = el ? el.value.trim() : "";
-  if(!text) { showToast("Введите домашнее задание", true); return; }
+  if(!text) return;
   const lockKey = "homework:save";
   if(journalPending.has(lockKey)) return;
   journalPending.add(lockKey);
@@ -4871,7 +4866,6 @@ async function saveJournalHomework() {
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
     await loadJournalGrades();
-    showToast("Домашнее задание сохранено");
   } catch(e) {
     showToast("Не удалось сохранить домашнее задание", true);
   } finally {
@@ -5168,35 +5162,23 @@ function renderJournalGrades() {
     : "";
 
   // Тема и дз — одна карточка с разделителем вместо двух отдельных рамок.
-  // Кнопка "Сохранить" — кружок-галочка поверх поля (справа), не отдельная
-  // строка снизу — раньше её появление сдвигало текст под ней (жалоба
-  // пользователя), теперь просто проявляется/скрывается на месте, поле ниже
-  // никуда не двигается. Правый паддинг инпута зарезервирован под неё всегда.
-  const saveIconBtn = (id, onclickFn) =>
-    `<button onclick="${onclickFn}" id="${id}" title="Сохранить"
-      style="position:absolute;right:6px;top:50%;width:26px;height:26px;border-radius:50%;border:none;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transform:translateY(-50%) scale(.5);transition:opacity .15s ease,transform .15s ease">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-    </button>`;
+  // Сохранение тихое, по потере фокуса поля (см. onJournalTopicBlur/
+  // onJournalHomeworkBlur) — ни кнопки, ни индикатора не нужно (просьба
+  // пользователя 2026-09-16: "никаких анимаций, просто сохраняется и всё").
   let html = subjectSelectHtml ? `<div style="margin-bottom:10px">${subjectSelectHtml}</div>` : "";
   html += `
     <div style="background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px">
       <div>
-        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тема урока${hasTopic ? "" : " — обязательно"}</div>
-        <div style="position:relative">
-          <input id="journalLessonTopicInput" type="text" value="${escapeHtml(topicValue)}" data-original="${escapeHtml(topicValue)}"
-            oninput="onJournalTopicInput()" placeholder="Например: Дроби — сложение и вычитание"
-            style="width:100%;padding:10px 40px 10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
-          ${saveIconBtn("journalTopicSaveBtn", "saveJournalLessonTopic()")}
-        </div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тема урока</div>
+        <input id="journalLessonTopicInput" type="text" value="${escapeHtml(topicValue)}" data-original="${escapeHtml(topicValue)}"
+          onfocus="onJournalTopicFocus()" onblur="onJournalTopicBlur()" placeholder="Например: Дроби — сложение и вычитание"
+          style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
       </div>
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Домашнее задание</div>
-        <div style="position:relative">
-          <input id="journalHomeworkInput" type="text" value="${escapeHtml(homeworkValue)}" data-original="${escapeHtml(homeworkValue)}"
-            oninput="onJournalHomeworkInput()" placeholder="Например: §12, упр. 3-5"
-            style="width:100%;padding:10px 40px 10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
-          ${saveIconBtn("journalHomeworkSaveBtn", "saveJournalHomework()")}
-        </div>
+        <input id="journalHomeworkInput" type="text" value="${escapeHtml(homeworkValue)}" data-original="${escapeHtml(homeworkValue)}"
+          onblur="onJournalHomeworkBlur()" placeholder="Например: §12, упр. 3-5"
+          style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
       </div>
     </div>`;
 
