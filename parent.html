@@ -115,6 +115,17 @@
 const API_URL = "https://y95h81n2pl7zlyb6hfca50s2.95.179.188.141.sslip.io";
 const tg = window.Telegram?.WebApp;
 
+// Превью для персонала (кнопка "Посмотреть дневник" в карточке ребёнка,
+// index.html) — открывается через tg.openLink() во внешнем браузере, где
+// initData сотрудника уже недоступен (Mini App не передаёт свою сессию
+// другому Mini App), поэтому короткоживущий токен вместо X-Telegram-Init-Data
+// (см. auth_middleware в api.py). withToken() добавляет его прямо в URL,
+// как уже сделано для init_data в downloadFile.
+const PREVIEW_TOKEN = new URLSearchParams(location.search).get("preview_token") || "";
+function withToken(url) {
+  return PREVIEW_TOKEN ? url + (url.includes("?") ? "&" : "?") + "preview_token=" + encodeURIComponent(PREVIEW_TOKEN) : url;
+}
+
 function authHeaders(extra) {
   return Object.assign(
     {"ngrok-skip-browser-warning": "true", "X-Telegram-Init-Data": (tg && tg.initData) || ""},
@@ -195,6 +206,23 @@ let parentChildren = [];
 let activeChild = null;
 
 async function init() {
+  // Превью для персонала — токен сразу привязан к одному конкретному
+  // ребёнку, нет смысла тянуть "список детей родителя" (его и не будет).
+  if(PREVIEW_TOKEN) {
+    try {
+      const resp = await fetch(withToken(API_URL + "/parent/preview-child"), {headers: authHeaders()});
+      const data = await resp.json();
+      if(data.ok && data.child) {
+        await openChild(data.child, false);
+        return;
+      }
+    } catch(e) { console.error("preview-child error:", e); }
+    document.getElementById("screen-no-access").innerHTML =
+      '<div class="empty">Не удалось открыть дневник — ссылка могла устареть.<br><br>Откройте карточку ребёнка заново.</div>';
+    showScreen("no-access");
+    return;
+  }
+
   try {
     const resp = await fetch(API_URL + "/parent/children", {headers: authHeaders()});
     const data = await resp.json();
@@ -269,12 +297,12 @@ async function renderChildSchool() {
     body.innerHTML = '<div class="empty">Загрузка...</div>';
     let subjects = [], schedule = [];
     try {
-      const resp = await fetch(API_URL + "/parent/subjects?child_id=" + activeChild.id, {headers: authHeaders()});
+      const resp = await fetch(withToken(API_URL + "/parent/subjects?child_id=" + activeChild.id), {headers: authHeaders()});
       const data = await resp.json();
       subjects = data.ok ? data.subjects : [];
     } catch(e) { console.error("subjects error:", e); }
     try {
-      const resp = await fetch(API_URL + "/parent/schedule?child_id=" + activeChild.id, {headers: authHeaders()});
+      const resp = await fetch(withToken(API_URL + "/parent/schedule?child_id=" + activeChild.id), {headers: authHeaders()});
       const data = await resp.json();
       schedule = data.ok ? data.schedule : [];
     } catch(e) { console.error("schedule error:", e); }
@@ -283,7 +311,7 @@ async function renderChildSchool() {
     await Promise.all(subjects.map(async s => {
       try {
         const resp = await fetch(
-          API_URL + "/parent/subject-feed?child_id=" + activeChild.id + "&subject_id=" + s.id,
+          withToken(API_URL + "/parent/subject-feed?child_id=" + activeChild.id + "&subject_id=" + s.id),
           {headers: authHeaders()},
         );
         const data = await resp.json();

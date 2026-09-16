@@ -926,6 +926,7 @@ window.addEventListener("focus", guardedUpdateCheck);
 setInterval(() => { if (document.visibilityState === "visible") guardedUpdateCheck(); }, 5 * 60 * 1000);
 
 const API_URL = "https://y95h81n2pl7zlyb6hfca50s2.95.179.188.141.sslip.io";
+const PARENT_MINIAPP_URL = "https://assist9998.github.io/gorizont-miniapp/parent.html";
 const tg = window.Telegram?.WebApp;
 
 // Подписанная строка initData добавляется на каждый запрос — бэкенд проверяет
@@ -1941,6 +1942,11 @@ function renderModal(c) {
         '<span style="color:var(--text2)">Особенности</span>' +
         '<span class="allergy-chip">' + escapeHtml(c.allergy) + '</span>' +
       '</div>' : "") +
+    // Дневник есть только у школьников (см. parent.html) — доступен всем,
+    // кто видит эту карточку, включая учителей, не только админам.
+    (c.dept === "Школа" ?
+      '<button onclick="openChildDiary(' + c.id + ')" style="width:100%;margin-top:14px;padding:10px 14px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">📔 Посмотреть дневник</button>'
+      : "") +
     '<div style="height:6px"></div>';
 }
 
@@ -2841,6 +2847,27 @@ async function generateParentLinkCode() {
     document.getElementById("modalOverlay").classList.add("show");
   } catch(e) {
     showToast("Не удалось сгенерировать код", true);
+  }
+}
+
+// "Посмотреть дневник" в карточке ребёнка — то же read-only приложение
+// (parent.html), что видит родитель, доступно и учителям, не только
+// админам (просьба пользователя). Mini App не умеет открыть другой Mini
+// App с передачей своей сессии, поэтому tg.openLink() ведёт во внешний
+// браузер по короткоживущему токену вместо initData (см. api.py).
+async function openChildDiary(childId) {
+  try {
+    const resp = await fetch(API_URL + "/children/" + childId + "/diary-preview-token", {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    const data = await resp.json();
+    if(!data.ok) throw new Error(data.error || "failed");
+    const url = PARENT_MINIAPP_URL + "?child_id=" + childId + "&preview_token=" + encodeURIComponent(data.token);
+    if(tg && typeof tg.openLink === "function") tg.openLink(url);
+    else window.open(url, "_blank");
+  } catch(e) {
+    showToast(e.message || "Не удалось открыть дневник", true);
   }
 }
 
@@ -4125,14 +4152,14 @@ function renderJournalStudents() {
   let html = "";
   journalClassStudents.forEach(c => {
     const initials = c.name.split(" ").map(w => w[0]).join("").slice(0,2);
-    html += `<div class="child-list-item" style="cursor:default">
+    html += `<div class="child-list-item" onclick="openModal('${c.id}')">
       <div class="avatar">${initials}</div>
       <div class="child-detail">
         <div class="child-detail-name">${escapeHtml(c.name)}</div>
         <div class="child-detail-meta">${c.dob ? calcAge(c.dob) : ""}</div>
       </div>
-      <button onclick="downloadReportCard('${c.id}', '${jsAttrEscape(c.name)}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;flex-shrink:0">ведомость</button>
-      <button onclick="removeChildFromClass('${c.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">убрать</button>
+      <button onclick="event.stopPropagation();downloadReportCard('${c.id}', '${jsAttrEscape(c.name)}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;flex-shrink:0">ведомость</button>
+      <button onclick="event.stopPropagation();removeChildFromClass('${c.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">убрать</button>
     </div>`;
   });
   if(!journalClassStudents.length) html = '<div class="empty">Пока нет учеников в этом классе</div>';
