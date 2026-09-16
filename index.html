@@ -318,7 +318,7 @@
   <div class="city-filter" id="journalCityFilter" style="margin-bottom:12px"></div>
   <div class="section-title">Классы</div>
   <div id="journalClassList"></div>
-  <div style="display:flex;gap:8px;margin-top:12px">
+  <div id="journalNewClassRow" style="display:flex;gap:8px;margin-top:12px">
     <input id="journalNewClassInput" type="text" placeholder="Класс, например 5А"
       style="flex:1;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
     <button onclick="openNewJournalClass()" style="flex-shrink:0;padding:0 16px;border-radius:10px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13px;cursor:pointer;font-weight:500">Открыть</button>
@@ -331,6 +331,10 @@
      отфильтровано до своих назначений — см. project_gorizont, роль "Учитель") -->
 <div class="screen" id="screen-journal-teacher">
   <div class="section-title">Мои классы</div>
+  <!-- "У меня замена" (2026-09-16) — открывает тот же список классов, что у
+       админа (screen-journal, journalSubstitutionMode=true), чтобы найти
+       чужой урок и отметить себя замещающим, см. openTeacherSubstitutionBrowse. -->
+  <button onclick="openTeacherSubstitutionBrowse()" style="width:100%;margin-bottom:14px;padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer">🔁 У меня замена</button>
   <div id="journalMySubjectsList"></div>
 </div>
 
@@ -2274,6 +2278,7 @@ function applyRolePermissions() {
 //   entryDept запоминает последний выбор на время сессии.
 let entryDept = "Сад";
 function openMainEntry() {
+  journalSubstitutionMode = false;
   if(staffInfo && isTeacherRole(staffInfo.role) && !isAdminRole(staffInfo.role)) {
     goTo("journal-teacher");
     loadJournalMySubjects();
@@ -3475,6 +3480,20 @@ let journalGrades = [];
 let journalViewTeacherMode = false;
 let journalMySubjects = [];
 
+// "У меня замена" (2026-09-16) — обычный учитель открывает тот же список
+// классов, что и админ (screen-journal), не только свои — ищет чужой урок,
+// чтобы отметить себя замещающим. Флаг только прячет форму "новый класс" в
+// этом режиме (не его дело) — сама видимость данных уже разрешена на
+// бэкенде (см. handle_get_journal_schedule). Сбрасывается при обычном входе
+// в "Классы" через нижнее меню (openMainEntry/goTo('journal')).
+let journalSubstitutionMode = false;
+
+function openTeacherSubstitutionBrowse() {
+  journalSubstitutionMode = true;
+  activeJournalCity = staffInfo.city;
+  goTo("journal");
+}
+
 function journalCities() {
   return (staffInfo && staffInfo.city) ? [staffInfo.city] : ["Дананг", "Нячанг"];
 }
@@ -3546,6 +3565,10 @@ function renderJournalClasses() {
     cf.appendChild(btn);
   });
 
+  // "Новый класс" — создание структуры, не для учителя, зашедшего искать
+  // урок для замены (journalSubstitutionMode, см. openTeacherSubstitutionBrowse).
+  document.getElementById("journalNewClassRow").style.display = journalSubstitutionMode ? "none" : "flex";
+
   let html = "";
   journalClassNames.forEach(name => {
     html += `<div class="child-list-item" onclick="openJournalClass('${name.replace(/'/g, "\\'")}')">
@@ -3553,7 +3576,11 @@ function renderJournalClasses() {
       <div class="child-detail">${journalClassBadges(name)}</div>
     </div>`;
   });
-  if(!journalClassNames.length) html = '<div class="empty">Нет классов — впишите название ниже и нажмите «Открыть»</div>';
+  if(!journalClassNames.length) {
+    html = journalSubstitutionMode
+      ? '<div class="empty">Классов пока нет</div>'
+      : '<div class="empty">Нет классов — впишите название ниже и нажмите «Открыть»</div>';
+  }
   document.getElementById("journalClassList").innerHTML = html;
 }
 
@@ -3630,8 +3657,15 @@ function openNewJournalClass() {
 }
 
 async function openJournalClass(name) {
-  journalViewTeacherMode = false;
-  document.getElementById("journalViewEditBtn").style.display = "";
+  // Обычный учитель тоже попадает сюда — через "У меня замена" (2026-09-16,
+  // openTeacherSubstitutionBrowse), а не только админ/завуч из обычного
+  // списка "Классы". journalViewTeacherMode те же ограничения UI, что и
+  // "Мои классы" (карандаш скрыт, предметы/дети только на просмотр) — то,
+  // что раньше держало учителя ТОЛЬКО в своих классах, было проверкой прав
+  // на бэкенде (снята для чтения, см. handle_get_journal_schedule), здесь
+  // просто убеждаемся, что интерфейс остаётся тем же безопасным read-only.
+  journalViewTeacherMode = isTeacherRole(staffInfo.role) && !isAdminRole(staffInfo.role) && !isZavuchRole(staffInfo.role);
+  document.getElementById("journalViewEditBtn").style.display = journalViewTeacherMode ? "none" : "";
   document.getElementById("journalViewTabBar").style.display = "";
   activeJournalClass = name;
   document.getElementById("journalViewTitle").textContent = name;
@@ -3967,6 +4001,44 @@ async function toggleNoLesson(scheduleId, dateStr) {
   }
 }
 
+// Самообслуживание замен учителем (2026-09-16, journalSubstitutionMode) —
+// та же таблица журнал_schedule_substitutions, что и у админской модалки
+// выше, но без выбора чужого человека: только сам себя, и снять можно
+// только свою же замену (бэкенд это же и проверяет, handle_set_journal_substitution
+// — эти функции просто не показывают лишние кнопки, а не единственная защита).
+async function markMySubstitution(scheduleId, dateStr) {
+  const myId = staffInfo && staffInfo.payroll_staff_id;
+  if(!myId) return;
+  try {
+    const resp = await fetch(API_URL + "/journal/substitutions", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({schedule_id: scheduleId, date: dateStr, teacher_staff_id: myId}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    showToast("Отмечено — можно вносить тему, дз и посещаемость");
+    renderJournalViewSchedule();
+  } catch(e) {
+    showToast("Не удалось отметить замену", true);
+  }
+}
+
+async function unmarkMySubstitution(scheduleId, dateStr) {
+  try {
+    const resp = await fetch(API_URL + "/journal/substitutions", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({schedule_id: scheduleId, date: dateStr, teacher_staff_id: null}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    renderJournalViewSchedule();
+  } catch(e) {
+    showToast("Не удалось отменить замену", true);
+  }
+}
+
 // editingJournalScheduleId — id урока, который сейчас редактируется через
 // нижнюю форму (null — форма в режиме добавления нового урока).
 let editingJournalScheduleId = null;
@@ -4121,13 +4193,30 @@ function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
     const delBtn = editable ? `<button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>` : "";
     const subBtn = editable ? `<button onclick="event.stopPropagation();openSubstitutionModal(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${sub && !sub.no_lesson ? "var(--accent)" : "var(--border)"};background:transparent;color:${sub && !sub.no_lesson ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:4px">замена</button>` : "";
     const noLessonBtn = editable ? `<button onclick="event.stopPropagation();toggleNoLesson(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${sub && sub.no_lesson ? "var(--accent)" : "var(--border)"};background:transparent;color:${sub && sub.no_lesson ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:4px">урока не было</button>` : "";
+    // Самообслуживание замен (2026-09-16, journalSubstitutionMode) — только
+    // на экране-обзоре (не editable, это не структурное редактирование), и
+    // только на реальном уроке (не перерыв, e.subject_id уже отфильтрован
+    // раньше). Учитель может отметить себя на свободный урок, снять только
+    // СВОЮ же замену (см. handle_set_journal_substitution) — чужую замену
+    // показываем текстом, не кнопкой, чтобы не провоцировать тап в пустоту.
+    let mySubBtn = "";
+    if(!editable && journalSubstitutionMode && e.subject_id) {
+      const myId = staffInfo && staffInfo.payroll_staff_id;
+      if(sub && !sub.no_lesson && sub.teacher_staff_id === myId) {
+        mySubBtn = `<button onclick="event.stopPropagation();unmarkMySubstitution(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--accent2);background:var(--g5-bg);color:var(--accent2);font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">замещаете вы ✕</button>`;
+      } else if(sub && !sub.no_lesson) {
+        mySubBtn = `<span style="padding:4px 10px;font-size:11px;color:var(--text2);flex-shrink:0">замещает: ${escapeHtml(sub.teacher_name || "?")}</span>`;
+      } else if(!sub || !sub.no_lesson) {
+        mySubBtn = `<button onclick="event.stopPropagation();markMySubstitution(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;flex-shrink:0">замена</button>`;
+      }
+    }
     return `<div class="child-list-item"${clickAttr}${rowStyle}>
         <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${lessonNumber}</div>
         <div class="child-detail">
           <div class="child-detail-name">${e.subject_name ? escapeHtml(e.subject_name) : "Предмет не указан"}</div>
           <div class="child-detail-meta">${meta || "Время не указано"}</div>
         </div>
-        ${noLessonBtn}${subBtn}${delBtn}
+        ${noLessonBtn}${subBtn}${delBtn}${mySubBtn}
       </div>`;
   }).join("");
 }
@@ -4576,10 +4665,17 @@ function openJournalScheduleLessonGrades(subjectId, weekday, weekOffset) {
     : journalGradesToday();
   // В учительском режиме бэкенд отдаёт оценки только по СВОЕМУ предмету
   // (_grade_access) — чужой урок в расписании кликабелен для просмотра
-  // времени, но не должен вести на 403.
+  // времени, но не должен вести на 403. Исключение (2026-09-16) — учитель
+  // сам отметил себя замещающим на ЭТУ дату (journalSubstitutionMode) —
+  // тот же критерий, что и на бэкенде (_grade_access принимает и дату).
   if(journalViewTeacherMode && !journalMySubjects.some(s => s.class_name === activeJournalClass && s.subject_id === subjectId)) {
-    showToast("Это не ваш предмет", true);
-    return;
+    const entry = journalSchedule.find(s => s.class_name === activeJournalClass && s.subject_id === subjectId && s.weekday === weekday);
+    const sub = entry && journalSubstitutions[entry.id];
+    const myId = staffInfo && staffInfo.payroll_staff_id;
+    if(!(sub && !sub.no_lesson && sub.teacher_staff_id === myId)) {
+      showToast("Это не ваш предмет", true);
+      return;
+    }
   }
   openJournalViewSubjectGrades(subjectId, "schedule");
 }
