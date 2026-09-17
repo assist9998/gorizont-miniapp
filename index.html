@@ -2017,7 +2017,12 @@ function parentBlockHtml(c, block, idx, total) {
   const phone = parts[1] || "";
   const telegram = parts[2] || "";
   const label = total > 1 ? `Родитель ${idx + 1}` : "Родитель";
-  const canLink = c.dept === "Школа" && telegram;
+  // Привязка родителя — только админ/директор/завуч (isAdminRole уже
+  // покрывает admin/director/developer), учителю эта кнопка не нужна и не
+  // положена (отзыв пользователя, 2026-09-17) — раньше проверки роли тут
+  // не было вообще, кнопка показывалась всем, кто может открыть карточку.
+  const canLink = c.dept === "Школа" && telegram && staffInfo &&
+    (isAdminRole(staffInfo.role) || isZavuchRole(staffInfo.role));
   return '<div style="border-top:1px solid var(--border);padding:9px 0">' +
       '<div style="display:flex;justify-content:space-between;font-size:13px">' +
         '<span style="color:var(--text2)">' + label + '</span>' +
