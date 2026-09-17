@@ -1103,7 +1103,12 @@ function goTo(screen) {
   document.getElementById("nav-" + (NAV_SCREEN_ALIAS[screen] || screen))?.classList.add("active");
   document.getElementById("attActions").style.display = screen === "attendance" ? "flex" : "none";
   currentScreen = screen;
-  if(screen === "home") renderHome();
+  // loadTodayLessons грузится один раз при старте (initStaff) и больше не
+  // обновлялся — сводка на Home молча показывала устаревшее "Не заполнено"
+  // после того, как учитель уже заполнил урок и вернулся назад (жалоба
+  // пользователя, 2026-09-17: "в расписании нормально, на главном нет").
+  // Перезапрашиваем при каждом возврате на Home, как и всё остальное здесь.
+  if(screen === "home") { renderHome(); loadTodayLessons(); }
   if(screen === "attendance") renderAttFilters();
   if(screen === "children") renderChildList();
   if(screen === "notifications") renderNotifications();
