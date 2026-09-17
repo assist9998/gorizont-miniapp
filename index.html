@@ -778,8 +778,9 @@
     <div class="modal-handle"></div>
     <div class="modal-name">Замена учителя</div>
     <div style="font-size:13px;color:var(--text2);margin-top:-8px;margin-bottom:14px" id="substitutionModalInfo"></div>
-    <select id="substitutionModalTeacherSelect"
+    <select id="substitutionModalTeacherSelect" onchange="renderSubstitutionSubjectPicker()"
       style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;margin-bottom:14px;box-sizing:border-box"></select>
+    <div id="substitutionModalSubjectPicker" style="display:none"></div>
     <div style="display:flex;gap:8px">
       <button onclick="saveSubstitutionModal()" class="filter-btn active" style="flex:1;text-align:center">Сохранить</button>
       <button onclick="closeSubstitutionModal()" class="filter-btn" style="flex:1;text-align:center">Отмена</button>
@@ -1380,11 +1381,16 @@ function renderHomeGreeting(total, present) {
           ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12.5 9.5 18 20 6"/></svg>'
           : '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>';
         const time = [l.time_start, l.time_end].filter(Boolean).join("–");
+        // Подмена предмета (2026-09-17) — см. renderDayPopoverLessons, тот
+        // же l.subject_overridden/original_subject_name из /journal/my-today.
+        const swapBadge = l.subject_overridden
+          ? ' <span style="font-size:9.5px;font-weight:700;color:rgba(255,255,255,.65);background:rgba(255,255,255,.16);border-radius:6px;padding:1px 6px;text-decoration:line-through">' + escapeHtml(l.original_subject_name || "") + '</span>'
+          : "";
         return '<div style="display:flex;align-items:center;gap:10px;padding:7px 2px">' +
           '<div style="width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;' +
             (l.done ? 'background:#fff;color:var(--accent2)' : 'background:rgba(255,255,255,.22);color:rgba(255,255,255,.7)') + '">' + dotIcon + '</div>' +
           '<div style="min-width:0">' +
-            '<div style="font-size:13.5px;font-weight:600;color:' + (l.done ? '#fff' : 'rgba(255,255,255,.75)') + '">' + escapeHtml(l.subject_name || "Предмет не указан") + '</div>' +
+            '<div style="font-size:13.5px;font-weight:600;color:' + (l.done ? '#fff' : 'rgba(255,255,255,.75)') + '">' + escapeHtml(l.subject_name || "Предмет не указан") + swapBadge + '</div>' +
             '<div style="font-size:11.5px;color:rgba(255,255,255,.7)">' + escapeHtml([time, l.class_name].filter(Boolean).join(" · ")) + '</div>' +
           '</div>' +
           '<div style="margin-left:auto;font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:999px;flex-shrink:0;' +
@@ -4077,6 +4083,10 @@ async function saveJournalSubjectModal() {
 // журнал_subjects (см. обсуждение фичи "замена учителя" 2026-09-09).
 let substitutionModalScheduleId = null;
 let substitutionModalDate = null;
+// Подмена предмета (2026-09-17) — заменяющий в эту дату может вести не тот
+// предмет, что обычно стоит в расписании (разово, только на этот день).
+// null = как обычно (без подмены), число = id выбранного предмета.
+let substitutionModalOverrideSubjectId = null;
 
 function openSubstitutionModal(scheduleId, dateStr) {
   const e = journalSchedule.find(x => x.id === scheduleId);
@@ -4095,17 +4105,56 @@ function openSubstitutionModal(scheduleId, dateStr) {
   document.getElementById("substitutionModalInfo").textContent =
     (e.subject_name || "Предмет") + " · " + dateStr + " · обычно ведёт: " + (e.teacher_name || "не назначен");
   const sub = journalSubstitutions[scheduleId];
+  substitutionModalOverrideSubjectId = (sub && sub.override_subject_id) || null;
   document.getElementById("substitutionModalTeacherSelect").innerHTML =
     '<option value="">Без замены (обычный учитель)</option>' +
     `<option value="external"${sub && sub.external ? " selected" : ""}>🚫 Внешняя замена (не из системы, ЗП никому)</option>` +
     journalTeachers.map(t => `<option value="${t.id}"${sub && !sub.external && sub.teacher_staff_id === t.id ? " selected" : ""}>${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
+  renderSubstitutionSubjectPicker();
   document.getElementById("substitutionModalOverlay").classList.add("show");
+}
+
+// Ряд пилюль "какой предмет ведёт" — только когда реально выбрана замена
+// (не "Без замены"): без замены подмена предмета не имеет смысла, обычный
+// учитель ведёт то, что и всегда. Первая пилюля — исходный предмет слота
+// ("как обычно"), остальные — другие предметы этого же класса.
+function renderSubstitutionSubjectPicker() {
+  const container = document.getElementById("substitutionModalSubjectPicker");
+  const raw = document.getElementById("substitutionModalTeacherSelect").value;
+  const e = journalSchedule.find(x => x.id === substitutionModalScheduleId);
+  if(!raw || !e || !e.subject_id) {
+    container.style.display = "none";
+    substitutionModalOverrideSubjectId = null;
+    return;
+  }
+  const otherSubjects = journalSubjects.filter(s => s.id !== e.subject_id);
+  container.style.display = "block";
+  const pill = (id, label, isSame) => {
+    const active = isSame ? !substitutionModalOverrideSubjectId : substitutionModalOverrideSubjectId === id;
+    return `<button type="button" onclick="pickSubstitutionSubject(${isSame ? "null" : id})" class="filter-btn${active ? " active" : ""}" style="margin:0 6px 6px 0">${escapeHtml(label)}</button>`;
+  };
+  container.innerHTML =
+    '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px">Какой предмет ведёт</div>' +
+    '<div style="display:flex;flex-wrap:wrap;margin-bottom:2px">' +
+      pill(null, (e.subject_name || "Предмет") + " (как обычно)", true) +
+      otherSubjects.map(s => pill(s.id, s.name, false)).join("") +
+    '</div>' +
+    (substitutionModalOverrideSubjectId
+      ? '<div style="font-size:11.5px;color:var(--text2);line-height:1.5;margin:2px 0 14px">Только на ' + escapeHtml(substitutionModalDate || "") +
+        '. Тема, оценки и посещаемость в этот день пойдут в дневник и ЗП как «' + escapeHtml(otherSubjects.find(s => s.id === substitutionModalOverrideSubjectId)?.name || "") + '».</div>'
+      : '<div style="margin-bottom:14px"></div>');
+}
+
+function pickSubstitutionSubject(id) {
+  substitutionModalOverrideSubjectId = id;
+  renderSubstitutionSubjectPicker();
 }
 
 function closeSubstitutionModal() {
   document.getElementById("substitutionModalOverlay").classList.remove("show");
   substitutionModalScheduleId = null;
   substitutionModalDate = null;
+  substitutionModalOverrideSubjectId = null;
 }
 
 async function saveSubstitutionModal() {
@@ -4115,11 +4164,12 @@ async function saveSubstitutionModal() {
   const raw = document.getElementById("substitutionModalTeacherSelect").value;
   const external = raw === "external";
   const teacher_staff_id = (raw && !external) ? parseInt(raw, 10) : null;
+  const override_subject_id = raw ? substitutionModalOverrideSubjectId : null;
   try {
     const resp = await fetch(API_URL + "/journal/substitutions", {
       method: "POST",
       headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({schedule_id: scheduleId, date, teacher_staff_id, external}),
+      body: JSON.stringify({schedule_id: scheduleId, date, teacher_staff_id, external, override_subject_id}),
     });
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
@@ -4349,14 +4399,22 @@ function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
     const sub = journalSubstitutions[e.id];
     const teacherLabel = sub && sub.no_lesson ? "Урока не было" : sub ? (sub.external ? "Внешняя замена" : (sub.teacher_name || "?") + " (замена)") : e.teacher_name;
     const meta = escapeHtml([time, teacherLabel].filter(Boolean).join(" · "));
+    // Подмена предмета (2026-09-17) — заменяющий в эту дату ведёт другой
+    // предмет, не тот, что стоит в расписании. effSubjectId/Name — тот,
+    // под которым реально пойдут тема/оценки/посещаемость и ЗП (см.
+    // pw_get_assigned_teacher_for_lesson) — везде дальше используем его,
+    // не e.subject_id напрямую.
+    const isOverridden = !!(sub && sub.override_subject_id && sub.override_subject_id !== e.subject_id);
+    const effSubjectId = isOverridden ? sub.override_subject_id : e.subject_id;
+    const effSubjectName = isOverridden ? sub.override_subject_name : e.subject_name;
     const clickAttr = editable
       ? ` onclick="startJournalScheduleEdit(${e.id})"`
-      : e.subject_id ? ` onclick="openJournalScheduleLessonGrades(${e.subject_id},${selectedDay},${weekOffset})"` : "";
-    const rowStyle = ` style="cursor:${editable || e.subject_id ? "pointer" : "default"};${sub && sub.no_lesson ? "opacity:.45" : ""}"`;
+      : effSubjectId ? ` onclick="openJournalScheduleLessonGrades(${effSubjectId},${selectedDay},${weekOffset})"` : "";
+    const rowStyle = ` style="cursor:${editable || effSubjectId ? "pointer" : "default"};${sub && sub.no_lesson ? "opacity:.45" : ""}"`;
     // Зелёная рамка — тема/посещаемость уже внесены на эту дату (см.
     // journalDayCompletion), только на экране-обзоре (не в структурном
     // редактировании расписания) и не когда урока не было (2026-09-17).
-    const isFilled = !editable && !!e.subject_id && journalDayCompletion.has(e.subject_id) && !(sub && sub.no_lesson);
+    const isFilled = !editable && !!effSubjectId && journalDayCompletion.has(effSubjectId) && !(sub && sub.no_lesson);
     const delBtn = editable ? `<button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>` : "";
     const subBtn = editable ? `<button onclick="event.stopPropagation();openSubstitutionModal(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${sub && !sub.no_lesson ? "var(--accent)" : "var(--border)"};background:transparent;color:${sub && !sub.no_lesson ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:4px">замена</button>` : "";
     const noLessonBtn = editable ? `<button onclick="event.stopPropagation();toggleNoLesson(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${sub && sub.no_lesson ? "var(--accent)" : "var(--border)"};background:transparent;color:${sub && sub.no_lesson ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:4px">урока не было</button>` : "";
@@ -4382,10 +4440,13 @@ function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
         mySubBtn = `<button onclick="event.stopPropagation();markMySubstitution(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;flex-shrink:0">замена</button>`;
       }
     }
+    const swapBadge = isOverridden
+      ? ` <span style="font-size:10px;font-weight:700;color:var(--text2);background:var(--surface2);border-radius:6px;padding:1px 6px;text-decoration:line-through">${escapeHtml(e.subject_name || "")}</span>`
+      : "";
     return `<div class="child-list-item${isFilled ? " filled" : ""}"${clickAttr}${rowStyle}>
         <div style="width:26px;height:26px;border-radius:50%;background:${isFilled ? "var(--accent2)" : "var(--accent)"};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${lessonNumber}</div>
         <div class="child-detail">
-          <div class="child-detail-name">${e.subject_name ? escapeHtml(e.subject_name) : "Предмет не указан"}</div>
+          <div class="child-detail-name">${effSubjectName ? escapeHtml(effSubjectName) : "Предмет не указан"}${swapBadge}</div>
           <div class="child-detail-meta">${meta || "Время не указано"}</div>
         </div>
         ${noLessonBtn}${subBtn}${delBtn}${mySubBtn}
@@ -4849,8 +4910,22 @@ function openJournalScheduleLessonGrades(subjectId, weekday, weekOffset) {
   // сам отметил себя замещающим на ЭТУ дату (journalSubstitutionMode) —
   // тот же критерий, что и на бэкенде (_grade_access принимает и дату).
   if(journalViewTeacherMode && !journalMySubjects.some(s => s.class_name === activeJournalClass && s.subject_id === subjectId)) {
-    const entry = journalSchedule.find(s => s.class_name === activeJournalClass && s.subject_id === subjectId && s.weekday === weekday);
-    const sub = entry && journalSubstitutions[entry.id];
+    let entry = journalSchedule.find(s => s.class_name === activeJournalClass && s.subject_id === subjectId && s.weekday === weekday);
+    let sub = entry && journalSubstitutions[entry.id];
+    // Предмет в эту дату подменён на ДРУГОЙ (2026-09-17) — под исходным
+    // предметом слота урока фактически не было, эта ветка не годится.
+    if(entry && sub && sub.override_subject_id && sub.override_subject_id !== subjectId) {
+      entry = null; sub = null;
+    }
+    if(!entry) {
+      // Подмена предмета: у подменённого предмета обычно нет своего слота
+      // в этот день недели — ищем слот ЭТОГО дня/класса, замена на который
+      // в эту дату ведёт именно subjectId (см. pw_get_assigned_teacher_for_lesson,
+      // та же двухшаговая логика на бэкенде).
+      entry = journalSchedule.find(s => s.class_name === activeJournalClass && s.weekday === weekday &&
+        journalSubstitutions[s.id] && journalSubstitutions[s.id].override_subject_id === subjectId);
+      sub = entry && journalSubstitutions[entry.id];
+    }
     const myId = staffInfo && staffInfo.payroll_staff_id;
     if(!(sub && !sub.no_lesson && sub.teacher_staff_id === myId)) {
       showToast("Это не ваш предмет", true);
@@ -6400,13 +6475,19 @@ function renderDayPopoverLessons() {
         // (openJournalScheduleLessonGrades требует subjectId), строка без
         // тапа и без стрелки, а не молчаливый мёртвый клик.
         const clickable = l.subject_id != null && !isFutureDate;
+        // Подмена предмета (2026-09-17) — l.subject_id/name уже эффективные
+        // (см. pw_get_teacher_today_lessons), original_subject_name — то,
+        // что было бы без подмены, зачёркнутым бейджем рядом.
+        const swapBadge = l.subject_overridden
+          ? ' <span style="font-size:10px;font-weight:700;color:var(--text2);background:var(--surface2);border-radius:6px;padding:1px 6px;text-decoration:line-through">' + escapeHtml(l.original_subject_name || "") + '</span>'
+          : "";
         return `<div ${clickable ? `onclick="openLessonFromDayPopover(${idx})"` : ""} style="display:flex;align-items:center;gap:10px;padding:7px 2px;${clickable ? "cursor:pointer" : ""}">` +
           '<div style="width:44px;flex-shrink:0;font-variant-numeric:tabular-nums">' +
             '<div style="font-size:12.5px;font-weight:700;color:var(--text)">' + escapeHtml(l.time_start || "") + '</div>' +
             '<div style="font-size:10px;color:var(--text2)">' + escapeHtml(l.time_end || "") + '</div>' +
           '</div>' +
           '<div style="min-width:0;flex:1">' +
-            '<div style="font-size:13px;font-weight:600;color:var(--text)">' + escapeHtml(l.subject_name || "Предмет не указан") + '</div>' +
+            '<div style="font-size:13px;font-weight:600;color:var(--text)">' + escapeHtml(l.subject_name || "Предмет не указан") + swapBadge + '</div>' +
             '<div style="font-size:11px;color:var(--text2);margin-top:1px">' + escapeHtml(l.class_name || "") + '</div>' +
           '</div>' +
           '<div style="width:20px;height:20px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;' +
