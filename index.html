@@ -3999,17 +3999,37 @@ function computeJournalClassStudents() {
   );
 }
 
-function renderJournalTeacherSelect() {
-  const sel = document.getElementById("js_teacher");
-  const prev = sel.value;
-  // journalTeachers — весь /payroll/staff города (воспитатели и няни тоже),
-  // в выпадающем списке "кто ведёт предмет" им делать нечего (жалоба
-  // пользователя 2026-09-07) — оставляем только учителя/завуча, та же
-  // подстрочная классификация, что и в isTeacherRole/isZavuchRole.
-  const teachingStaff = journalTeachers.filter(t => {
+// journalTeachers — весь /payroll/staff города (воспитатели, няни, админы
+// тоже) — в списках "кто ведёт предмет"/"кто заменяет" им делать нечего
+// (жалоба пользователя 2026-09-07 про первый список, тот же принцип для
+// замены — 2026-09-17: "админы и директора не считаются, они сами могут
+// замены проставлять"), оставляем только учителя/завуча — та же подстрочная
+// классификация, что и в isTeacherRole/isZavuchRole, только по position
+// карточки персонала, а не по staff.role вызывающего.
+function journalTeachingStaff(list) {
+  return list.filter(t => {
     const p = (t.position || "").toLowerCase();
     return p.includes("учител") || p.includes("завуч");
   });
+}
+
+// Шире, чем journalTeachingStaff — для "кто ведёт этот урок/предмет по
+// умолчанию" (не разовая замена, а постоянное назначение) добавляем ещё
+// админа/директора: должность в "Персонале" может быть административной,
+// но человек при этом реально ведёт уроки (2026-09-17, "админы тоже
+// учителя"). Для разовой замены (journalTeachingStaff) это не нужно — там
+// пользователь явно попросил админов/директоров не показывать.
+function journalSubjectTeacherCandidates(list) {
+  return list.filter(t => {
+    const p = (t.position || "").toLowerCase();
+    return p.includes("учител") || p.includes("завуч") || p.includes("админ") || p.includes("директор");
+  });
+}
+
+function renderJournalTeacherSelect() {
+  const sel = document.getElementById("js_teacher");
+  const prev = sel.value;
+  const teachingStaff = journalSubjectTeacherCandidates(journalTeachers);
   sel.innerHTML = '<option value="">Без учителя</option>' +
     teachingStaff.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
   sel.value = prev;
@@ -4054,8 +4074,15 @@ function openJournalSubjectModal(id) {
   if(!s) return;
   journalSubjectModalId = id;
   document.getElementById("journalSubjectModalNameInput").value = s.name;
+  // journalSubjectTeacherCandidates — так же, как в защите у "Кто заменяет"
+  // (openSubstitutionModal): если исторически предмет назначен на кого-то
+  // мимо фильтра, всё равно показываем, не теряем сохранённое состояние.
+  let subjectTeacherOptions = journalSubjectTeacherCandidates(journalTeachers);
+  if(s.teacher_staff_id && !subjectTeacherOptions.some(t => t.id === s.teacher_staff_id)) {
+    subjectTeacherOptions = subjectTeacherOptions.concat(journalTeachers.filter(t => t.id === s.teacher_staff_id));
+  }
   document.getElementById("journalSubjectModalTeacherSelect").innerHTML = '<option value="">Без учителя</option>' +
-    journalTeachers.map(t => `<option value="${t.id}"${s.teacher_staff_id === t.id ? " selected" : ""}>${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
+    subjectTeacherOptions.map(t => `<option value="${t.id}"${s.teacher_staff_id === t.id ? " selected" : ""}>${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
   document.getElementById("journalSubjectModalOverlay").classList.add("show");
 }
 
@@ -4114,10 +4141,20 @@ function openSubstitutionModal(scheduleId, dateStr) {
     (e.subject_name || "Предмет") + " · " + dateStr + " · обычно ведёт: " + (e.teacher_name || "не назначен");
   const sub = journalSubstitutions[scheduleId];
   substitutionModalOverrideSubjectId = (sub && sub.override_subject_id) || null;
+  // Только преподаватели (учитель/завуч) — админ/директор замену на себя
+  // тут не назначают, у них и так есть права поставить её кому угодно
+  // (2026-09-17). Текущего замещающего, даже если он исторически не
+  // прошёл бы фильтр (запись до этого правила), всё равно показываем —
+  // иначе модалка молча "забыла" бы реальное сохранённое состояние.
+  const currentSubId = sub && !sub.external ? sub.teacher_staff_id : null;
+  let teacherOptions = journalTeachingStaff(journalTeachers);
+  if(currentSubId && !teacherOptions.some(t => t.id === currentSubId)) {
+    teacherOptions = teacherOptions.concat(journalTeachers.filter(t => t.id === currentSubId));
+  }
   document.getElementById("substitutionModalTeacherSelect").innerHTML =
     '<option value="">Без замены (обычный учитель)</option>' +
     `<option value="external"${sub && sub.external ? " selected" : ""}>🚫 Внешняя замена (не из системы, ЗП никому)</option>` +
-    journalTeachers.map(t => `<option value="${t.id}"${sub && !sub.external && sub.teacher_staff_id === t.id ? " selected" : ""}>${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
+    teacherOptions.map(t => `<option value="${t.id}"${currentSubId === t.id ? " selected" : ""}>${escapeHtml(t.name)}${t.position ? " (" + escapeHtml(t.position) + ")" : ""}</option>`).join("");
   renderSubstitutionSubjectPicker();
   document.getElementById("substitutionModalOverlay").classList.add("show");
 }
