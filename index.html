@@ -127,7 +127,12 @@
      открывается поверх уже открытого календарного модала. */
   #dayPopoverBackdrop{display:none;position:fixed;inset:0;z-index:349;background:rgba(0,0,0,0);transition:background .18s ease-out}
   #dayPopoverBackdrop.show{background:rgba(0,0,0,.32)}
-  #dayPopover{display:none;position:fixed;z-index:350;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;width:236px;box-shadow:0 16px 40px rgba(0,0,0,.4);opacity:0;transform:translateY(8px) scale(.96);transition:opacity .16s ease-out,transform .16s ease-out}
+  /* width:236px раньше был фиксирован под попап "пришла/не было" (два кружка
+     в ряд) — для списка уроков (время+предмет+класс+статус в одной строке,
+     см. renderDayPopoverLessons) это тесно и текст обрезался бы. auto+max
+     позволяет попапу расшириться под более широкое содержимое, но не больше
+     разумного предела. */
+  #dayPopover{display:none;position:fixed;z-index:350;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;width:auto;min-width:236px;max-width:300px;box-shadow:0 16px 40px rgba(0,0,0,.4);opacity:0;transform:translateY(8px) scale(.96);transition:opacity .16s ease-out,transform .16s ease-out}
   #dayPopover.show{opacity:1;transform:translateY(0) scale(1)}
   @media (prefers-reduced-motion:reduce){#dayPopover,#dayPopoverBackdrop{transition:none}}
   .modal-overlay.show{display:flex}
@@ -6364,11 +6369,11 @@ function renderDayPopover() {
 }
 
 // Список уроков за день для journal-учителя (см. openTeacherDayLessons) —
-// тот же вид строки (кружок готово/не готово + предмет + время·класс), что
-// и сводка "сегодня у вас" на Home (renderHomeGreeting), просто на нейтральной
-// поверхности попапа вместо градиентной карточки. Тап по строке ведёт прямо
-// в "Оценки" этого урока (openLessonFromDayPopover) — дата/класс/предмет уже
-// известны из самой строки, отдельно выбирать класс не нужно.
+// время слева (как в обычном расписании), статус кружком справа — выбранный
+// пользователем вариант дизайна из трёх мокапов (2026-09-17). Тап по строке
+// ведёт прямо в "Оценки" этого урока (openLessonFromDayPopover) —
+// дата/класс/предмет уже известны из самой строки, отдельно выбирать класс
+// не нужно.
 function renderDayPopoverLessons() {
   const lessons = window._dayPopoverLessons;
   const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
@@ -6382,23 +6387,26 @@ function renderDayPopoverLessons() {
   } else if(!lessons.length) {
     html = '<div style="padding:4px 2px;color:var(--text2);font-size:13px;min-width:200px">В этот день уроков нет</div>';
   } else {
-    html = '<div style="display:flex;flex-direction:column;gap:2px;min-width:220px">' +
+    html = '<div style="display:flex;flex-direction:column;gap:2px;min-width:250px">' +
       lessons.map((l, idx) => {
-        const dotIcon = l.done
-          ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12.5 9.5 18 20 6"/></svg>'
-          : '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>';
-        const time = [l.time_start, l.time_end].filter(Boolean).join("–");
+        const statusIcon = l.done
+          ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12.5 9.5 18 20 6"/></svg>'
+          : '<svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>';
         // Слот расписания без назначенного предмета — переходить некуда
         // (openJournalScheduleLessonGrades требует subjectId), строка без
         // тапа и без стрелки, а не молчаливый мёртвый клик.
         const clickable = l.subject_id != null && !isFutureDate;
-        return `<div ${clickable ? `onclick="openLessonFromDayPopover(${idx})"` : ""} style="display:flex;align-items:center;gap:10px;padding:6px 2px;${clickable ? "cursor:pointer" : ""}">` +
-          '<div style="width:20px;height:20px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;' +
-            (l.done ? 'background:var(--accent2);color:#fff' : 'background:var(--surface2);color:var(--text2)') + '">' + dotIcon + '</div>' +
+        return `<div ${clickable ? `onclick="openLessonFromDayPopover(${idx})"` : ""} style="display:flex;align-items:center;gap:10px;padding:7px 2px;${clickable ? "cursor:pointer" : ""}">` +
+          '<div style="width:44px;flex-shrink:0;font-variant-numeric:tabular-nums">' +
+            '<div style="font-size:12.5px;font-weight:700;color:var(--text)">' + escapeHtml(l.time_start || "") + '</div>' +
+            '<div style="font-size:10px;color:var(--text2)">' + escapeHtml(l.time_end || "") + '</div>' +
+          '</div>' +
           '<div style="min-width:0;flex:1">' +
             '<div style="font-size:13px;font-weight:600;color:var(--text)">' + escapeHtml(l.subject_name || "Предмет не указан") + '</div>' +
-            '<div style="font-size:11.5px;color:var(--text2)">' + escapeHtml([time, l.class_name].filter(Boolean).join(" · ")) + '</div>' +
+            '<div style="font-size:11px;color:var(--text2);margin-top:1px">' + escapeHtml(l.class_name || "") + '</div>' +
           '</div>' +
+          '<div style="width:20px;height:20px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;' +
+            (l.done ? 'background:var(--accent2);color:#fff' : 'background:var(--surface2);color:var(--text2);border:1.5px solid var(--border)') + '">' + statusIcon + '</div>' +
           (clickable ? '<span class="child-arrow">&#8250;</span>' : "") +
         '</div>';
       }).join("") +
