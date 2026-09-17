@@ -2527,7 +2527,7 @@ function openTodayLessonModal() {
   window._currentStaffForCalendar = {
     id: staffInfo.payroll_staff_id, name: staffInfo.name, pay_type: staffInfo.pay_type,
     lesson_rate: staffInfo.lesson_rate, extended_day_rate: staffInfo.extended_day_rate,
-    overtime_rate: staffInfo.overtime_rate,
+    overtime_rate: staffInfo.overtime_rate, is_journal_teacher: staffInfo.is_journal_teacher,
   };
   window._staffCalReadOnly = true;
   window._staffCalView = { year: now.getFullYear(), month: now.getMonth() };
@@ -6004,7 +6004,7 @@ async function openMyAttendanceCalendar() {
   window._currentStaffForCalendar = {
     id: staffInfo.payroll_staff_id, name: staffInfo.name, position: staffInfo.role, pay_type: staffInfo.pay_type,
     lesson_rate: staffInfo.lesson_rate, extended_day_rate: staffInfo.extended_day_rate,
-    overtime_rate: staffInfo.overtime_rate,
+    overtime_rate: staffInfo.overtime_rate, is_journal_teacher: staffInfo.is_journal_teacher,
   };
   window._staffCalReadOnly = true;
   const n = new Date();
