@@ -2023,16 +2023,21 @@ function parentBlockHtml(c, block, idx, total) {
   // не было вообще, кнопка показывалась всем, кто может открыть карточку.
   const canLink = c.dept === "Школа" && telegram && staffInfo &&
     (isAdminRole(staffInfo.role) || isZavuchRole(staffInfo.role));
-  return '<div style="border-top:1px solid var(--border);padding:9px 0">' +
-      '<div style="display:flex;justify-content:space-between;font-size:13px">' +
-        '<span style="color:var(--text2)">' + label + '</span>' +
-        '<span style="font-weight:500">' + escapeHtml(name || "—") + '</span>' +
+  // Редизайн карточки ребёнка (2026-09-17, отзыв пользователя: "разношёрстно",
+  // родитель как отдельный блок — понравилось) — вместо строки в общей ленте
+  // с кнопкой на всю ширину внутри неё: своя карточка (заголовок-лейбл
+  // снаружи, имя+компактная кнопка сверху, контакты списком под ними, тот же
+  // label/value стиль, что и раньше, просто в своей рамке surface2).
+  return '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 8px">' + label + '</div>' +
+    '<div style="background:var(--surface2);border-radius:12px;padding:12px 14px;margin-bottom:8px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">' +
+        '<div style="font-size:13.5px;font-weight:600">' + escapeHtml(name || "—") + '</div>' +
+        (canLink ? '<button onclick="autoLinkParent(' + c.id + ',' + idx + ')" id="linkBtn_' + c.id + '_' + idx + '" style="flex-shrink:0;padding:4px 11px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">👪 Привязать</button>' : '') +
       '</div>' +
       (phone ? '<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:6px">' +
         '<span style="color:var(--text2)">Телефон</span><span style="font-weight:500">' + escapeHtml(phone) + '</span></div>' : '') +
       (telegram ? '<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:6px">' +
         '<span style="color:var(--text2)">Telegram</span><span style="font-weight:500;color:var(--accent)">' + escapeHtml(telegram) + '</span></div>' : '') +
-      (canLink ? '<button onclick="autoLinkParent(' + c.id + ',' + idx + ')" id="linkBtn_' + c.id + '_' + idx + '" style="margin-top:8px;width:100%;padding:8px;border-radius:8px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:12px;font-weight:500;cursor:pointer">👪 Привязать</button>' : '') +
     '</div>';
 }
 
@@ -2043,7 +2048,11 @@ function renderModal(c) {
   // Тип/до какого времени — только у сада, у школы этих полей нет вообще
   // (см. typeUntilRow в форме) — не показываем "до" без значения.
   const typeUntil = c.type ? (c.type + (c.until ? " до " + c.until : "")) : "";
-  const subtitleParts = [age, c.group, typeUntil].filter(Boolean).map(escapeHtml);
+  // Дата рождения вернулась сюда, в подстрочник — раньше была отдельной
+  // строкой в общей ленте, теперь просто ещё один факт рядом с возрастом
+  // (отзыв пользователя, 2026-09-17: без отдельных бейджей, но и без лишней
+  // строки-разделителя ради одной даты).
+  const subtitleParts = [age, c.group, typeUntil, c.dob].filter(Boolean).map(escapeHtml);
 
   // Дневник есть только у школьников (см. parent.html) — видят учителя,
   // завуч, админ и директор, но не воспитатели (просьба пользователя).
@@ -2053,22 +2062,17 @@ function renderModal(c) {
   document.getElementById("modalContent").innerHTML =
     // Subtitle
     '<div style="font-size:12px;color:var(--text2);margin-bottom:14px">' + subtitleParts.join(" · ") + '</div>' +
-    // Rows — "Дневник" оформлен такой же строкой, как остальные поля карточки
-    // (не отдельной кнопкой/пилюлей — жалоба пользователя, что кнопка
-    // выбивалась из дизайна), кликабельна, со стрелкой как у пунктов списка.
+    // "Дневник" — на лёгкой подложке (surface2), как строки в списках по
+    // всему приложению, а не border-top разделителем вперемешку с фактами
+    // ниже (редизайн 2026-09-17, отзыв пользователя про "разношёрстность").
     (canSeeDiary ?
-      '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;align-items:center;font-size:13px;cursor:pointer" onclick="openChildDiary(' + c.id + ')">' +
-        '<span style="color:var(--text2)">📔 Дневник</span>' +
+      '<div style="display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;background:var(--surface2);margin-bottom:12px;cursor:pointer" onclick="openChildDiary(' + c.id + ')">' +
+        '<span style="flex:1;font-size:13.5px;color:var(--text)">📔 Дневник</span>' +
         '<span class="child-arrow">›</span>' +
-      '</div>' : "") +
-    (c.dob ?
-      '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;font-size:13px">' +
-        '<span style="color:var(--text2)">Дата рождения</span>' +
-        '<span style="font-weight:500">' + escapeHtml(c.dob) + '</span>' +
       '</div>' : "") +
     (blocks.length
       ? blocks.map((b, i) => parentBlockHtml(c, b, i, blocks.length)).join("")
-      : '<div style="border-top:1px solid var(--border);padding:9px 0;font-size:13px;color:var(--text2)">Родитель не указан</div>') +
+      : '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">Родитель не указан</div>') +
     (hasAllergy ?
       '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;align-items:center;font-size:13px">' +
         '<span style="color:var(--text2)">Особенности</span>' +
