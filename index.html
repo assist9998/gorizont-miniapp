@@ -3890,7 +3890,14 @@ let journalViewGradesReturnTab = "subjects";
 function journalViewBack() {
   const gradesPanel = document.getElementById("journalViewPanel-grades");
   if(gradesPanel.style.display !== "none") {
-    switchJournalViewTab(journalViewGradesReturnTab);
+    // Пришли не из "Расписания"/"Предметов", а из попапа календаря
+    // "Персонала" (см. openLessonFromDayPopover) — назад значит обратно в
+    // тот попап, а не в класс, где пользователь никогда не был.
+    if(journalViewGradesReturnTab === "calendar-popup") {
+      returnToCalendarFromGrades();
+    } else {
+      switchJournalViewTab(journalViewGradesReturnTab);
+    }
     return;
   }
   // Кнопка "замена" в списке уроков должна появляться только сразу после
@@ -6364,6 +6371,11 @@ function renderDayPopover() {
 // известны из самой строки, отдельно выбирать класс не нужно.
 function renderDayPopoverLessons() {
   const lessons = window._dayPopoverLessons;
+  const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
+  // Будущая дата — тут только "что запланировано", оценивать/заполнять
+  // ещё нечего (2026-09-17: тап по будущему дню открыт специально для
+  // просмотра плана, но переход в "Оценки" из него не даём).
+  const isFutureDate = window._dayPopoverDate && dmyToDate(window._dayPopoverDate) > dmyToDate(todayDMY);
   let html;
   if(lessons === null) {
     html = '<div style="padding:4px 2px;color:var(--text2);font-size:13px;min-width:200px">Загружаем...</div>';
@@ -6379,7 +6391,7 @@ function renderDayPopoverLessons() {
         // Слот расписания без назначенного предмета — переходить некуда
         // (openJournalScheduleLessonGrades требует subjectId), строка без
         // тапа и без стрелки, а не молчаливый мёртвый клик.
-        const clickable = l.subject_id != null;
+        const clickable = l.subject_id != null && !isFutureDate;
         return `<div ${clickable ? `onclick="openLessonFromDayPopover(${idx})"` : ""} style="display:flex;align-items:center;gap:10px;padding:6px 2px;${clickable ? "cursor:pointer" : ""}">` +
           '<div style="width:20px;height:20px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;' +
             (l.done ? 'background:var(--accent2);color:#fff' : 'background:var(--surface2);color:var(--text2)') + '">' + dotIcon + '</div>' +
@@ -6416,7 +6428,17 @@ async function openLessonFromDayPopover(idx) {
   const l = (window._dayPopoverLessons || [])[idx];
   const dateStr = window._dayPopoverDate;
   const s = window._currentStaffForCalendar;
-  if(!l || !dateStr || !l.subject_id) return;
+  const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
+  if(!l || !dateStr || !l.subject_id || dmyToDate(dateStr) > dmyToDate(todayDMY)) return;
+  // Запоминаем, откуда пришли — "Назад" из "Оценки" должен вернуть обратно
+  // в этот попап (см. returnToCalendarFromGrades), а не в "Расписание"
+  // класса, где пользователь никогда не был (жалоба 2026-09-17: "возвращает
+  // в расписание... неудобно"). isSelf нужен, чтобы при возврате открыть
+  // тот же (свой read-only или чужой админский) календарь.
+  window._calendarReturnContext = {
+    staffId: s.id, isSelf: !!(staffInfo && s.id === staffInfo.payroll_staff_id),
+    dateStr, year: window._staffCalView.year, month: window._staffCalView.month,
+  };
   closeDayPopover();
   document.getElementById("modalOverlay").classList.remove("show");
   activeJournalCity = (s && s.city) || (staffInfo && staffInfo.city) || activeJournalCity;
@@ -6426,6 +6448,24 @@ async function openLessonFromDayPopover(idx) {
   journalScheduleDayView = weekday;
   journalScheduleWeekView = weekOffset;
   openJournalScheduleLessonGrades(l.subject_id, weekday, weekOffset);
+  journalViewGradesReturnTab = "calendar-popup"; // переопределяем "schedule", выставленный выше
+}
+
+// "Назад" из "Оценки", открытых через попап календаря (см. openLessonFromDayPopover) —
+// пересобираем тот же календарь (свой/чужой), тот же месяц, и заново
+// открываем попап с уроками на ту же дату. Клетку ищем заново по data-date —
+// старая ссылка на DOM-элемент уже не годится, модалка была закрыта и
+// content пересоздан с нуля.
+async function returnToCalendarFromGrades() {
+  const ctx = window._calendarReturnContext;
+  window._calendarReturnContext = null;
+  if(!ctx) { goTo("home"); return; }
+  if(ctx.isSelf) await openMyAttendanceCalendar();
+  else await openStaffCalendar(ctx.staffId);
+  window._staffCalView = { year: ctx.year, month: ctx.month };
+  await loadStaffMonth();
+  const cellEl = document.querySelector('#modalContent [data-date="' + ctx.dateStr + '"]');
+  if(cellEl) openTeacherDayLessons(ctx.dateStr, cellEl);
 }
 
 function renderDayPopoverAttendance() {
@@ -6857,7 +6897,14 @@ function renderStaffCalendarModal() {
     const isSub = status === "present" && subs.has(dateStr);
     const otHoursToday = status === "present" ? (otHours[dateStr] || 0) : 0;
     const isOt = otHoursToday > 0;
-    const isScheduled = isFuture && scheduled.has(dateStr);
+    // "Персонал по дням" (план на будущее) для journal-учителя (per_lesson,
+    // без базовой ставки) так же неактуален, как и присутствие — ЗП всё
+    // равно считается только по факту заполненных уроков в журнале, план
+    // "собирается работать" на неё не влияет. Отзыв пользователя 2026-09-17
+    // ("зачем-то зелёным отметить будущие... не надо") — гасим и заливку, и
+    // саму возможность отметить план (см. canEditFuture ниже), даже если
+    // где-то раньше уже стоял план на эти дни.
+    const isScheduled = isFuture && !isJournalOnly && scheduled.has(dateStr);
     // Число уроков за день — нужно уже здесь (для заливки клетки у
     // journal-учителя, см. isJournalOnly ниже), не только для бейджа в углу.
     const lessonInfo = (window._staffCalLessonDetails && window._staffCalLessonDetails[dateStr]) || {};
@@ -6895,12 +6942,17 @@ function renderStaffCalendarModal() {
     // в "Персонал по дням", просто заполнять его удобнее через карточку
     // конкретного человека (отметить сразу всю его неделю), чем по одной
     // дате за раз (project_gorizont_payroll).
-    const canEditFuture = isFuture && !readOnly;
+    const canEditFuture = isFuture && !readOnly && !isJournalOnly;
     // isJournalOnly — тап открывает расписание уроков (просмотр, не
-    // редактирование), поэтому доступен и в своём (readOnly) календаре, и в
-    // админском, на любой прошедший/сегодняшний день — не только "сегодня",
-    // как у isNulevka.
-    const canEdit = canEditFuture || (!isFuture && (isJournalOnly || !readOnly || (isNulevka && dateStr === todayDMY)));
+    // редактирование плана/присутствия), поэтому доступен и в своём
+    // (readOnly) календаре, и в админском, на ЛЮБОЙ день, включая будущие —
+    // посмотреть, какие предметы запланированы на будущую дату, это отзыв
+    // пользователя 2026-09-17 ("зачем это на будущее?" был про зелёную
+    // заливку/план присутствия, не про сам просмотр расписания — заливку
+    // убрали (isScheduled), а тап оставили). Переход в "Оценки" для будущего
+    // дня внутри самого попапа при этом не даём (см. renderDayPopoverLessons) —
+    // оценивать пока нечего, только просмотр.
+    const canEdit = canEditFuture || isJournalOnly || (!isFuture && (!readOnly || (isNulevka && dateStr === todayDMY)));
     const cursor = canEdit ? "pointer" : "default";
     const onclick = !canEdit ? "" : (canEditFuture
       ? `onclick="toggleFutureSchedule('${dateStr}')"`
@@ -6961,7 +7013,11 @@ function renderStaffCalendarModal() {
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
         `font-size:8.5px;font-weight:800;letter-spacing:-.5px;box-shadow:0 1px 3px rgba(0,0,0,.25)">${otHoursToday}ч</span>`
       : "";
-    grid += `<div ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}${lessonBadge}${extBadge}${otBadge}</div>`;
+    // data-date — чтобы можно было найти именно эту клетку заново после
+    // возврата из "Оценки" в попап (см. returnToCalendarFromGrades), когда
+    // модалка календаря пересоздаётся с нуля и старая ссылка на cellEl уже
+    // не годится.
+    grid += `<div data-date="${dateStr}" ${onclick} style="position:relative;aspect-ratio:1;border-radius:8px;background:${bg};color:${color};cursor:${cursor};opacity:${isWknd?0.5:1};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${d}${subBadge}${lessonBadge}${extBadge}${otBadge}</div>`;
   });
   grid += '</div>';
 
