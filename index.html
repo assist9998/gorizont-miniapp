@@ -102,6 +102,10 @@
 
   /* CHILDREN LIST */
   .child-list-item{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .2s}
+  /* Урок с уже внесённой темой/посещаемостью (journalDayCompletion) — просто
+     цвет рамки, без бейджа/текста: с бейджем съезжает время/учитель справа
+     (отзыв пользователя, 2026-09-17). */
+  .child-list-item.filled{border-color:var(--accent2)}
   .child-list-item:active{border-color:var(--accent)}
   .child-arrow{color:var(--text2);font-size:16px;flex-shrink:0}
   .child-detail{flex:1;min-width:0}
@@ -1350,6 +1354,32 @@ function renderHomeGreeting(total, present) {
     }
 
     selfRow = '<div style="display:flex;align-items:center;gap:8px;margin-top:10px">' + attBtn + extrasBtn + '</div>';
+
+    // Сводка "сегодня у вас" — только у журнального учителя, только если
+    // сегодня вообще есть уроки (todayLessons, см. loadTodayLessons). Белый
+    // кружок с зелёной галочкой (не сливается с градиентом карточки, отзыв
+    // пользователя 2026-09-17) + бейдж статуса, без клика — просто
+    // подтверждение, что урок реально засчитался.
+    if(staffInfo.is_journal_teacher && todayLessons.length) {
+      const rows = todayLessons.map(l => {
+        const dotIcon = l.done
+          ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12.5 9.5 18 20 6"/></svg>'
+          : '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>';
+        const time = [l.time_start, l.time_end].filter(Boolean).join("–");
+        return '<div style="display:flex;align-items:center;gap:10px;padding:7px 2px">' +
+          '<div style="width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;' +
+            (l.done ? 'background:#fff;color:var(--accent2)' : 'background:rgba(255,255,255,.22);color:rgba(255,255,255,.7)') + '">' + dotIcon + '</div>' +
+          '<div style="min-width:0">' +
+            '<div style="font-size:13.5px;font-weight:600;color:' + (l.done ? '#fff' : 'rgba(255,255,255,.75)') + '">' + escapeHtml(l.subject_name || "Предмет не указан") + '</div>' +
+            '<div style="font-size:11.5px;color:rgba(255,255,255,.7)">' + escapeHtml([time, l.class_name].filter(Boolean).join(" · ")) + '</div>' +
+          '</div>' +
+          '<div style="margin-left:auto;font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:999px;flex-shrink:0;' +
+            (l.done ? 'background:#fff;color:var(--grad2)' : 'background:rgba(255,255,255,.18);color:rgba(255,255,255,.85)') + '">' +
+            (l.done ? "Заполнено" : "Не заполнено") + '</div>' +
+        '</div>';
+      }).join("");
+      selfRow += '<div style="display:flex;flex-direction:column;gap:2px;margin-top:8px">' + rows + '</div>';
+    }
   }
 
   el.innerHTML =
@@ -2358,6 +2388,7 @@ async function initStaff(){
       console.log("Staff:", staffInfo);
       if(isAdminRole(staffInfo.role) || !staffInfo.payroll_staff_id) hideAppGate();
       initSelfAttendance();
+      loadTodayLessons();
       showPendingAnnouncement();
     } else {
       hideAppGate();
@@ -2438,6 +2469,25 @@ let selfTodayExt = false; // нулёвка: была ли сегодня про
 let homeExtrasExpanded = false;
 function toggleHomeExtrasExpanded() {
   homeExtrasExpanded = !homeExtrasExpanded;
+  renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
+}
+
+// Сводка "сегодня у вас такие-то уроки" на Home — только у журнального
+// учителя (см. isNulevkaSelf/is_journal_teacher), чтобы видел, что реально
+// засчиталось, без отдельной кнопки-отметки (2026-09-17, project_gorizont_e_zhurnal).
+let todayLessons = [];
+async function loadTodayLessons() {
+  if(!staffInfo || !staffInfo.is_journal_teacher) { todayLessons = []; return; }
+  try {
+    const resp = await fetch(API_URL + "/journal/my-today?date=" + encodeURIComponent(dateToDmy(now)), {
+      headers: authHeaders(),
+    });
+    const data = await resp.json();
+    todayLessons = data.ok ? (data.lessons || []) : [];
+  } catch(e) {
+    console.error("Today lessons:", e);
+    todayLessons = [];
+  }
   renderHomeGreeting(_lastHomeCounts.total, _lastHomeCounts.present);
 }
 
@@ -3512,6 +3562,10 @@ let journalScheduleWeekEdit = 0;
 // {schedule_id: {teacher_staff_id, teacher_name}} — замены на КОНКРЕТНУЮ
 // дату текущего выбранного дня (перезагружается при смене дня/недели).
 let journalSubstitutions = {};
+// subject_id-ы, по которым на выбранную дату уже есть тема/посещаемость —
+// для зелёной рамки урока (см. journalLessonCardsHtml), грузится тем же
+// запросом, что и journalSubstitutions (2026-09-17).
+let journalDayCompletion = new Set();
 
 // Оценки — своя дата (не день недели расписания, а конкретный календарный
 // день) и свой выбранный предмет. null = ещё не выбраны, подставятся при
@@ -4247,6 +4301,10 @@ function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
       ? ` onclick="startJournalScheduleEdit(${e.id})"`
       : e.subject_id ? ` onclick="openJournalScheduleLessonGrades(${e.subject_id},${selectedDay},${weekOffset})"` : "";
     const rowStyle = ` style="cursor:${editable || e.subject_id ? "pointer" : "default"};${sub && sub.no_lesson ? "opacity:.45" : ""}"`;
+    // Зелёная рамка — тема/посещаемость уже внесены на эту дату (см.
+    // journalDayCompletion), только на экране-обзоре (не в структурном
+    // редактировании расписания) и не когда урока не было (2026-09-17).
+    const isFilled = !editable && !!e.subject_id && journalDayCompletion.has(e.subject_id) && !(sub && sub.no_lesson);
     const delBtn = editable ? `<button onclick="event.stopPropagation();deleteJournalScheduleEntry(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">удалить</button>` : "";
     const subBtn = editable ? `<button onclick="event.stopPropagation();openSubstitutionModal(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${sub && !sub.no_lesson ? "var(--accent)" : "var(--border)"};background:transparent;color:${sub && !sub.no_lesson ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:4px">замена</button>` : "";
     const noLessonBtn = editable ? `<button onclick="event.stopPropagation();toggleNoLesson(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid ${sub && sub.no_lesson ? "var(--accent)" : "var(--border)"};background:transparent;color:${sub && sub.no_lesson ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:4px">урока не было</button>` : "";
@@ -4272,8 +4330,8 @@ function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
         mySubBtn = `<button onclick="event.stopPropagation();markMySubstitution(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;flex-shrink:0">замена</button>`;
       }
     }
-    return `<div class="child-list-item"${clickAttr}${rowStyle}>
-        <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${lessonNumber}</div>
+    return `<div class="child-list-item${isFilled ? " filled" : ""}"${clickAttr}${rowStyle}>
+        <div style="width:26px;height:26px;border-radius:50%;background:${isFilled ? "var(--accent2)" : "var(--accent)"};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${lessonNumber}</div>
         <div class="child-detail">
           <div class="child-detail-name">${e.subject_name ? escapeHtml(e.subject_name) : "Предмет не указан"}</div>
           <div class="child-detail-meta">${meta || "Время не указано"}</div>
@@ -4291,8 +4349,10 @@ async function loadJournalSubstitutionsForDate(dateStr) {
     const d = await resp.json();
     journalSubstitutions = {};
     (d.substitutions || []).forEach(s => { journalSubstitutions[s.schedule_id] = s; });
+    journalDayCompletion = new Set(d.completed || []);
   } catch(e) {
     journalSubstitutions = {};
+    journalDayCompletion = new Set();
   }
 }
 
