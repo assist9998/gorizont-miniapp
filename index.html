@@ -4846,12 +4846,19 @@ function renderJournalView() {
 
   const stuHtml = journalClassStudents.map(c => {
     const initials = c.name.split(" ").map(w => w[0]).join("").slice(0,2);
-    return `<div class="child-list-item" style="cursor:default">
+    // Тап открывает ту же карточку, что и на "Дети" (openModal/renderModal) —
+    // там уже своя логика доступа: дневник виден учителю/завучу/админу
+    // (canSeeDiary), а привязка/редактирование родителя вообще не в этой
+    // карточке, а за отдельной кнопкой "ред.", которая видна только админу
+    // (см. openEditForm) — значит учителю просто нечем привязать родителя,
+    // отдельно ничего скрывать не нужно (отзыв пользователя, 2026-09-17).
+    return `<div class="child-list-item" onclick="openModal(${c.id})">
       <div class="avatar">${initials}</div>
       <div class="child-detail">
         <div class="child-detail-name">${escapeHtml(c.name)}</div>
         <div class="child-detail-meta">${c.dob ? calcAge(c.dob) : ""}</div>
       </div>
+      <span class="child-arrow">&#8250;</span>
     </div>`;
   }).join("");
   document.getElementById("journalViewStudents").innerHTML = stuHtml || '<div class="empty">Пока нет учеников в этом классе</div>';
