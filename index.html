@@ -2365,6 +2365,7 @@ function applyRolePermissions() {
 let entryDept = "Сад";
 function openMainEntry() {
   journalSubstitutionMode = false;
+  mySubstitutionSubjectPickerFor = null;
   if(staffInfo && isTeacherRole(staffInfo.role) && !isAdminRole(staffInfo.role)) {
     goTo("journal-teacher");
     loadJournalMySubjects();
@@ -3623,6 +3624,12 @@ let journalMySubjects = [];
 // в "Классы" через нижнее меню (openMainEntry/goTo('journal')).
 let journalSubstitutionMode = false;
 
+// Подмена предмета в самообслуживании (2026-09-17) — id урока (schedule_id),
+// для которого сейчас развёрнут ряд пилюль "какой предмет ведёте" под
+// карточкой; null — свёрнуто везде. Только один урок за раз, сворачивается
+// сам при выборе предмета (см. pickMySubstitutionSubject).
+let mySubstitutionSubjectPickerFor = null;
+
 function openTeacherSubstitutionBrowse() {
   journalSubstitutionMode = true;
   activeJournalCity = staffInfo.city;
@@ -3919,6 +3926,7 @@ function journalViewBack() {
   // 2026-09-17). openMainEntry уже сбрасывает это при заходе через нижнее
   // меню — здесь тот же сброс для возврата "Назад" из класса.
   journalSubstitutionMode = false;
+  mySubstitutionSubjectPickerFor = null;
   goTo(journalViewTeacherMode ? "journal-teacher" : "journal");
 }
 
@@ -4238,6 +4246,31 @@ async function unmarkMySubstitution(scheduleId, dateStr) {
   }
 }
 
+// Подмена предмета в самообслуживании (2026-09-17) — разворачивает/сворачивает
+// ряд пилюль под своей карточкой (см. mySubjectPickerRow в journalLessonCardsHtml).
+function toggleMySubstitutionSubjectPicker(scheduleId) {
+  mySubstitutionSubjectPickerFor = mySubstitutionSubjectPickerFor === scheduleId ? null : scheduleId;
+  renderJournalViewSchedule();
+}
+
+async function pickMySubstitutionSubject(scheduleId, dateStr, subjectId) {
+  const myId = staffInfo && staffInfo.payroll_staff_id;
+  if(!myId) return;
+  try {
+    const resp = await fetch(API_URL + "/journal/substitutions", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({schedule_id: scheduleId, date: dateStr, teacher_staff_id: myId, override_subject_id: subjectId}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    mySubstitutionSubjectPickerFor = null;
+    renderJournalViewSchedule();
+  } catch(e) {
+    showToast("Не удалось сохранить", true);
+  }
+}
+
 // editingJournalScheduleId — id урока, который сейчас редактируется через
 // нижнюю форму (null — форма в режиме добавления нового урока).
 let editingJournalScheduleId = null;
@@ -4425,6 +4458,7 @@ function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
     // СВОЮ же замену (см. handle_set_journal_substitution) — чужую замену
     // показываем текстом, не кнопкой, чтобы не провоцировать тап в пустоту.
     let mySubBtn = "";
+    let mySubjectPickerRow = "";
     if(!editable && journalSubstitutionMode && e.subject_id) {
       const myId = staffInfo && staffInfo.payroll_staff_id;
       if(sub && sub.no_lesson) {
@@ -4433,7 +4467,25 @@ function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
         // пометкой без кнопки, чтобы место справа не пустовало (2026-09-16).
         mySubBtn = `<span style="padding:4px 10px;font-size:11px;color:var(--text2);flex-shrink:0">урока не было</span>`;
       } else if(sub && sub.teacher_staff_id === myId) {
-        mySubBtn = `<button onclick="event.stopPropagation();unmarkMySubstitution(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--accent2);background:var(--g5-bg);color:var(--accent2);font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">замещаете вы ✕</button>`;
+        mySubBtn = `<button onclick="event.stopPropagation();unmarkMySubstitution(${e.id},'${dateStr}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--accent2);background:var(--g5-bg);color:var(--accent2);font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">замещаете вы ✕</button>` +
+          // Подмена предмета для себя (2026-09-17, "и учитель тоже может") —
+          // тот же принцип, что у админа, но без модалки: ряд пилюль
+          // разворачивается прямо под своей карточкой (см. mySubjectPickerRow).
+          `<button onclick="event.stopPropagation();toggleMySubstitutionSubjectPicker(${e.id})" style="padding:4px 10px;border-radius:8px;border:1px solid ${isOverridden ? "var(--accent)" : "var(--border)"};background:transparent;color:${isOverridden ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-left:4px">предмет</button>`;
+        if(mySubstitutionSubjectPickerFor === e.id) {
+          const otherSubjects = journalSubjects.filter(s => s.id !== e.subject_id);
+          const pill = (id, label, isSame) => {
+            const active = isSame ? !isOverridden : (isOverridden && sub.override_subject_id === id);
+            return `<button type="button" onclick="event.stopPropagation();pickMySubstitutionSubject(${e.id},'${dateStr}',${isSame ? "null" : id})" class="filter-btn${active ? " active" : ""}" style="margin:0 6px 6px 0">${escapeHtml(label)}</button>`;
+          };
+          mySubjectPickerRow = `<div class="child-list-item" style="cursor:default;flex-direction:column;align-items:stretch;background:var(--surface2)" onclick="event.stopPropagation()">` +
+            '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px">Какой предмет ведёте</div>' +
+            '<div style="display:flex;flex-wrap:wrap">' +
+              pill(null, (e.subject_name || "Предмет") + " (как обычно)", true) +
+              otherSubjects.map(s => pill(s.id, s.name, false)).join("") +
+            '</div>' +
+          '</div>';
+        }
       } else if(sub) {
         mySubBtn = `<span style="padding:4px 10px;font-size:11px;color:var(--text2);flex-shrink:0">замещает: ${escapeHtml(sub.teacher_name || "?")}</span>`;
       } else {
@@ -4450,7 +4502,7 @@ function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
           <div class="child-detail-meta">${meta || "Время не указано"}</div>
         </div>
         ${noLessonBtn}${subBtn}${delBtn}${mySubBtn}
-      </div>`;
+      </div>${mySubjectPickerRow}`;
   }).join("");
 }
 
