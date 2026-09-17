@@ -1252,7 +1252,14 @@ function renderHomeGreeting(total, present) {
     // "я на работе" недостаточно, ЗП считается от числа уроков/продлёнки,
     // поэтому кнопка сразу открывает тот же диалог, что и в календаре
     // (openTodayLessonModal), а не молча ставит "present" без деталей.
-    const isNulevkaSelf = !!(staffInfo.lesson_rate || staffInfo.extended_day_rate);
+    // У журнального учителя (is_journal_teacher) число уроков в этот диалог
+    // больше не входит (считается по журналу) — если у него ЕЩЁ и нет
+    // ставки за продлёнку, диалогу спрашивать вообще нечего, и он молча
+    // сохранял бы "отсутствует" (нет ответа = count 0 = status absent, см.
+    // saveLessonDay) — баг, из-за которого учитель не мог отметиться на
+    // работе (жалоба Алины, 2026-09-17). В этом случае — обычная простая
+    // отметка present/absent, как у сотрудников без ставки за урок вовсе.
+    const isNulevkaSelf = !!((staffInfo.lesson_rate && !staffInfo.is_journal_teacher) || staffInfo.extended_day_rate);
     const attBtn = isNulevkaSelf
       ? (selfAttendanceMarked
           ? '<button onclick="openTodayLessonModal()" style="display:inline-flex;align-items:center;gap:6px;' +
