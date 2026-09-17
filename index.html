@@ -4216,6 +4216,20 @@ function journalDateStrForWeekday(weekday, weekOffset) {
   return String(d.getDate()).padStart(2,'0') + "." + String(d.getMonth()+1).padStart(2,'0') + "." + d.getFullYear();
 }
 
+// Обратное к journalDateStrForWeekday — по абсолютной дате (из календаря
+// "Персонала", см. openLessonFromDayPopover) вычисляем день недели/смещение
+// недели, чтобы попасть в "Оценки" на нужный урок, не только "на сегодня".
+function journalWeekdayAndOffsetForDate(dateStr) {
+  const d = dmyToDate(dateStr);
+  const jsDay = d.getDay();
+  const weekday = jsDay === 0 ? 7 : jsDay;
+  const mon = new Date(d);
+  mon.setDate(mon.getDate() - (weekday - 1));
+  const thisMon = journalWeekMonday(0);
+  const weekOffset = Math.round((mon - thisMon) / (7 * 24 * 60 * 60 * 1000));
+  return { weekday, weekOffset };
+}
+
 // Учебный год 26/27 и каникулы (картинка "Календарь на 26/27 учебный год",
 // прислана пользователем 2026-09-09) — те же границы, что и триместры
 // (JOURNAL_QUARTER_RANGES), плюс сами перерывы между ними. Ограничивает
@@ -6260,8 +6274,44 @@ function openDayPopover(dateStr, cellEl) {
   const s = window._currentStaffForCalendar;
   if(!s) return;
   window._dayPopoverDate = dateStr;
+  window._dayPopoverMode = "attendance";
+  window._dayPopoverCell = cellEl;
   renderDayPopover();
+  positionDayPopover(cellEl);
+}
 
+// Учитель, у которого уроки считаются автоматически по журналу
+// (is_journal_teacher) и нет ставки за продлёнку — тап по дню открывает не
+// попап "пришла/не было" (он для такого учителя больше ничего не решает,
+// см. комментарий у isJournalOnly в renderStaffCalendarModal), а список
+// уроков за этот день — тот же /journal/my-today, что и сводка на Home,
+// только по конкретной дате, а не всегда "сегодня".
+async function openTeacherDayLessons(dateStr, cellEl) {
+  const s = window._currentStaffForCalendar;
+  if(!s) return;
+  window._dayPopoverDate = dateStr;
+  window._dayPopoverMode = "lessons";
+  window._dayPopoverLessons = null;
+  window._dayPopoverCell = cellEl;
+  renderDayPopover();
+  positionDayPopover(cellEl);
+
+  const isSelf = staffInfo && s.id === staffInfo.payroll_staff_id;
+  const url = API_URL + "/journal/my-today?date=" + encodeURIComponent(dateStr) +
+    (isSelf ? "" : "&staff_id=" + s.id + "&city=" + encodeURIComponent(s.city || ""));
+  try {
+    const resp = await fetch(url, { headers: authHeaders() });
+    const data = await resp.json();
+    window._dayPopoverLessons = data.ok ? (data.lessons || []) : [];
+  } catch(e) {
+    window._dayPopoverLessons = [];
+  }
+  if(window._dayPopoverDate !== dateStr) return; // попап успели закрыть/сменить дату
+  renderDayPopover();
+  positionDayPopover(cellEl); // содержимое сменилось (было "Загружаем...") — пересчитать размер/позицию
+}
+
+function positionDayPopover(cellEl) {
   const pop = document.getElementById("dayPopover");
   const backdrop = document.getElementById("dayPopoverBackdrop");
   pop.style.display = "block";
@@ -6302,6 +6352,83 @@ function closeDayPopover() {
 }
 
 function renderDayPopover() {
+  if(window._dayPopoverMode === "lessons") { renderDayPopoverLessons(); return; }
+  renderDayPopoverAttendance();
+}
+
+// Список уроков за день для journal-учителя (см. openTeacherDayLessons) —
+// тот же вид строки (кружок готово/не готово + предмет + время·класс), что
+// и сводка "сегодня у вас" на Home (renderHomeGreeting), просто на нейтральной
+// поверхности попапа вместо градиентной карточки. Тап по строке ведёт прямо
+// в "Оценки" этого урока (openLessonFromDayPopover) — дата/класс/предмет уже
+// известны из самой строки, отдельно выбирать класс не нужно.
+function renderDayPopoverLessons() {
+  const lessons = window._dayPopoverLessons;
+  let html;
+  if(lessons === null) {
+    html = '<div style="padding:4px 2px;color:var(--text2);font-size:13px;min-width:200px">Загружаем...</div>';
+  } else if(!lessons.length) {
+    html = '<div style="padding:4px 2px;color:var(--text2);font-size:13px;min-width:200px">В этот день уроков нет</div>';
+  } else {
+    html = '<div style="display:flex;flex-direction:column;gap:2px;min-width:220px">' +
+      lessons.map((l, idx) => {
+        const dotIcon = l.done
+          ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12.5 9.5 18 20 6"/></svg>'
+          : '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>';
+        const time = [l.time_start, l.time_end].filter(Boolean).join("–");
+        // Слот расписания без назначенного предмета — переходить некуда
+        // (openJournalScheduleLessonGrades требует subjectId), строка без
+        // тапа и без стрелки, а не молчаливый мёртвый клик.
+        const clickable = l.subject_id != null;
+        return `<div ${clickable ? `onclick="openLessonFromDayPopover(${idx})"` : ""} style="display:flex;align-items:center;gap:10px;padding:6px 2px;${clickable ? "cursor:pointer" : ""}">` +
+          '<div style="width:20px;height:20px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;' +
+            (l.done ? 'background:var(--accent2);color:#fff' : 'background:var(--surface2);color:var(--text2)') + '">' + dotIcon + '</div>' +
+          '<div style="min-width:0;flex:1">' +
+            '<div style="font-size:13px;font-weight:600;color:var(--text)">' + escapeHtml(l.subject_name || "Предмет не указан") + '</div>' +
+            '<div style="font-size:11.5px;color:var(--text2)">' + escapeHtml([time, l.class_name].filter(Boolean).join(" · ")) + '</div>' +
+          '</div>' +
+          (clickable ? '<span class="child-arrow">&#8250;</span>' : "") +
+        '</div>';
+      }).join("") +
+    '</div>';
+  }
+  document.getElementById("dayPopover").innerHTML = html;
+}
+
+// Тап по уроку в попапе календаря "Персонала" — прыгаем сразу в "Оценки"
+// этого урока (openJournalScheduleLessonGrades уже сама разруливает права
+// доступа: для обычного учителя проверяет "свой ли предмет/замена", для
+// админа/завуча — без ограничений, см. её комментарий). Дата/класс/предмет
+// уже известны из строки попапа — выбирать класс отдельно не нужно.
+// Два момента, из-за которых просто позвать openJournalClass+openJournalScheduleLessonGrades
+// недостаточно:
+// 1) activeJournalCity ставит только openJournalTeacherClass ("Мои классы"),
+//    а не сам openJournalClass — если админ ни разу не открывал Журнал в
+//    этой сессии, город остался бы null/чужим. Ставим явно из карточки
+//    сотрудника (тот же город, для которого посчитан список уроков).
+// 2) Проверка "свой ли предмет" в openJournalScheduleLessonGrades смотрит
+//    journalSubstitutions[schedule_id] — а эта карта грузится только когда
+//    открываешь вкладку "Расписание" на конкретный день (loadJournalSubstitutionsForDate),
+//    что мы тут пропускаем. Без явной подгрузки учитель, зашедший через
+//    попап на СВОЙ же урок по самозамене в чужом классе, получил бы
+//    "Это не ваш предмет" — ложный запрет. Грузим её сами перед переходом.
+async function openLessonFromDayPopover(idx) {
+  const l = (window._dayPopoverLessons || [])[idx];
+  const dateStr = window._dayPopoverDate;
+  const s = window._currentStaffForCalendar;
+  if(!l || !dateStr || !l.subject_id) return;
+  closeDayPopover();
+  document.getElementById("modalOverlay").classList.remove("show");
+  activeJournalCity = (s && s.city) || (staffInfo && staffInfo.city) || activeJournalCity;
+  await openJournalClass(l.class_name);
+  await loadJournalSubstitutionsForDate(dateStr);
+  const { weekday, weekOffset } = journalWeekdayAndOffsetForDate(dateStr);
+  journalScheduleDayView = weekday;
+  journalScheduleWeekView = weekOffset;
+  openJournalScheduleLessonGrades(l.subject_id, weekday, weekOffset);
+}
+
+function renderDayPopoverAttendance() {
   const dateStr = window._dayPopoverDate;
   const s = window._currentStaffForCalendar;
   if(!dateStr || !s) return;
@@ -6699,6 +6826,10 @@ function renderStaffCalendarModal() {
   const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
   const DOW = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
   const todayDMY = fmtDMY(now.getFullYear(), now.getMonth(), now.getDate());
+  // Журнальный учитель без ставки за продлёнку — "Отработано" (присутствие)
+  // для него больше ничего не решает (см. комментарий у isJournalOnly в
+  // цикле ниже) и незачем показывать в сводке, только "Уроков за месяц".
+  const isJournalOnly = !!s.is_journal_teacher && !s.extended_day_rate;
 
   let startDow = new Date(year, month, 1).getDay();
   startDow = startDow === 0 ? 6 : startDow - 1;
@@ -6727,6 +6858,10 @@ function renderStaffCalendarModal() {
     const otHoursToday = status === "present" ? (otHours[dateStr] || 0) : 0;
     const isOt = otHoursToday > 0;
     const isScheduled = isFuture && scheduled.has(dateStr);
+    // Число уроков за день — нужно уже здесь (для заливки клетки у
+    // journal-учителя, см. isJournalOnly ниже), не только для бейджа в углу.
+    const lessonInfo = (window._staffCalLessonDetails && window._staffCalLessonDetails[dateStr]) || {};
+    const lessonCount = lessonInfo.lessons_count;
     // Замена НЕ меняет цвет клетки — остаётся обычный зелёный "пришла",
     // отличается только маленьким бейджиком в углу (см. ниже).
     // "Absent" отдельным цветом не заливаем — по просьбе пользователя: если
@@ -6735,7 +6870,17 @@ function renderStaffCalendarModal() {
     // Запланированный будущий день — та же зелёная логика, но сильно
     // приглушённая (не факт, а план): без подписи, без рамки, просто
     // мягкая заливка, по просьбе пользователя.
-    const bg = isFuture ? (isScheduled ? "rgba(56,217,169,.15)" : "transparent") : status === "present" ? "rgba(56,217,169,.25)" : "var(--surface2)";
+    // is_journal_teacher без ставки за продлёнку (isJournalOnly, объявлен
+    // выше) — уроки считаются из журнала независимо от payroll_attendance
+    // (см. calculate_salary), присутствие/отсутствие для него больше ничего
+    // не решает и почти никогда не проставляется (2026-09-17, отзыв
+    // пользователя: "уже неактуально") — заливка клетки вместо этого
+    // отражает, был ли в этот день реально проведён урок.
+    const bg = isFuture
+      ? (isScheduled ? "rgba(56,217,169,.15)" : "transparent")
+      : isJournalOnly
+        ? (lessonCount != null && lessonCount > 0 ? "rgba(56,217,169,.25)" : "var(--surface2)")
+        : status === "present" ? "rgba(56,217,169,.25)" : "var(--surface2)";
     const color = isFuture ? "var(--text2)" : "var(--text)";
     // Нулёвка (есть ставка за урок и/или продлёнку) — тап по дню не
     // переключает пришла/нет циклом, а спрашивает число уроков и/или
@@ -6744,12 +6889,6 @@ function renderStaffCalendarModal() {
     // дни, но должен уметь сам внести уроки/продлёнку за СЕГОДНЯ — иначе
     // этот учёт вносить некому (в отличие от обычных сотрудников, у которых
     // для этого есть отдельная кнопка на Home, см. toggleSelfAttendance).
-    // is_journal_teacher (см. GET /payroll/staff и /staff) — журнальному
-    // учителю без ставки за продлёнку тут спрашивать нечего (число уроков
-    // не входит в promptLessonCount для него, см. renderLessonModal), и тап
-    // по дню должен идти в обычный openDayPopover present/absent, а не в
-    // диалог, который сохранил бы status=absent без единого ответа (тот же
-    // баг, что и на Home, см. isNulevkaSelf).
     const isNulevka = !!((s.lesson_rate && !s.is_journal_teacher) || s.extended_day_rate);
     // Будущие даты — план, не факт. Админ (не readOnly) может тапом по дню
     // добавить/убрать сотрудника из плана на этот день — тот же план, что и
@@ -6757,13 +6896,19 @@ function renderStaffCalendarModal() {
     // конкретного человека (отметить сразу всю его неделю), чем по одной
     // дате за раз (project_gorizont_payroll).
     const canEditFuture = isFuture && !readOnly;
-    const canEdit = canEditFuture || (!isFuture && (!readOnly || (isNulevka && dateStr === todayDMY)));
+    // isJournalOnly — тап открывает расписание уроков (просмотр, не
+    // редактирование), поэтому доступен и в своём (readOnly) календаре, и в
+    // админском, на любой прошедший/сегодняшний день — не только "сегодня",
+    // как у isNulevka.
+    const canEdit = canEditFuture || (!isFuture && (isJournalOnly || !readOnly || (isNulevka && dateStr === todayDMY)));
     const cursor = canEdit ? "pointer" : "default";
     const onclick = !canEdit ? "" : (canEditFuture
       ? `onclick="toggleFutureSchedule('${dateStr}')"`
-      : (isNulevka
-        ? `onclick="promptLessonCount('${dateStr}')"`
-        : `onclick="openDayPopover('${dateStr}', this)"`));
+      : (isJournalOnly
+        ? `onclick="openTeacherDayLessons('${dateStr}', this)"`
+        : (isNulevka
+          ? `onclick="promptLessonCount('${dateStr}')"`
+          : `onclick="openDayPopover('${dateStr}', this)"`)));
     // Бейдж замены — у "за смену" (няня замещает воспитателя) И у "месячный
     // фикс" (воспитатель замещает няню) — работает в обе стороны, тот же
     // флаг is_substitution. Чисто информационный, не кликабельный нигде (ни
@@ -6782,9 +6927,8 @@ function renderStaffCalendarModal() {
 
     // Нулёвка: число уроков — сверху справа (тот же угол, что и замена у
     // других сотрудников — конфликта нет, это разные люди). Не кликабельна
-    // сама по себе, число меняется тапом по всей клетке — promptLessonCount.
-    const lessonInfo = (window._staffCalLessonDetails && window._staffCalLessonDetails[dateStr]) || {};
-    const lessonCount = lessonInfo.lessons_count;
+    // сама по себе, число меняется тапом по всей клетке — promptLessonCount
+    // (lessonInfo/lessonCount уже посчитаны выше, для заливки клетки).
     const lessonBadge = (!isFuture && s.lesson_rate && lessonCount != null && lessonCount > 0)
       ? `<span style="position:absolute;top:-4px;right:-7px;z-index:2;width:20px;height:20px;border-radius:50%;` +
         `background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;` +
@@ -6845,11 +6989,12 @@ function renderStaffCalendarModal() {
         '<button onclick="nextStaffMonth()" style="border:none;background:var(--surface);border-radius:10px;width:28px;height:28px;cursor:pointer;color:var(--text)">›</button>' +
       '</div>' + grid +
     '</div>' +
+    (isJournalOnly ? "" :
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:12px;background:var(--surface2);border-radius:12px;font-size:13px">' +
       '<span style="color:var(--text2);display:flex;align-items:center;gap:6px">Отработано (будних дней)' +
         '<span style="width:14px;height:14px;border-radius:4px;background:rgba(56,217,169,.25)"></span></span>' +
       '<b>' + present + ' / ' + weekdays + '</b>' +
-    '</div>' +
+    '</div>') +
     // Расшифровка уроков/продлёнки за месяц — только если у сотрудника
     // вообще есть такие ставки, показываем даже в read-only (это просто
     // сводка, не расчёт денег). Бейдж-подсказка рядом с подписью — пример
