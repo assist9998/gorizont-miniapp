@@ -6128,7 +6128,10 @@ async function archiveStaffMember() {
 // та же схема, что и renderModal/renderCalendarModal для детей) ────────────
 window._staffAttPending = window._staffAttPending || new Set();
 
-async function openStaffCalendar(id) {
+// view — необязательный {year, month}, на который открыть сразу (см.
+// returnToCalendarFromGrades — без этого пришлось бы сначала грузить текущий
+// месяц по умолчанию, а потом сразу перегружать нужный: заметное мелькание).
+async function openStaffCalendar(id, view) {
   const s = staffList.find(x => x.id == id);
   if(!s) return;
   closeDayPopover();
@@ -6136,7 +6139,7 @@ async function openStaffCalendar(id) {
   window._staffCalReadOnly = false;
   window._staffSalaryExpanded = false;
   const n = new Date();
-  window._staffCalView = { year: n.getFullYear(), month: n.getMonth() };
+  window._staffCalView = view || { year: n.getFullYear(), month: n.getMonth() };
   document.getElementById("modalName").textContent = s.name;
   document.getElementById("modalContent").innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем...</div>';
   document.getElementById("modalOverlay").classList.add("show");
@@ -6145,7 +6148,8 @@ async function openStaffCalendar(id) {
 
 // Тап по своему имени на Home — только просмотр (без редактирования,
 // без зарплаты), в отличие от openStaffCalendar (админ, полный доступ).
-async function openMyAttendanceCalendar() {
+// view — см. комментарий у openStaffCalendar.
+async function openMyAttendanceCalendar(view) {
   if(!staffInfo || !staffInfo.payroll_staff_id) return;
   window._currentStaffForCalendar = {
     id: staffInfo.payroll_staff_id, name: staffInfo.name, position: staffInfo.role, pay_type: staffInfo.pay_type,
@@ -6154,7 +6158,7 @@ async function openMyAttendanceCalendar() {
   };
   window._staffCalReadOnly = true;
   const n = new Date();
-  window._staffCalView = { year: n.getFullYear(), month: n.getMonth() };
+  window._staffCalView = view || { year: n.getFullYear(), month: n.getMonth() };
   document.getElementById("modalName").textContent = "Моя посещаемость";
   document.getElementById("modalContent").innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">Загружаем...</div>';
   document.getElementById("modalOverlay").classList.add("show");
@@ -6468,10 +6472,9 @@ async function returnToCalendarFromGrades() {
   const ctx = window._calendarReturnContext;
   window._calendarReturnContext = null;
   if(!ctx) { goTo("home"); return; }
-  if(ctx.isSelf) await openMyAttendanceCalendar();
-  else await openStaffCalendar(ctx.staffId);
-  window._staffCalView = { year: ctx.year, month: ctx.month };
-  await loadStaffMonth();
+  const view = { year: ctx.year, month: ctx.month };
+  if(ctx.isSelf) await openMyAttendanceCalendar(view);
+  else await openStaffCalendar(ctx.staffId, view);
   const cellEl = document.querySelector('#modalContent [data-date="' + ctx.dateStr + '"]');
   if(cellEl) openTeacherDayLessons(ctx.dateStr, cellEl);
 }
