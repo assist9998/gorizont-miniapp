@@ -6631,7 +6631,13 @@ function renderStaffCalendarModal() {
     // дни, но должен уметь сам внести уроки/продлёнку за СЕГОДНЯ — иначе
     // этот учёт вносить некому (в отличие от обычных сотрудников, у которых
     // для этого есть отдельная кнопка на Home, см. toggleSelfAttendance).
-    const isNulevka = !!(s.lesson_rate || s.extended_day_rate);
+    // is_journal_teacher (см. GET /payroll/staff и /staff) — журнальному
+    // учителю без ставки за продлёнку тут спрашивать нечего (число уроков
+    // не входит в promptLessonCount для него, см. renderLessonModal), и тап
+    // по дню должен идти в обычный openDayPopover present/absent, а не в
+    // диалог, который сохранил бы status=absent без единого ответа (тот же
+    // баг, что и на Home, см. isNulevkaSelf).
+    const isNulevka = !!((s.lesson_rate && !s.is_journal_teacher) || s.extended_day_rate);
     // Будущие даты — план, не факт. Админ (не readOnly) может тапом по дню
     // добавить/убрать сотрудника из плана на этот день — тот же план, что и
     // в "Персонал по дням", просто заполнять его удобнее через карточку
