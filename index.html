@@ -1019,6 +1019,11 @@ const CHECKIN_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none
   '<circle cx="12" cy="12" r="10"/>' +
   '<polyline points="7.5 12.5 10.5 15.5 16.5 8.5"/>' +
   '</svg>';
+// Плашка-подсказка "считается по журналу" вместо кнопки самоотметки у
+// журнальных учителей (Дананг, есть уроки), см. renderHomeGreeting.
+const JOURNAL_ICON = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>' +
+  '</svg>';
 // "Замена воспитателя" — круглая кнопка рядом с самоотметкой на Home (только
 // у сотрудников с оплатой "за смену"), см. renderHomeGreeting.
 const SUBSTITUTION_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
@@ -1280,17 +1285,32 @@ function renderHomeGreeting(total, present) {
       // переключении между ними верстку "дёргает" (было center у кнопки,
       // flex-start у бейджа). Текст остаётся белым (зелёный на синем градиенте
       // сливается и плохо читается) — зелёным только иконка, тап отменяет.
-      : (selfAttendanceMarked
-          ? '<button onclick="unmarkSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;' +
-            'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
-            'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
-              '<span style="color:var(--accent2);display:flex">' + CHECKIN_ICON + '</span><span>Вы отмечены на сегодня</span>' +
-            '</button>'
-          : '<button onclick="markSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;' +
-            'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
-            'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
-              CHECKIN_ICON + '<span>Отметить, что я сегодня на работе</span>' +
-            '</button>');
+      : staffInfo.is_journal_teacher
+        // Журнальный учитель (пока только Дананг, у кого есть уроки — см.
+        // payroll.is_journal_teacher) без ставки за продлёнку: сама отметка
+        // "на работе" ни на что не влияет, ЗП и так считается по журналу.
+        // Вместо кликабельной кнопки — информационная плашка того же вида,
+        // но приглушённая (не должна выглядеть как активный элемент), текст
+        // и решение — пользователь, 2026-09-17. Продлёнки в школе это не
+        // касается — при заданном extended_day_rate работает старая ветка
+        // (isNulevkaSelf) без изменений.
+        ? '<div style="display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:7px 14px;' +
+          'font-family:inherit;font-size:12.5px;font-weight:500;line-height:1.3;background:rgba(255,255,255,.14);' +
+          'color:rgba(255,255,255,.88)">' +
+            '<span style="display:flex;flex-shrink:0;opacity:.9">' + JOURNAL_ICON + '</span>' +
+            '<span>Теперь считается по журналу — отмечаться не нужно</span>' +
+          '</div>'
+        : (selfAttendanceMarked
+            ? '<button onclick="unmarkSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;' +
+              'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
+              'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
+                '<span style="color:var(--accent2);display:flex">' + CHECKIN_ICON + '</span><span>Вы отмечены на сегодня</span>' +
+              '</button>'
+            : '<button onclick="markSelfAttendance()" style="display:inline-flex;align-items:center;gap:8px;' +
+              'border:none;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;' +
+              'padding:7px 14px 7px 11px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' +
+                CHECKIN_ICON + '<span>Отметить, что я сегодня на работе</span>' +
+              '</button>');
 
     // Замена — теперь в обе стороны: няня замещает воспитателя (per_shift,
     // как раньше) ИЛИ воспитатель замещает няню (monthly_fixed, новое —
