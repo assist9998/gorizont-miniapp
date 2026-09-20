@@ -3664,6 +3664,14 @@ let journalDayCompletion = new Set();
 // первом открытии вкладки "Оценки" (loadJournalGrades).
 let journalGradesDate = null;
 let journalGradesSubjectId = null;
+// Какой именно урок дня открыт (id строки расписания), не только какой
+// предмет (2026-09-20) — если в один день два урока (два периода, или две
+// замены) ведут на один и тот же эффективный предмет, тема/посещаемость
+// без этого физически не различались и правка одного перетирала другой
+// (жалоба: "всё что хочу поставить в одном уроке, дублируется во втором").
+// null — открыли не через конкретную карточку урока (например, вручную
+// выбрали предмет в выпадающем списке) — тогда бэкенд ведёт себя по-старому.
+let journalGradesScheduleId = null;
 let journalGrades = [];
 // Вошли в "Оценки" по замене, не по своему предмету (2026-09-16) — см.
 // openJournalScheduleLessonGrades/switchJournalViewTab.
@@ -3847,6 +3855,7 @@ async function openJournalTeacherClass(className) {
   journalScheduleWeekView = 0;
   journalGradesDate = null;
   journalGradesSubjectId = null;
+  journalGradesScheduleId = null;
   journalGrades = [];
   journalGradeModalChildId = null;
   goTo("journal-view");
@@ -3884,6 +3893,7 @@ async function openJournalClass(name) {
   journalScheduleWeekEdit = 0;
   journalGradesDate = null;
   journalGradesSubjectId = null;
+  journalGradesScheduleId = null;
   journalGrades = [];
   journalGradeModalChildId = null;
   goTo("journal-view");
@@ -4559,7 +4569,7 @@ function journalLessonCardsHtml(schedule, selectedDay, editable, weekOffset) {
     const effSubjectName = isOverridden ? sub.override_subject_name : e.subject_name;
     const clickAttr = editable
       ? ` onclick="startJournalScheduleEdit(${e.id})"`
-      : effSubjectId ? ` onclick="openJournalScheduleLessonGrades(${effSubjectId},${selectedDay},${weekOffset})"` : "";
+      : effSubjectId ? ` onclick="openJournalScheduleLessonGrades(${effSubjectId},${selectedDay},${weekOffset},${e.id})"` : "";
     const rowStyle = ` style="cursor:${editable || effSubjectId ? "pointer" : "default"};${sub && sub.no_lesson ? "opacity:.45" : ""}"`;
     // Зелёная рамка — тема/посещаемость уже внесены на эту дату (см.
     // journalDayCompletion), только на экране-обзоре (не в структурном
@@ -5063,10 +5073,14 @@ function openJournalViewSubjectGrades(id, fromTab) {
 // же запись "на сегодня": правка темы на одном дне тут же "утекала" на
 // другой (баг, найден Ольгой 2026-09-09). weekday/weekOffset — опциональные,
 // если их нет (старые вызовы), падаем обратно на "сегодня".
-function openJournalScheduleLessonGrades(subjectId, weekday, weekOffset) {
+function openJournalScheduleLessonGrades(subjectId, weekday, weekOffset, scheduleId) {
   journalGradesDate = (typeof weekday === "number" && typeof weekOffset === "number")
     ? journalDateStrForWeekday(weekday, weekOffset)
     : journalGradesToday();
+  // Конкретный урок (карточка), с которого зашли — не только предмет+дата
+  // (см. journalGradesScheduleId). scheduleId не передан у старых вызовов —
+  // тогда просто нет привязки к конкретному уроку, как раньше.
+  journalGradesScheduleId = typeof scheduleId === "number" ? scheduleId : null;
   // journalGradesIsSubstituteOnly — вошли не в свой предмет, а по замене на
   // сегодня (2026-09-16). Влияет на "Итоговые оценки": эта кнопка про
   // финальный балл за весь предмет, не про один урок, замещающему одного дня
@@ -5223,6 +5237,9 @@ function updateJournalHistoryBtn() {
 
 function switchJournalGradesSubject(id) {
   journalGradesSubjectId = id ? parseInt(id, 10) : null;
+  // Ручной выбор предмета из списка — вне конкретной карточки урока,
+  // привязку к schedule_id теряем осознанно (см. journalGradesScheduleId).
+  journalGradesScheduleId = null;
   journalGradesEditingId = null;
   loadJournalGrades();
 }
@@ -5250,6 +5267,10 @@ async function loadJournalGrades() {
   const options = journalGradesSubjectOptions();
   if(journalGradesSubjectId === null && options.length) journalGradesSubjectId = options[0].id;
   if(!journalGradesSubjectId) { journalGrades = []; journalLessonTopic = null; journalHomework = null; journalAttendance = {}; renderJournalGrades(); return; }
+  // schedule_id — какой именно урок дня, не только предмет (см.
+  // journalGradesScheduleId) — иначе два урока в один день на один и тот же
+  // эффективный предмет читали бы/писали одну и ту же тему/посещаемость.
+  const scheduleIdParam = journalGradesScheduleId !== null ? "&schedule_id=" + journalGradesScheduleId : "";
   try {
     const [gradesData, topicData, homeworkData, attendanceData] = await Promise.all([
       fetch(
@@ -5261,19 +5282,19 @@ async function loadJournalGrades() {
       fetch(
         API_URL + "/journal/lesson-topic?city=" + encodeURIComponent(activeJournalCity) +
         "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
-        "&date=" + encodeURIComponent(journalGradesDate),
+        "&date=" + encodeURIComponent(journalGradesDate) + scheduleIdParam,
         {headers: authHeaders()},
       ).then(r => r.json()),
       fetch(
         API_URL + "/journal/homework?city=" + encodeURIComponent(activeJournalCity) +
         "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
-        "&date=" + encodeURIComponent(journalGradesDate),
+        "&date=" + encodeURIComponent(journalGradesDate) + scheduleIdParam,
         {headers: authHeaders()},
       ).then(r => r.json()),
       fetch(
         API_URL + "/journal/attendance?city=" + encodeURIComponent(activeJournalCity) +
         "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
-        "&date=" + encodeURIComponent(journalGradesDate),
+        "&date=" + encodeURIComponent(journalGradesDate) + scheduleIdParam,
         {headers: authHeaders()},
       ).then(r => r.json()),
     ]);
@@ -5305,7 +5326,7 @@ async function toggleJournalAttendance(childId) {
       body: JSON.stringify({
         city: activeJournalCity, class_name: activeJournalClass,
         subject_id: journalGradesSubjectId, date: journalGradesDate,
-        records: [{child_id: childId, status}],
+        records: [{child_id: childId, status}], schedule_id: journalGradesScheduleId,
       }),
     });
     const d = await resp.json();
@@ -5364,6 +5385,7 @@ async function saveJournalLessonTopic() {
       body: JSON.stringify({
         city: activeJournalCity, class_name: activeJournalClass,
         subject_id: journalGradesSubjectId, date: journalGradesDate, topic,
+        schedule_id: journalGradesScheduleId,
       }),
     });
     const d = await resp.json();
@@ -5389,6 +5411,7 @@ async function saveJournalHomework() {
       body: JSON.stringify({
         city: activeJournalCity, class_name: activeJournalClass,
         subject_id: journalGradesSubjectId, date: journalGradesDate, text,
+        schedule_id: journalGradesScheduleId,
       }),
     });
     const d = await resp.json();
@@ -5897,6 +5920,7 @@ async function saveJournalGradePending(childId) {
         city: activeJournalCity, class_name: activeJournalClass,
         child_id: childId, subject_id: journalGradesSubjectId,
         date: journalGradesDate, value, grade_type: journalGradePendingType, comment,
+        schedule_id: journalGradesScheduleId,
       }),
     });
     const d = await resp.json();
@@ -5915,7 +5939,7 @@ async function saveJournalGradePending(childId) {
           body: JSON.stringify({
             city: activeJournalCity, class_name: activeJournalClass,
             subject_id: journalGradesSubjectId, date: journalGradesDate,
-            records: [{child_id: childId, status: "present"}],
+            records: [{child_id: childId, status: "present"}], schedule_id: journalGradesScheduleId,
           }),
         });
       } catch(attErr) {
@@ -6714,7 +6738,7 @@ async function openLessonFromDayPopover(idx) {
   const { weekday, weekOffset } = journalWeekdayAndOffsetForDate(dateStr);
   journalScheduleDayView = weekday;
   journalScheduleWeekView = weekOffset;
-  openJournalScheduleLessonGrades(l.subject_id, weekday, weekOffset);
+  openJournalScheduleLessonGrades(l.subject_id, weekday, weekOffset, l.schedule_id);
   journalViewGradesReturnTab = "calendar-popup"; // переопределяем "schedule", выставленный выше
 }
 
