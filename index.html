@@ -581,16 +581,16 @@
     </div>
     <div style="margin-bottom:12px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Родитель</div>
-      <input id="f_parent" type="text" placeholder="Имя родителя" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+      <input id="f_parent" type="text" placeholder="Имя родителя" autocomplete="off" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Телефон</div>
-        <input id="f_phone" type="text" placeholder="+7 999..." style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+        <input id="f_phone" type="text" placeholder="+7 999..." autocomplete="off" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
       </div>
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Telegram</div>
-        <input id="f_telegram" type="text" placeholder="@username" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
+        <input id="f_telegram" type="text" placeholder="@username" autocomplete="off" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none">
       </div>
     </div>
     <div id="secondParentGroup" style="display:none;margin-bottom:12px;padding-top:8px;border-top:1px dashed var(--border)">
@@ -598,10 +598,10 @@
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase">Второй родитель</div>
         <button type="button" onclick="removeSecondParent()" style="border:none;background:transparent;color:var(--danger);font-size:11px;cursor:pointer">убрать</button>
       </div>
-      <input id="f_parent2" type="text" placeholder="Имя родителя" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none;margin-bottom:10px;box-sizing:border-box">
+      <input id="f_parent2" type="text" placeholder="Имя родителя" autocomplete="off" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none;margin-bottom:10px;box-sizing:border-box">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <input id="f_phone2" type="text" placeholder="+7 999..." style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none;box-sizing:border-box">
-        <input id="f_telegram2" type="text" placeholder="@username" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none;box-sizing:border-box">
+        <input id="f_phone2" type="text" placeholder="+7 999..." autocomplete="off" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none;box-sizing:border-box">
+        <input id="f_telegram2" type="text" placeholder="@username" autocomplete="off" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;outline:none;box-sizing:border-box">
       </div>
     </div>
     <button type="button" id="addSecondParentBtn" onclick="showSecondParent()" style="width:100%;padding:8px 14px;border-radius:10px;border:1.5px dashed var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer;margin-bottom:12px">+ Добавить второго родителя</button>
