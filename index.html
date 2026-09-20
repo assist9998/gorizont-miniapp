@@ -2043,6 +2043,13 @@ function parentBlockHtml(c, block, idx, total) {
   // не было вообще, кнопка показывалась всем, кто может открыть карточку.
   const canLink = c.dept === "Школа" && telegram && staffInfo &&
     (isAdminRole(staffInfo.role) || isZavuchRole(staffInfo.role));
+  // Сверяем ник из этого блока с реально привязанными (см. api.py
+  // handle_get_children, поле linked_telegrams) — раньше кнопка всегда была
+  // "Привязать", даже если этот родитель уже пользуется дневником (отзыв
+  // пользователя, 2026-09-20: "надо чтобы было с проверкой привязан или нет").
+  const telegramNorm = telegram.replace(/^@/, "").toLowerCase();
+  const isLinked = canLink && telegramNorm &&
+    (c.linked_telegrams || []).some(u => (u || "").toLowerCase() === telegramNorm);
   // Редизайн карточки ребёнка (2026-09-17, отзыв пользователя: "разношёрстно",
   // родитель как отдельный блок — понравилось) — вместо строки в общей ленте
   // с кнопкой на всю ширину внутри неё: своя карточка (заголовок-лейбл
@@ -2052,7 +2059,9 @@ function parentBlockHtml(c, block, idx, total) {
     '<div style="background:var(--surface2);border-radius:12px;padding:12px 14px;margin-bottom:8px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">' +
         '<div style="font-size:13.5px;font-weight:600">' + escapeHtml(name || "—") + '</div>' +
-        (canLink ? '<button onclick="autoLinkParent(' + c.id + ',' + idx + ')" id="linkBtn_' + c.id + '_' + idx + '" style="flex-shrink:0;padding:4px 11px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">👪 Привязать</button>' : '') +
+        (isLinked
+          ? '<button onclick="unlinkParent(' + c.id + ',' + idx + ')" id="linkBtn_' + c.id + '_' + idx + '" style="flex-shrink:0;padding:4px 11px;border-radius:999px;border:1.5px solid var(--accent2);background:transparent;color:var(--accent2);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">✅ Привязан</button>'
+          : canLink ? '<button onclick="autoLinkParent(' + c.id + ',' + idx + ')" id="linkBtn_' + c.id + '_' + idx + '" style="flex-shrink:0;padding:4px 11px;border-radius:999px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">👪 Привязать</button>' : '') +
       '</div>' +
       (phone ? '<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:6px">' +
         '<span style="color:var(--text2)">Телефон</span><span style="font-weight:500">' + escapeHtml(phone) + '</span></div>' : '') +
@@ -3023,6 +3032,42 @@ async function autoLinkParent(childId, idx) {
       showToast("Родитель ещё не писал боту — попросите его открыть бота, затем нажмите ещё раз", true);
     } else {
       showToast("Не удалось отправить — попробуйте код вручную из формы редактирования", true);
+    }
+  } catch(e) {
+    showToast("Ошибка сети", true);
+  } finally {
+    if(btn) { btn.disabled = false; btn.textContent = prevText; }
+  }
+}
+
+// Кнопка "✅ Привязан" (см. parentBlockHtml) — снимает привязку конкретного
+// родителя по нику из его блока в карточке (см. api.py /parent-unlink),
+// после чего перечитывает детей и перерисовывает карточку, чтобы кнопка
+// сразу вернулась в состояние "Привязать" (отзыв пользователя, 2026-09-20).
+async function unlinkParent(childId, idx) {
+  const c = children.find(x => x.id == childId);
+  if(!c) return;
+  const blocks = (c.parent || "").split("\n").map(b => b.trim()).filter(Boolean);
+  const block = blocks[idx];
+  const telegram = block ? (block.split("|")[2] || "").trim() : "";
+  if(!telegram) return;
+  if(!confirm("Отвязать родителя (" + telegram + ") от карточки ребёнка? Доступ к дневнику пропадёт — привязать заново можно будет по коду.")) return;
+  const btn = document.getElementById("linkBtn_" + childId + "_" + idx);
+  const prevText = btn ? btn.textContent : "";
+  if(btn) { btn.disabled = true; btn.textContent = "Отвязываем..."; }
+  try {
+    const resp = await fetch(API_URL + "/children/" + childId + "/parent-unlink", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({telegram}),
+    });
+    const d = await resp.json();
+    if(d.ok) {
+      showToast("Родитель отвязан");
+      await loadChildren();
+      openModal(childId);
+    } else {
+      showToast("Не удалось отвязать", true);
     }
   } catch(e) {
     showToast("Ошибка сети", true);
