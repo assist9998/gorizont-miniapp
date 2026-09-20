@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- Страница открывается с preview_token в URL (см. index.html openChildDiary
+     /parent-link) — без этого мета-тега браузер шлёт полный текущий адрес,
+     включая живой токен, в Referer при загрузке Google Fonts ниже
+     (security review, 2026-09-20). -->
+<meta name="referrer" content="no-referrer">
 <title>Горизонт — Мой ребёнок</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>

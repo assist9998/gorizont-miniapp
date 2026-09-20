@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- Без этого браузер шлёт текущий адрес (иногда с init_data в query —
+     см. downloadFile) в заголовке Referer при загрузке Google Fonts ниже
+     (security review, 2026-09-20). -->
+<meta name="referrer" content="no-referrer">
 <title>Горизонт — Посещаемость</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
