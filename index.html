@@ -411,9 +411,9 @@
 <!-- SCREEN: JOURNAL CLASS (редактирование — предметы/расписание/дети одного класса) -->
 <div class="screen" id="screen-journal-class">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-    <button onclick="goTo('journal-view')" style="flex-shrink:0;padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
+    <button onclick="exitJournalClassEdit()" style="flex-shrink:0;padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:13px;cursor:pointer">&#8592; Назад</button>
     <div style="flex:1"></div>
-    <button onclick="goTo('journal-view')" title="Выйти из редактирования" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer">
+    <button onclick="exitJournalClassEdit()" title="Выйти из редактирования" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:20px;border:1.5px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
     </button>
   </div>
@@ -3900,9 +3900,27 @@ function openJournalClassEdit() {
   cancelJournalScheduleEdit();
   cancelJournalClassRename();
   applyJournalClassEditScope(false);
+  // Экран редактирования раньше не перерисовывал расписание при входе —
+  // оставался "снимок" с последнего рендера (обычно дефолтный день), из-за
+  // чего замена, только что видная в обзоре, будто пропадала при переходе в
+  // редактирование (отзыв пользователя, 2026-09-20). Синхронизируем день/
+  // неделю с тем, что было открыто в обзоре, и перерисовываем заново.
+  journalScheduleDayEdit = journalScheduleDayView;
+  journalScheduleWeekEdit = journalScheduleWeekView;
+  renderJournalSchedule();
   const editTab = ["subjects", "schedule", "students"].includes(journalViewActiveTab) ? journalViewActiveTab : "subjects";
   switchJournalEditTab(editTab);
   goTo("journal-class");
+}
+
+// Обратная синхронизация при выходе из редактирования (та же причина, что и
+// у openJournalClassEdit) — иначе обзор мог бы показать день, который смотрели
+// давно, а не тот, что только что был открыт в редактировании.
+function exitJournalClassEdit() {
+  journalScheduleDayView = journalScheduleDayEdit;
+  journalScheduleWeekView = journalScheduleWeekEdit;
+  renderJournalViewSchedule();
+  goTo("journal-view");
 }
 
 // teacherOnly=true — прячет "Расписание"/"Предметы" и переименование класса,
