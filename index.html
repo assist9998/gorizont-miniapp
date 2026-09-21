@@ -3085,16 +3085,25 @@ async function generateParentLinkCode() {
     });
     const data = await resp.json();
     if(!data.ok) throw new Error(data.error || "failed");
-    document.getElementById("modalName").textContent = "Код для родителя";
-    document.getElementById("modalContent").innerHTML =
-      '<div style="text-align:center;padding:10px 0">' +
-      '<div style="font-size:36px;font-weight:700;letter-spacing:.1em;color:var(--accent);margin-bottom:14px">' + data.code + '</div>' +
-      '<div style="font-size:13px;color:var(--text2);line-height:1.5">Попросите родителя открыть бота Горизонт в Telegram и отправить этот код сообщением <b>/start ' + data.code + '</b>.<br><br>Код действует 24 часа и одноразовый.</div>' +
-      '</div>';
+    document.getElementById("modalName").textContent = "Ссылка для родителя";
+    const linkBlock = data.link
+      ? '<input readonly id="parentLinkUrl" value="' + data.link + '" onclick="this.select()" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:13px;margin-bottom:10px" />' +
+        '<button type="button" onclick="copyParentLink(\'' + data.link + '\')" class="btn-primary" style="width:100%;margin-bottom:14px">📋 Скопировать ссылку</button>' +
+        '<div style="font-size:13px;color:var(--text2);line-height:1.5">Отправьте эту ссылку родителю (WhatsApp, SMS — куда угодно). Родителю достаточно её открыть, вводить ничего не нужно.<br><br>Ссылка одноразовая и действует 24 часа.</div>'
+      : '<div style="font-size:36px;font-weight:700;letter-spacing:.1em;color:var(--accent);margin-bottom:14px">' + data.code + '</div>' +
+        '<div style="font-size:13px;color:var(--text2);line-height:1.5">Не удалось собрать ссылку — попросите родителя открыть бота Горизонт в Telegram и отправить код сообщением <b>/start ' + data.code + '</b>.<br><br>Код действует 24 часа и одноразовый.</div>';
+    document.getElementById("modalContent").innerHTML = '<div style="text-align:center;padding:10px 0">' + linkBlock + '</div>';
     document.getElementById("modalOverlay").classList.add("show");
   } catch(e) {
-    showToast("Не удалось сгенерировать код", true);
+    showToast("Не удалось сгенерировать ссылку", true);
   }
+}
+
+function copyParentLink(link) {
+  navigator.clipboard.writeText(link).then(
+    () => showToast("Ссылка скопирована"),
+    () => showToast("Не удалось скопировать — выделите ссылку вручную", true),
+  );
 }
 
 // "Дневник" в карточке ребёнка — тот же календарь+карточки уроков, что видит
@@ -5276,7 +5285,7 @@ async function loadJournalGrades() {
       fetch(
         API_URL + "/journal/grades?city=" + encodeURIComponent(activeJournalCity) +
         "&class=" + encodeURIComponent(activeJournalClass) + "&subject_id=" + journalGradesSubjectId +
-        "&date_from=" + encodeURIComponent(journalGradesDate) + "&date_to=" + encodeURIComponent(journalGradesDate),
+        "&date_from=" + encodeURIComponent(journalGradesDate) + "&date_to=" + encodeURIComponent(journalGradesDate) + scheduleIdParam,
         {headers: authHeaders()},
       ).then(r => r.json()),
       fetch(
@@ -5357,8 +5366,11 @@ function onJournalTopicBlur() {
   if(!el) return;
   const value = el.value.trim();
   const original = (el.dataset.original || "").trim();
-  if(!value) { el.value = original; return; }
   if(value === original) return;
+  // Пустое значение больше не откатывается назад — это осознанная очистка
+  // (удаляет запись на сервере, см. pw_upsert_journal_lesson_topic), не
+  // случайность (жалоба Алины, Дананг: "не могу стереть тему и дз, чтобы
+  // урок не светился как проведённый — не удаляется и обнуляется").
   saveJournalLessonTopic();
 }
 
@@ -5367,7 +5379,6 @@ function onJournalHomeworkBlur() {
   if(!el) return;
   const value = el.value.trim();
   const original = (el.dataset.original || "").trim();
-  if(!value) { el.value = original; return; }
   if(value === original) return;
   saveJournalHomework();
 }
@@ -5375,7 +5386,6 @@ function onJournalHomeworkBlur() {
 async function saveJournalLessonTopic() {
   const el = document.getElementById("journalLessonTopicInput");
   const topic = el ? el.value.trim() : "";
-  if(!topic) return;
   const lockKey = "topic:save";
   if(journalPending.has(lockKey)) return;
   journalPending.add(lockKey);
@@ -5390,7 +5400,15 @@ async function saveJournalLessonTopic() {
     });
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
-    await loadJournalGrades();
+    // Не дёргаем loadJournalGrades()/полную переотрисовку списка учеников —
+    // список от темы урока не зависит (только оценки/посещаемость), а
+    // полная переотрисовка DOM асинхронно, пока учитель уже тапает по
+    // следующему полю (оценка/посещаемость), иногда перехватывала этот тап
+    // на переотрисованный элемент (жалоба учителя 2026-09-21: "выкидывает
+    // на поле оценок и посещаемости"). Только фиксируем новое "исходное"
+    // значение поля, чтобы следующий blur-diff (onJournalTopicBlur) работал верно.
+    journalLessonTopic = {...(journalLessonTopic || {}), topic};
+    if(el) el.dataset.original = topic;
   } catch(e) {
     showToast("Не удалось сохранить тему урока", true);
   } finally {
@@ -5401,7 +5419,6 @@ async function saveJournalLessonTopic() {
 async function saveJournalHomework() {
   const el = document.getElementById("journalHomeworkInput");
   const text = el ? el.value.trim() : "";
-  if(!text) return;
   const lockKey = "homework:save";
   if(journalPending.has(lockKey)) return;
   journalPending.add(lockKey);
@@ -5416,7 +5433,10 @@ async function saveJournalHomework() {
     });
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
-    await loadJournalGrades();
+    // См. комментарий в saveJournalLessonTopic — та же переотрисовка
+    // перехватывала следующий тап учителя (по оценке/посещаемости).
+    journalHomework = {...(journalHomework || {}), text};
+    if(el) el.dataset.original = text;
   } catch(e) {
     showToast("Не удалось сохранить домашнее задание", true);
   } finally {
