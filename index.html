@@ -5444,6 +5444,39 @@ async function saveJournalHomework() {
   }
 }
 
+// Полная очистка урока (жалоба Алины, Дананг, 2026-09-22: очистка темы/дз по
+// отдельности не убирала "проведён" — посещаемость не имеет "пустого"
+// состояния и оставалась строкой в БД). Удаляет тему, дз, посещаемость и
+// оценки этого урока разом (см. handle_clear_journal_lesson).
+async function clearJournalLesson() {
+  if(!confirm("Полностью очистить урок: тема, дз, посещаемость и оценки будут удалены. Урок перестанет считаться проведённым. Продолжить?")) return;
+  const lockKey = "lesson:clear";
+  if(journalPending.has(lockKey)) return;
+  journalPending.add(lockKey);
+  try {
+    const resp = await fetch(API_URL + "/journal/lesson/clear", {
+      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        city: activeJournalCity, class_name: activeJournalClass,
+        subject_id: journalGradesSubjectId, date: journalGradesDate,
+        schedule_id: journalGradesScheduleId,
+      }),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    journalLessonTopic = null;
+    journalHomework = null;
+    journalAttendance = {};
+    journalGrades = [];
+    renderJournalGrades();
+    showToast("Урок очищен");
+  } catch(e) {
+    showToast("Не удалось очистить урок", true);
+  } finally {
+    journalPending.delete(lockKey);
+  }
+}
+
 // ── ИСТОРИЯ УРОКОВ по классу+предмету — сводка вместо разворачивания
 // каждого дня заново (запрос пользователя: "сводку по предмету иметь надо").
 async function openJournalHistory() {
@@ -5751,6 +5784,9 @@ function renderJournalGrades() {
         <input id="journalHomeworkInput" type="text" value="${escapeHtml(homeworkValue)}" data-original="${escapeHtml(homeworkValue)}"
           onblur="onJournalHomeworkBlur()" placeholder="Например: §12, упр. 3-5"
           style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px;box-sizing:border-box">
+      </div>
+      <div style="margin-top:12px;text-align:right">
+        <button onclick="clearJournalLesson()" style="border:none;background:none;color:var(--danger);font-family:inherit;font-size:12px;cursor:pointer;padding:4px">Урок не проводился — очистить</button>
       </div>
     </div>`;
 
