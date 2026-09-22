@@ -5811,7 +5811,7 @@ function renderJournalGrades() {
   const noLessonSub = journalGradesScheduleId !== null ? journalSubstitutions[journalGradesScheduleId] : null;
   const noLessonActive = !!(noLessonSub && noLessonSub.no_lesson);
   const noLessonBtn = (!journalViewTeacherMode && journalGradesScheduleId !== null)
-    ? `<button onclick="toggleJournalGradesNoLesson()" style="padding:4px 10px;border-radius:8px;border:1px solid ${noLessonActive ? "var(--accent)" : "var(--border)"};background:transparent;color:${noLessonActive ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:6px">${noLessonActive ? "✓ урока не было" : "урока не было"}</button>`
+    ? `<button onclick="toggleJournalGradesNoLesson()" style="padding:4px 10px;border-radius:8px;border:1px solid ${noLessonActive ? "var(--accent)" : "var(--border)"};background:transparent;color:${noLessonActive ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:6px">${noLessonActive ? "✓ Урок не проводился" : "Урок не проводился"}</button>`
     : "";
   html += `
     <div style="background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px">
