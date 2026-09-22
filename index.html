@@ -5444,6 +5444,35 @@ async function saveJournalHomework() {
   }
 }
 
+// "Урока не было" из карточки урока — та же отметка no_lesson, что и кнопка
+// в редактировании расписания (toggleNoLesson), но без похода в "Расписание".
+// Пишем локально в journalSubstitutions сами (ответ POST не возвращает
+// строку замены) — тем же значением, что шлём на сервер.
+async function toggleJournalGradesNoLesson() {
+  if(journalGradesScheduleId === null) return;
+  const sub = journalSubstitutions[journalGradesScheduleId];
+  const nextNoLesson = !(sub && sub.no_lesson);
+  const lockKey = "lesson:no_lesson";
+  if(journalPending.has(lockKey)) return;
+  journalPending.add(lockKey);
+  try {
+    const resp = await fetch(API_URL + "/journal/substitutions", {
+      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({schedule_id: journalGradesScheduleId, date: journalGradesDate, teacher_staff_id: null, external: false, no_lesson: nextNoLesson}),
+    });
+    const d = await resp.json();
+    if(!d.ok) throw new Error(d.error);
+    journalSubstitutions[journalGradesScheduleId] = nextNoLesson
+      ? {schedule_id: journalGradesScheduleId, no_lesson: true, teacher_staff_id: null, external: false}
+      : null;
+    renderJournalGrades();
+  } catch(e) {
+    showToast("Не удалось сохранить", true);
+  } finally {
+    journalPending.delete(lockKey);
+  }
+}
+
 // Полная очистка урока (жалоба Алины, Дананг, 2026-09-22: очистка темы/дз по
 // отдельности не убирала "проведён" — посещаемость не имеет "пустого"
 // состояния и оставалась строкой в БД). Удаляет тему, дз, посещаемость и
@@ -5771,11 +5800,27 @@ function renderJournalGrades() {
   // onJournalHomeworkBlur) — ни кнопки, ни индикатора не нужно (просьба
   // пользователя 2026-09-16: "никаких анимаций, просто сохраняется и всё").
   let html = subjectSelectHtml ? `<div style="margin-bottom:10px">${subjectSelectHtml}</div>` : "";
+  // "Урока не было" — та же отметка no_lesson, что и в редактировании
+  // расписания (см. toggleNoLesson), только доступ отсюда, без похода в
+  // "Расписание". Только админ/завуч — бэкенд отдельным учителям её ставить
+  // не даёт (handle_set_journal_substitution: "external or no_lesson —
+  // forbidden" для самообслуживания). "Очистить" — другое действие (см.
+  // clearJournalLesson): не трогает расписание, только стирает уже внесённые
+  // тему/дз/посещаемость/оценки этого урока. Названия нарочно разные —
+  // одинаковый текст путал бы два разных механизма (2026-09-22).
+  const noLessonSub = journalGradesScheduleId !== null ? journalSubstitutions[journalGradesScheduleId] : null;
+  const noLessonActive = !!(noLessonSub && noLessonSub.no_lesson);
+  const noLessonBtn = (!journalViewTeacherMode && journalGradesScheduleId !== null)
+    ? `<button onclick="toggleJournalGradesNoLesson()" style="padding:4px 10px;border-radius:8px;border:1px solid ${noLessonActive ? "var(--accent)" : "var(--border)"};background:transparent;color:${noLessonActive ? "var(--accent)" : "var(--text2)"};font-size:11px;cursor:pointer;flex-shrink:0;margin-right:6px">${noLessonActive ? "✓ урока не было" : "урока не было"}</button>`
+    : "";
   html += `
     <div style="background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <span style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase">Урок</span>
-        <button onclick="clearJournalLesson()" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">Урок не проводился</button>
+        <div style="display:flex">
+          ${noLessonBtn}
+          <button onclick="clearJournalLesson()" style="padding:4px 10px;border-radius:8px;border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:11px;cursor:pointer;flex-shrink:0">Очистить</button>
+        </div>
       </div>
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Тема урока</div>
