@@ -4813,7 +4813,7 @@ async function submitJournalScheduleForm() {
 async function deleteJournalScheduleEntry(id) {
   const e = journalSchedule.find(x => x.id === id);
   const label = e ? [e.subject_name || "Урок без предмета", [e.time_start, e.time_end].filter(Boolean).join("–")].filter(Boolean).join(", ") : "урок";
-  if(!confirm("Удалить «" + label + "» из расписания?")) return;
+  if(!confirm("Удалить «" + label + "» из расписания насовсем — со всех дат, и прошлых, и будущих (это недельный слот, не один день)?")) return;
   try {
     const resp = await fetch(API_URL + "/journal/schedule?id=" + id, {method: "DELETE", headers: authHeaders()});
     const d = await resp.json();
