@@ -1821,7 +1821,7 @@ function renderChildList() {
         <div class="child-detail-name">${escapeHtml(child.name)}</div>
         <div class="child-detail-meta">${escapeHtml(child.group || "Без группы")}${age ? " · " + age : ""}${child.type ? " · " + escapeHtml(child.type) : ""}</div>
       </div>
-      ${(!staffInfo || isAdminRole(staffInfo.role)) ? `<button onclick="event.stopPropagation();openEditForm('${child.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>` : ""}
+      ${(!staffInfo || isAdminRole(staffInfo.role) || isZavuchRole(staffInfo.role)) ? `<button onclick="event.stopPropagation();openEditForm('${child.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>` : ""}
       <span class="child-arrow">›</span>
     </div>`;
   };
