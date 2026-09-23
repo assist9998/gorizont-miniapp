@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="referrer" content="no-referrer">
+<title>Горизонт — Заявки</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geologica:wght@300;400;500;600;700&display=swap');
+  :root {
+    --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;
+    --accent:#4f8ef7;--accent2:#38d9a9;--danger:#ff6b6b;--warning:#ffd43b;
+    --text:#e8eaf0;--text2:#8b90a8;--border:#2d3250;
+    --radius:16px;--radius-sm:10px;
+  }
+  html[data-theme="light"] {
+    --bg:#f4f5f9;--surface:#ffffff;--surface2:#eef0f6;
+    --text:#1a1d27;--text2:#6b7086;--border:#e2e4ee;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Geologica',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+
+  .header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 16px;padding-top:calc(20px + env(safe-area-inset-top));position:sticky;top:0;z-index:100}
+  .header-title{font-size:17px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:10px}
+
+  .tabs{display:flex;gap:8px;margin-bottom:8px}
+  .tab-btn{flex:1;padding:9px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .tab-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  .city-toggle{display:flex;gap:8px}
+  .city-btn{flex:1;padding:7px;border-radius:var(--radius-sm);border:1px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:12px;cursor:pointer}
+  .city-btn.active{border-color:var(--accent);color:var(--accent)}
+
+  .content{padding:14px 16px}
+  .empty{text-align:center;color:var(--text2);font-size:13px;padding:40px 20px}
+  .loading{text-align:center;color:var(--text2);font-size:13px;padding:40px 20px}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+  .card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;flex-shrink:0}
+  .badge-pending{background:rgba(255,212,59,.16);color:var(--warning)}
+  .badge-confirmed{background:rgba(56,217,169,.16);color:var(--accent2)}
+  .badge-self{background:rgba(79,142,247,.14);color:var(--accent)}
+  .badge-admin{background:var(--surface2);color:var(--text2)}
+  .card-meta{font-size:11px;color:var(--text2)}
+  .card-row{font-size:13.5px;margin-bottom:4px;display:flex;gap:6px}
+  .card-row .lbl{flex-shrink:0}
+  .card-row .val{color:var(--text);word-break:break-word}
+  .card-position{font-size:11px;color:var(--text2);font-weight:600}
+
+  .card-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .act-btn{flex:1;min-width:90px;padding:9px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+  .act-btn.confirm{background:var(--accent2);color:#06251c;border-color:var(--accent2)}
+  .act-btn.reject{background:transparent;color:var(--danger);border-color:var(--danger)}
+  .act-btn.wait{background:transparent;color:var(--accent);border-color:var(--accent)}
+  .act-btn.spot{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .act-btn.delete{background:transparent;color:var(--danger);border-color:var(--danger)}
+  .act-btn:disabled{opacity:.5}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:10px 18px;border-radius:20px;font-size:13px;z-index:999;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">📋 Заявки</div>
+  <div class="tabs">
+    <button class="tab-btn active" id="tabActive" onclick="switchTab('active')">Актуальные записи</button>
+    <button class="tab-btn" id="tabWaitlist" onclick="switchTab('waitlist')">Лист ожидания</button>
+  </div>
+  <div class="city-toggle" id="cityToggle" style="display:none"></div>
+</div>
+
+<div class="content" id="content">
+  <div class="loading">Загрузка…</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API_URL = "https://y95h81n2pl7zlyb6hfca50s2.95.179.188.141.sslip.io";
+const tg = window.Telegram?.WebApp;
+
+function authHeaders(extra) {
+  return Object.assign(
+    {"ngrok-skip-browser-warning": "true", "X-Telegram-Init-Data": (tg && tg.initData) || ""},
+    extra || {}
+  );
+}
+if(tg){ tg.ready(); tg.expand(); if(tg.requestFullscreen) tg.requestFullscreen(); }
+
+async function withRetry(fn, attempts = 3, delayMs = 500) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); }
+    catch (e) { lastErr = e; if (i < attempts - 1) await new Promise(r => setTimeout(r, delayMs)); }
+  }
+  throw lastErr;
+}
+
+function showToast(text, isError) {
+  const el = document.getElementById("toast");
+  el.textContent = text;
+  el.style.color = isError ? "var(--danger)" : "var(--text)";
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+let staffInfo = null;
+let activeTab = "active";
+let activeCity = "Дананг";
+const UNSCOPED_ROLES = ["Директор", "director", "developer"];
+let pending = new Set();
+
+async function initStaff() {
+  const tgId = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : "";
+  if (!tgId) { renderError("Не удалось определить пользователя"); return; }
+  try {
+    const data = await withRetry(async () => {
+      const resp = await fetch(API_URL + "/staff?tg_id=" + tgId, { headers: authHeaders() });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      return resp.json();
+    });
+    if (!data.ok) { renderError("Нет доступа"); return; }
+    staffInfo = data.staff;
+    if (UNSCOPED_ROLES.includes(staffInfo.role)) {
+      document.getElementById("cityToggle").style.display = "flex";
+      renderCityToggle();
+    } else {
+      activeCity = staffInfo.city || "Дананг";
+    }
+    load();
+  } catch (e) {
+    console.error(e);
+    renderError("Ошибка загрузки");
+  }
+}
+
+function renderCityToggle() {
+  const el = document.getElementById("cityToggle");
+  el.innerHTML = ["Дананг", "Нячанг"].map(c =>
+    `<button class="city-btn${c === activeCity ? " active" : ""}" onclick="switchCity('${c}')">${c}</button>`
+  ).join("");
+}
+
+function switchCity(city) {
+  activeCity = city;
+  renderCityToggle();
+  load();
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById("tabActive").classList.toggle("active", tab === "active");
+  document.getElementById("tabWaitlist").classList.toggle("active", tab === "waitlist");
+  load();
+}
+
+function renderError(text) {
+  document.getElementById("content").innerHTML = `<div class="empty">${text}</div>`;
+}
+
+function esc(s) {
+  return (s || "").toString().replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+
+async function load() {
+  document.getElementById("content").innerHTML = `<div class="loading">Загрузка…</div>`;
+  try {
+    if (activeTab === "active") {
+      const data = await withRetry(async () => {
+        const resp = await fetch(API_URL + "/bookings/active?city=" + encodeURIComponent(activeCity), { headers: authHeaders() });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        return resp.json();
+      });
+      if (!data.ok) { renderError("Не удалось загрузить"); return; }
+      renderActive(data.bookings || []);
+    } else {
+      const data = await withRetry(async () => {
+        const resp = await fetch(API_URL + "/waitlist?city=" + encodeURIComponent(activeCity), { headers: authHeaders() });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        return resp.json();
+      });
+      if (!data.ok) { renderError("Не удалось загрузить"); return; }
+      renderWaitlist(data.waitlist || []);
+    }
+  } catch (e) {
+    console.error(e);
+    renderError("Ошибка загрузки");
+  }
+}
+
+const PENDING_STATUSES = new Set(["Заявка отправлена", "Заявка: напомнено админу", "Заявка: контакты отправлены", "new"]);
+
+function renderActive(bookings) {
+  const content = document.getElementById("content");
+  if (!bookings.length) { content.innerHTML = `<div class="empty">Заявок нет</div>`; return; }
+  content.innerHTML = bookings.map(b => {
+    const isPending = PENDING_STATUSES.has(b.status);
+    const dateStr = b.confirmed_date || b.wished_date || "—";
+    const uname = (b.telegram || "").replace(/^@/, "");
+    const lockKey = "b_" + b.row_num;
+    return `
+      <div class="card">
+        <div class="card-top">
+          <span class="badge ${isPending ? "badge-pending" : "badge-confirmed"}">${isPending ? "⏳ Ожидает" : "✅ Подтверждено"}</span>
+          <span class="card-meta">${esc(b.city)} · ${esc(b.dept)} · ${esc(b.type_label)}</span>
+        </div>
+        <div class="card-row"><span class="lbl">👶</span><span class="val">${esc(b.child_name) || "—"}, ${esc(b.child_age) || "—"}</span></div>
+        <div class="card-row"><span class="lbl">👤</span><span class="val">${esc(b.parent)}${uname ? " @" + esc(uname) : ""}</span></div>
+        <div class="card-row"><span class="lbl">📞</span><span class="val">${esc(b.phone)}</span></div>
+        <div class="card-row"><span class="lbl">📅</span><span class="val">${esc(dateStr)}</span></div>
+        ${isPending ? `
+        <div class="card-actions">
+          <button class="act-btn confirm" ${pending.has(lockKey) ? "disabled" : ""} onclick="doConfirm('${b.tg_id}', ${b.row_num}, '${lockKey}')">✅ Принять</button>
+          <button class="act-btn reject" ${pending.has(lockKey) ? "disabled" : ""} onclick="doReject('${b.tg_id}', ${b.row_num}, '${lockKey}')">❌ Отклонить</button>
+          <button class="act-btn wait" ${pending.has(lockKey) ? "disabled" : ""} onclick="doWaitlist('${b.tg_id}', ${b.row_num}, '${lockKey}')">🕐 В лист ожидания</button>
+        </div>` : ""}
+      </div>
+    `;
+  }).join("");
+}
+
+function renderWaitlist(entries) {
+  const content = document.getElementById("content");
+  if (!entries.length) { content.innerHTML = `<div class="empty">Лист ожидания пуст</div>`; return; }
+  content.innerHTML = entries.map((e, i) => {
+    const lockKey = "w_" + e.id;
+    return `
+      <div class="card">
+        <div class="card-top">
+          <span class="card-position">#${i + 1} в очереди</span>
+          <span class="badge ${e.source === "self" ? "badge-self" : "badge-admin"}">${e.source === "self" ? "Сам встал" : "Добавил админ"}</span>
+        </div>
+        <div class="card-row"><span class="lbl">🏙</span><span class="val">${esc(e.city)} · ${esc(e.department)}${e.group_name ? " · " + esc(e.group_name) : ""}</span></div>
+        <div class="card-row"><span class="lbl">👶</span><span class="val">${esc(e.child_name) || "—"}, ${esc(e.child_age) || "—"}</span></div>
+        <div class="card-row"><span class="lbl">👤</span><span class="val">${esc(e.parent_name)}${e.telegram_username ? " @" + esc(e.telegram_username) : ""}</span></div>
+        <div class="card-row"><span class="lbl">📞</span><span class="val">${esc(e.phone)}</span></div>
+        <div class="card-actions">
+          <button class="act-btn spot" ${pending.has(lockKey) ? "disabled" : ""} onclick="doSpotFree(${e.id}, '${lockKey}')">✅ Место свободно</button>
+          <button class="act-btn delete" ${pending.has(lockKey) ? "disabled" : ""} onclick="doDeleteWaitlist(${e.id}, '${lockKey}')">🗑 Удалить</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function doConfirm(tgId, rowNum, lockKey) {
+  if (pending.has(lockKey)) return;
+  pending.add(lockKey);
+  try {
+    const resp = await fetch(API_URL + "/bookings/confirm", {
+      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({tg_id: tgId, row_num: rowNum}),
+    });
+    const d = await resp.json();
+    if (!d.ok) throw new Error(d.error || "Ошибка");
+    showToast("Заявка подтверждена");
+    load();
+  } catch (e) {
+    showToast(e.message || "Не удалось подтвердить", true);
+  } finally {
+    pending.delete(lockKey);
+  }
+}
+
+async function doReject(tgId, rowNum, lockKey) {
+  if (!confirm("Отклонить заявку?")) return;
+  if (pending.has(lockKey)) return;
+  pending.add(lockKey);
+  try {
+    const resp = await fetch(API_URL + "/bookings/reject", {
+      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({tg_id: tgId, row_num: rowNum}),
+    });
+    const d = await resp.json();
+    if (!d.ok) throw new Error(d.error || "Ошибка");
+    showToast("Заявка отклонена");
+    load();
+  } catch (e) {
+    showToast(e.message || "Не удалось отклонить", true);
+  } finally {
+    pending.delete(lockKey);
+  }
+}
+
+async function doWaitlist(tgId, rowNum, lockKey) {
+  if (pending.has(lockKey)) return;
+  pending.add(lockKey);
+  try {
+    const resp = await fetch(API_URL + "/bookings/waitlist", {
+      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({tg_id: tgId, row_num: rowNum}),
+    });
+    const d = await resp.json();
+    if (!d.ok) throw new Error(d.error || "Ошибка");
+    showToast("Предложение отправлено родителю");
+  } catch (e) {
+    showToast(e.message || "Не удалось отправить", true);
+  } finally {
+    pending.delete(lockKey);
+  }
+}
+
+async function doSpotFree(id, lockKey) {
+  if (pending.has(lockKey)) return;
+  pending.add(lockKey);
+  try {
+    const resp = await fetch(API_URL + "/waitlist/spot-free", {
+      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({id}),
+    });
+    const d = await resp.json();
+    if (!d.ok) throw new Error(d.error || "Ошибка");
+    showToast("Родителю отправлено сообщение");
+  } catch (e) {
+    showToast(e.message || "Не удалось отправить", true);
+  } finally {
+    pending.delete(lockKey);
+  }
+}
+
+async function doDeleteWaitlist(id, lockKey) {
+  if (!confirm("Убрать из листа ожидания?")) return;
+  if (pending.has(lockKey)) return;
+  pending.add(lockKey);
+  try {
+    const resp = await fetch(API_URL + "/waitlist/" + id, {
+      method: "DELETE", headers: authHeaders(),
+    });
+    const d = await resp.json();
+    if (!d.ok) throw new Error("Ошибка");
+    showToast("Удалено");
+    load();
+  } catch (e) {
+    showToast(e.message || "Не удалось удалить", true);
+  } finally {
+    pending.delete(lockKey);
+  }
+}
+
+initStaff();
+</script>
+</body>
+</html>
