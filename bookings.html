@@ -80,6 +80,10 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// Тема — общий localStorage-ключ с index.html (тот же origin GitHub Pages),
+// чтобы переключатель темы в журнале действовал и здесь.
+document.documentElement.setAttribute("data-theme", localStorage.getItem("gorizont_theme") || "dark");
+
 const API_URL = "https://y95h81n2pl7zlyb6hfca50s2.95.179.188.141.sslip.io";
 const tg = window.Telegram?.WebApp;
 
@@ -162,8 +166,10 @@ function renderError(text) {
   document.getElementById("content").innerHTML = `<div class="empty">${text}</div>`;
 }
 
+// Та же функция, что в index.html/parent.html (security review 2026-08-25) —
+// держим идентичными.
 function esc(s) {
-  return (s || "").toString().replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  return (s || "").toString().replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
 async function load() {
