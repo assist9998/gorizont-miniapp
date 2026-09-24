@@ -241,7 +241,12 @@ const MONTHS_RU_MAP = {
 };
 function dateSortKey(dateStr) {
   const s = (dateStr || "").trim();
-  const approx = s.match(/^Ориентировочно:\s*(\S+)\s+(\d{4})/i);
+  // "Ориентировочно: <месяц> <год>" (выбор примерного месяца) и
+  // "С нового учебного года (сентябрь <год>)" (школьный enroll_date,
+  // bot.py:2064) — обе примерные, обе попадают в одну и ту же группу
+  // approx=1 своего месяца.
+  const approx = s.match(/^Ориентировочно:\s*(\S+)\s+(\d{4})/i)
+    || s.match(/^С нового учебного года\s*\((\S+)\s+(\d{4})\)/i);
   if (approx) {
     const month = MONTHS_RU_MAP[approx[1].toLowerCase()] || 13;
     return [parseInt(approx[2], 10), month, 1, 0];
