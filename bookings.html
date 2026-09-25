@@ -55,6 +55,17 @@
   .card-row .val{color:var(--text);word-break:break-word}
   .card-position{font-size:11px;color:var(--text2);font-weight:600}
 
+  .contact-row{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+  .contact-label{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);flex-shrink:0}
+  .contact-label svg{width:14px;height:14px}
+  .contact-select{flex:1;min-width:0;padding:7px 10px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer}
+  .contact-select:disabled{opacity:.6;cursor:default}
+  .contact-select.cs-warn{border-color:var(--warning);color:var(--warning)}
+  .contact-select.cs-accent{border-color:var(--accent);color:var(--accent)}
+  .contact-select.cs-danger{border-color:var(--danger);color:var(--danger)}
+  .contact-select.cs-good{border-color:var(--accent2);color:var(--accent2)}
+  .contact-select.cs-muted{border-color:var(--border);color:var(--text2)}
+
   .card-actions{display:flex;flex-direction:column;gap:8px;margin-top:14px}
   .act-row{display:flex;gap:8px}
   .act-row .act-btn{flex:1}
@@ -113,7 +124,27 @@ const ICONS = {
   phone: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3h2l1 3.2-1.6 1.4a10 10 0 0 0 4.5 4.5l1.4-1.6 3.2 1V15a1.5 1.5 0 0 1-1.6 1.5A12.5 12.5 0 0 1 4 5.6 1.5 1.5 0 0 1 5.5 3Z"/></svg>`,
   calendar: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="14" height="12" rx="2"/><path d="M3 8h14M7 2.5v3M13 2.5v3"/></svg>`,
   building: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17V5.5L10 3l6 2.5V17"/><path d="M4 17h12M8 17v-3h4v3M8 8h.01M12 8h.01M8 11h.01M12 11h.01"/></svg>`,
+  chat: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h12a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1H9l-3.5 3V14H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1Z"/></svg>`,
 };
+
+// Отметка "как связались" (отзыв пользователя, 2026-09-25) — фиксированный
+// набор статусов переписки (админы пишут клиенту в Telegram, не звонят),
+// отдельная ось от статуса заявки (Ожидает/Подтверждено). Цвет селекта даёт
+// то самое "что горит" без отдельной логики по таймеру: "Не связывались" —
+// внимание нужно, "Не отвечает" — уже застряло.
+const CONTACT_STATUSES = [
+  "Не связывались", "Написали, ждём ответ", "Не отвечает",
+  "Подтвердили в переписке", "Отказ в переписке",
+];
+function contactStatusClass(status) {
+  switch (status) {
+    case "Написали, ждём ответ": return "cs-accent";
+    case "Не отвечает": return "cs-danger";
+    case "Подтвердили в переписке": return "cs-good";
+    case "Отказ в переписке": return "cs-muted";
+    default: return "cs-warn";
+  }
+}
 document.getElementById("headerTitle").innerHTML = ICONS.clipboard + "<span>Заявки</span>";
 
 function authHeaders(extra) {
@@ -290,6 +321,12 @@ function renderActive(bookings) {
         <div class="card-row"><span class="lbl">${ICONS.phone}</span><span class="val">${esc(b.phone)}</span></div>
         <div class="card-row"><span class="lbl">${ICONS.calendar}</span><span class="val">${esc(dateStr)}</span></div>
         ${isPending ? `
+        <div class="contact-row">
+          <span class="contact-label">${ICONS.chat}Связь</span>
+          <select class="contact-select ${contactStatusClass(b.contact_status)}" onchange="doContactStatus(this, ${b.row_num})">
+            ${CONTACT_STATUSES.map(s => `<option value="${esc(s)}" ${s === (b.contact_status || CONTACT_STATUSES[0]) ? "selected" : ""}>${esc(s)}</option>`).join("")}
+          </select>
+        </div>
         <div class="card-actions">
           <button class="act-btn confirm" ${pending.has(lockKey) ? "disabled" : ""} onclick="doConfirm('${b.tg_id}', ${b.row_num}, '${lockKey}')">${ICONS.check}Принять</button>
           <div class="act-row">
@@ -365,6 +402,25 @@ async function doReject(tgId, rowNum, lockKey) {
     showToast(e.message || "Не удалось отклонить", true);
   } finally {
     pending.delete(lockKey);
+  }
+}
+
+async function doContactStatus(selectEl, rowNum) {
+  const status = selectEl.value;
+  selectEl.disabled = true;
+  try {
+    const resp = await fetch(API_URL + "/bookings/contact-status", {
+      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({row_num: rowNum, status}),
+    });
+    const d = await resp.json();
+    if (!d.ok) throw new Error("Ошибка");
+    selectEl.className = "contact-select " + contactStatusClass(status);
+    showToast("Статус связи сохранён");
+  } catch (e) {
+    showToast("Не удалось сохранить статус", true);
+  } finally {
+    selectEl.disabled = false;
   }
 }
 
