@@ -2362,8 +2362,14 @@ function isZavuchRole(role) {
 // (см. также серверную проверку роли в api.py).
 function applyRolePermissions() {
   const admin = !!staffInfo && isAdminRole(staffInfo.role);
+  // Завуч (2026-09-26, Нячанг) — доступ в "Персонал" ограниченный: вносить
+  // смены/уроки за забывчивых учителей, без ставок и сумм ЗП (см.
+  // renderStaffList/loadStaffMonth/renderStaffCalendarModal — там же скрыто
+  // то, что не должно быть видно). Та же логика "по умолчанию скрыто, показываем
+  // только подтверждённой роли" — см. комментарий выше про баг с Анжеликой.
+  const zavuch = !!staffInfo && isZavuchRole(staffInfo.role) && !admin;
   const navStaff = document.getElementById("nav-staff");
-  if(navStaff) navStaff.style.display = admin ? "" : "none";
+  if(navStaff) navStaff.style.display = (admin || zavuch) ? "" : "none";
   // nav-journal сама кнопка видна всем всегда — она теперь единая точка
   // входа и в посещаемость (сад/воспитатель), и в журнал (школа/учитель),
   // просто ведёт в разные экраны по роли (см. openMainEntry).
@@ -3593,7 +3599,7 @@ function renderStaffList() {
         <div class="child-detail-name">${escapeHtml(s.name)}</div>
         <div class="child-detail-meta">${escapeHtml(s.position || "—")}${rate ? " · " + rate : ""}</div>
       </div>
-      <button onclick="event.stopPropagation();openEditStaffForm('${s.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>
+      ${(!!staffInfo && isAdminRole(staffInfo.role)) ? `<button onclick="event.stopPropagation();openEditStaffForm('${s.id}')" style="padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;margin-right:4px;flex-shrink:0">ред.</button>` : ""}
       <span class="child-arrow">›</span>
     </div>`;
   });
@@ -6520,6 +6526,10 @@ async function openStaffCalendar(id, view) {
   closeDayPopover();
   window._currentStaffForCalendar = s;
   window._staffCalReadOnly = false;
+  // Завуч (2026-09-26) редактирует смены/уроки за других, но ставки и суммы
+  // ЗП ей не показываем (см. applyRolePermissions/renderStaffList) — здесь
+  // просто не запрашиваем /payroll/salary, см. loadStaffMonth.
+  window._staffCalHideSalary = !!staffInfo && isZavuchRole(staffInfo.role) && !isAdminRole(staffInfo.role);
   window._staffSalaryExpanded = false;
   const n = new Date();
   window._staffCalView = view || { year: n.getFullYear(), month: n.getMonth() };
@@ -6577,7 +6587,7 @@ async function loadStaffMonth() {
   // ЗП считаем на бэкенде (payroll.calculate_salary), не дублируем формулу
   // (в т.ч. с учётом дней замены) в двух местах — риск разойтись.
   window._staffCalSalary = null;
-  if(!window._staffCalReadOnly) {
+  if(!window._staffCalReadOnly && !window._staffCalHideSalary) {
     try {
       const salData = await withRetry(async () => {
         const resp = await fetch(API_URL + "/payroll/salary?staff_id=" + s.id + "&year=" + year + "&month=" + (month + 1), {
