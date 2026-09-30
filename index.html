@@ -2031,6 +2031,30 @@ function renderCalendarModal(c, history) {
 // Telegram", как и при одном родителе. У каждого блока со своим Telegram —
 // своя кнопка "Привязать" (автопривязка, см. autoLinkParent), т.к. привязка
 // всегда идёт на конкретного человека, а не на карточку в целом.
+// Список привязок сверх именованных "Родитель 1/2" — код на привязку можно
+// сгенерировать кому угодно (второй родитель без своего поля в карточке,
+// сам ребёнок, бабушка), а карточка раньше показывала только тех двух
+// родителей, чей Telegram-ник уже вписан в её поля (просьба пользователя
+// 2026-09-30: "раз это и так записывается... не так сложно отобразить?").
+// c.linked_telegrams — ПОЛНЫЙ список привязанных ников с бэкенда
+// (pw_get_linked_parents_by_child), тут просто убираем тех, кто уже показан
+// выше как "Родитель N".
+function extraLinkedHtml(c, blocks) {
+  const canLink = c.dept === "Школа" && staffInfo &&
+    (isAdminRole(staffInfo.role) || isZavuchRole(staffInfo.role));
+  if(!canLink) return "";
+  const named = blocks.map(b => (b.split("|")[2] || "").trim().replace(/^@/, "").toLowerCase()).filter(Boolean);
+  const extra = (c.linked_telegrams || []).filter(u => !named.includes((u || "").toLowerCase()));
+  if(!extra.length) return "";
+  return '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 8px">Ещё подключены</div>' +
+    extra.map(u =>
+      '<div style="background:var(--surface2);border-radius:12px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">' +
+        '<span style="font-size:13.5px;font-weight:500;color:var(--accent)">@' + escapeHtml(u) + '</span>' +
+        '<button onclick="unlinkExtraParent(' + c.id + ',\'' + escapeHtml(u).replace(/'/g, "\\'") + '\')" id="extraLinkBtn_' + c.id + '_' + escapeHtml(u) + '" style="flex-shrink:0;padding:4px 11px;border-radius:999px;border:1.5px solid var(--accent2);background:transparent;color:var(--accent2);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">✕ Отвязать</button>' +
+      '</div>'
+    ).join("");
+}
+
 function parentBlockHtml(c, block, idx, total) {
   const parts = block.split("|").map(p => p.trim());
   const name = parts[0] || "";
@@ -2102,6 +2126,7 @@ function renderModal(c) {
     (blocks.length
       ? blocks.map((b, i) => parentBlockHtml(c, b, i, blocks.length)).join("")
       : '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">Родитель не указан</div>') +
+    extraLinkedHtml(c, blocks) +
     (hasAllergy ?
       '<div style="border-top:1px solid var(--border);padding:9px 0;display:flex;justify-content:space-between;align-items:center;font-size:13px">' +
         '<span style="color:var(--text2)">Особенности</span>' +
@@ -3081,6 +3106,35 @@ async function unlinkParent(childId, idx) {
     const d = await resp.json();
     if(d.ok) {
       showToast("Родитель отвязан");
+      await loadChildren();
+      openModal(childId);
+    } else {
+      showToast("Не удалось отвязать", true);
+    }
+  } catch(e) {
+    showToast("Ошибка сети", true);
+  } finally {
+    if(btn) { btn.disabled = false; btn.textContent = prevText; }
+  }
+}
+
+// Отвязка из блока "Ещё подключены" (см. extraLinkedHtml) — та же ручка
+// /parent-unlink, что и у именованных родителей, просто ник берём напрямую,
+// не через индекс блока (этих людей нет среди полей "Родитель 1/2").
+async function unlinkExtraParent(childId, telegram) {
+  if(!confirm("Отвязать (@" + telegram + ") от карточки ребёнка? Доступ к дневнику пропадёт — привязать заново можно будет по коду.")) return;
+  const btn = document.getElementById("extraLinkBtn_" + childId + "_" + telegram);
+  const prevText = btn ? btn.textContent : "";
+  if(btn) { btn.disabled = true; btn.textContent = "Отвязываем..."; }
+  try {
+    const resp = await fetch(API_URL + "/children/" + childId + "/parent-unlink", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({telegram}),
+    });
+    const d = await resp.json();
+    if(d.ok) {
+      showToast("Отвязано");
       await loadChildren();
       openModal(childId);
     } else {
