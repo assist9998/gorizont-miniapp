@@ -2036,23 +2036,32 @@ function renderCalendarModal(c, history) {
 // сам ребёнок, бабушка), а карточка раньше показывала только тех двух
 // родителей, чей Telegram-ник уже вписан в её поля (просьба пользователя
 // 2026-09-30: "раз это и так записывается... не так сложно отобразить?").
-// c.linked_telegrams — ПОЛНЫЙ список привязанных ников с бэкенда
-// (pw_get_linked_parents_by_child), тут просто убираем тех, кто уже показан
-// выше как "Родитель N".
+// c.linked_all — ПОЛНЫЙ список привязок с бэкенда (pw_get_all_linked_by_child),
+// включая тех, у кого нет публичного Telegram-ника — у "Привязан"-бейджа
+// именованных блоков и у старого c.linked_telegrams таких не было видно
+// вообще, привязку было не снять (баг найден 2026-09-30, жалоба Алины
+// "не работала привязка у многих" — оказалось, ссылкой привязывались люди
+// без ника в аккаунте, и это просто нигде не отображалось).
 function extraLinkedHtml(c, blocks) {
   const canLink = c.dept === "Школа" && staffInfo &&
     (isAdminRole(staffInfo.role) || isZavuchRole(staffInfo.role));
   if(!canLink) return "";
   const named = blocks.map(b => (b.split("|")[2] || "").trim().replace(/^@/, "").toLowerCase()).filter(Boolean);
-  const extra = (c.linked_telegrams || []).filter(u => !named.includes((u || "").toLowerCase()));
+  const extra = (c.linked_all || []).filter(l =>
+    !(l.telegram_username && named.includes(l.telegram_username.toLowerCase()))
+  );
   if(!extra.length) return "";
   return '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 8px">Ещё подключены</div>' +
-    extra.map(u =>
-      '<div style="background:var(--surface2);border-radius:12px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">' +
-        '<span style="font-size:13.5px;font-weight:500;color:var(--accent)">@' + escapeHtml(u) + '</span>' +
-        '<button onclick="unlinkExtraParent(' + c.id + ',\'' + escapeHtml(u).replace(/'/g, "\\'") + '\')" id="extraLinkBtn_' + c.id + '_' + escapeHtml(u) + '" style="flex-shrink:0;padding:4px 11px;border-radius:999px;border:1.5px solid var(--accent2);background:transparent;color:var(--accent2);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">✕ Отвязать</button>' +
-      '</div>'
-    ).join("");
+    extra.map(l => {
+      const label = l.telegram_username ? "@" + escapeHtml(l.telegram_username) : "Без ника (ID " + escapeHtml(l.telegram_id) + ")";
+      const sub = l.linked_at ? '<div style="font-size:11.5px;color:var(--text2);margin-top:2px">подключён ' + escapeHtml(l.linked_at) + '</div>' : "";
+      const tgIdArg = "'" + escapeHtml(l.telegram_id).replace(/'/g, "\\'") + "'";
+      const usernameArg = l.telegram_username ? "'" + escapeHtml(l.telegram_username).replace(/'/g, "\\'") + "'" : "null";
+      return '<div style="background:var(--surface2);border-radius:12px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">' +
+        '<div><span style="font-size:13.5px;font-weight:500;color:' + (l.telegram_username ? "var(--accent)" : "var(--text2)") + '">' + label + '</span>' + sub + '</div>' +
+        '<button onclick="unlinkExtraParent(' + c.id + ',' + tgIdArg + ',' + usernameArg + ')" id="extraLinkBtn_' + c.id + '_' + escapeHtml(l.telegram_id) + '" style="flex-shrink:0;padding:4px 11px;border-radius:999px;border:1.5px solid var(--accent2);background:transparent;color:var(--accent2);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer">✕ Отвязать</button>' +
+      '</div>';
+    }).join("");
 }
 
 function parentBlockHtml(c, block, idx, total) {
@@ -3119,18 +3128,20 @@ async function unlinkParent(childId, idx) {
 }
 
 // Отвязка из блока "Ещё подключены" (см. extraLinkedHtml) — та же ручка
-// /parent-unlink, что и у именованных родителей, просто ник берём напрямую,
-// не через индекс блока (этих людей нет среди полей "Родитель 1/2").
-async function unlinkExtraParent(childId, telegram) {
-  if(!confirm("Отвязать (@" + telegram + ") от карточки ребёнка? Доступ к дневнику пропадёт — привязать заново можно будет по коду.")) return;
-  const btn = document.getElementById("extraLinkBtn_" + childId + "_" + telegram);
+// /parent-unlink, что и у именованных родителей, просто ник (или, если его
+// нет, telegram_id — см. pw_unlink_parent_by_id) берём напрямую, не через
+// индекс блока (этих людей нет среди полей "Родитель 1/2").
+async function unlinkExtraParent(childId, telegramId, telegram) {
+  const label = telegram ? "@" + telegram : "ID " + telegramId;
+  if(!confirm("Отвязать (" + label + ") от карточки ребёнка? Доступ к дневнику пропадёт — привязать заново можно будет по коду.")) return;
+  const btn = document.getElementById("extraLinkBtn_" + childId + "_" + telegramId);
   const prevText = btn ? btn.textContent : "";
   if(btn) { btn.disabled = true; btn.textContent = "Отвязываем..."; }
   try {
     const resp = await fetch(API_URL + "/children/" + childId + "/parent-unlink", {
       method: "POST",
       headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({telegram}),
+      body: JSON.stringify(telegram ? {telegram} : {telegram_id: telegramId}),
     });
     const d = await resp.json();
     if(d.ok) {
