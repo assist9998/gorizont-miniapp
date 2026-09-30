@@ -2053,7 +2053,9 @@ function extraLinkedHtml(c, blocks) {
   if(!extra.length) return "";
   return '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 8px">Ещё подключены</div>' +
     extra.map(l => {
-      const label = l.telegram_username ? "@" + escapeHtml(l.telegram_username) : "Без ника (ID " + escapeHtml(l.telegram_id) + ")";
+      const label = l.telegram_username ? "@" + escapeHtml(l.telegram_username)
+        : l.telegram_name ? escapeHtml(l.telegram_name) + " (без ника)"
+        : "Без ника (ID " + escapeHtml(l.telegram_id) + ")";
       const sub = l.linked_at ? '<div style="font-size:11.5px;color:var(--text2);margin-top:2px">подключён ' + escapeHtml(l.linked_at) + '</div>' : "";
       const tgIdArg = "'" + escapeHtml(l.telegram_id).replace(/'/g, "\\'") + "'";
       const usernameArg = l.telegram_username ? "'" + escapeHtml(l.telegram_username).replace(/'/g, "\\'") + "'" : "null";
