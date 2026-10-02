@@ -348,7 +348,7 @@ function selectSchoolDate(dateStr) { schoolSelectedDate = schoolSelectedDate ===
 function renderSchoolCalendar() {
   const { year, month } = schoolCalView;
   const DOW = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
-  const schoolWeekdays = new Set(schoolCache.schedule.map(e => e.weekday));
+  const schoolWeekdays = new Set(schoolCache.schedule.filter(e => !e.is_break).map(e => e.weekday));
 
   let startDow = new Date(year, month, 1).getDay();
   startDow = startDow === 0 ? 6 : startDow - 1;
@@ -415,7 +415,7 @@ function schoolDayDetailHtml(dateStr) {
   const jsDow = d.getDay();
   const isoDow = jsDow === 0 ? 7 : jsDow;
   const lessons = schoolCache.schedule
-    .filter(e => e.weekday === isoDow)
+    .filter(e => e.weekday === isoDow && !e.is_break)
     .slice()
     .sort((a, b) => (a.time_start || "").localeCompare(b.time_start || ""));
 
