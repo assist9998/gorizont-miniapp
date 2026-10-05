@@ -1032,6 +1032,24 @@ async function withRetry(fn, attempts = 3, delayMs = 500) {
 }
 
 const now = new Date();
+// now фиксируется один раз при загрузке скрипта и дальше используется как
+// "сегодня" ВЕЗДЕ (календарь, самоотметка, /journal/my-today, проверка "свой
+// ли это урок" и т.д., десятки мест). Telegram Mini App обычно не закрывают
+// руками — сворачивают и разворачивают заново, скрипт при этом не
+// перезагружается, now остаётся вчерашним. Итог — учитель видит расписание
+// вчерашнего дня и получает "Это не ваш предмет" на сегодняшний урок (жалоба
+// Анастасии, 2026-10-05, Горизонт: "показывает не те даты... не ваш урок").
+// Чинится не точечно (мест с now слишком много), а перезагрузкой страницы,
+// как только обнаружили что календарная дата успела смениться, пока апп был
+// свёрнут — тогда now снова станет актуальным с нуля.
+const _loadedDayKey = now.toDateString();
+function _reloadIfDayChanged() {
+  if (new Date().toDateString() !== _loadedDayKey) location.reload();
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") _reloadIfDayChanged(); });
+window.addEventListener("pageshow", (e) => { if (e.persisted) _reloadIfDayChanged(); });
+window.addEventListener("focus", _reloadIfDayChanged);
+setInterval(_reloadIfDayChanged, 5 * 60 * 1000);
 const days = ["вс","пн","вт","ср","чт","пт","сб"];
 const months = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
 const monthsFull = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
