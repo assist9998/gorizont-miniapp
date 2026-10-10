@@ -5654,13 +5654,20 @@ function closeJournalHistory() {
 // акцентная плашка вместо серой и отдельная надпись над темой.
 function renderJournalHistoryModal(history) {
   const today = journalGradesToday();
-  const todayEntry = history.find(h => h.date === today) || {date: today, topic: null, homework: null};
-  const items = [todayEntry, ...history.filter(h => h.date !== today)];
+  // Если сегодня — два урока на один эффективный предмет (обычная замена,
+  // см. pw_get_journal_subject_history), закрепляем ОБА, а не только первый
+  // найденный — раньше find() брал один, а filter() тут же вычёркивал
+  // второй из остального списка, тот пропадал из истории целиком.
+  const todayEntries = history.filter(h => h.date === today);
+  const items = todayEntries.length
+    ? [...todayEntries, ...history.filter(h => h.date !== today)]
+    : [{date: today, schedule_id: null, topic: null, homework: null}, ...history];
   document.getElementById("journalHistoryModalContent").innerHTML = items.map(h => {
     const isToday = h.date === today;
     const d = dmyToDate(h.date);
+    const sidArg = typeof h.schedule_id === "number" ? h.schedule_id : "null";
     return `
-    <div class="child-list-item" onclick="jumpToJournalHistoryDate('${h.date}')"${isToday ? ' style="border-color:var(--accent)"' : ""}>
+    <div class="child-list-item" onclick="jumpToJournalHistoryDate('${h.date}', ${sidArg})"${isToday ? ' style="border-color:var(--accent)"' : ""}>
       <div class="avatar" style="flex-direction:column;gap:0;${isToday ? "background:var(--accent);color:#fff" : ""}">
         <div style="font-size:14px;font-weight:700;line-height:1.05">${d.getDate()}</div>
         <div style="font-size:7px;font-weight:600;text-transform:uppercase;letter-spacing:.02em;opacity:.85">${months[d.getMonth()]}</div>
@@ -5673,9 +5680,13 @@ function renderJournalHistoryModal(history) {
   }).join("");
 }
 
-function jumpToJournalHistoryDate(date) {
+function jumpToJournalHistoryDate(date, scheduleId) {
   closeJournalHistory();
   journalGradesDate = date;
+  // Без этого при двух уроках в один день (замена) клик по любому из них
+  // открывал один и тот же урок — тянулся старый journalGradesScheduleId,
+  // с которым был открыт сам экран истории (см. openJournalScheduleLessonGrades).
+  journalGradesScheduleId = typeof scheduleId === "number" ? scheduleId : null;
   journalGradesEditingId = null;
   loadJournalGrades();
 }
