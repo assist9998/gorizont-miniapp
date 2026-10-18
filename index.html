@@ -6547,6 +6547,10 @@ async function submitStaffForm() {
   const lessonRateRaw = document.getElementById("s_lesson_rate").value.trim();
   const extDayRateRaw = document.getElementById("s_extended_day_rate").value.trim();
   const overtimeRateRaw = document.getElementById("s_overtime_rate").value.trim();
+  if(payType === "per_lesson" && !lessonRateRaw) {
+    showToast("Укажите ставку за урок — без неё зарплата по урокам не посчитается", true);
+    return;
+  }
   // "За урок" — отдельный тип оплаты, а не довесок: только одно из двух
   // полей реально относится к текущему типу, второе игнорируем (даже если
   // в скрытом инпуте осталось старое значение от предыдущего выбора).
