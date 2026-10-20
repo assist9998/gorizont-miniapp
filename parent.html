@@ -442,7 +442,7 @@ function schoolDayDetailHtml(dateStr) {
       return !isNaN(v) && (min === null || v < min) ? v : min;
     }, null);
     const gradeBadges = gradeItems
-      .map(g => `<div class="grade-badge tier-${escapeHtml(g.value)}">${escapeHtml(g.value)}</div>`)
+      .map(g => `<div class="grade-badge tier-${parseInt(g.value, 10)}">${escapeHtml(g.value)}</div>`)
       .join("");
     const gradeComments = gradeItems.filter(g => g.comment)
       .map(g => `<div class="lesson-comment">«${escapeHtml(g.comment)}»</div>`)
