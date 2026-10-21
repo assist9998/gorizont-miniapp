@@ -2150,15 +2150,17 @@ function renderModal(c) {
     // всему приложению, а не border-top разделителем вперемешку с фактами
     // ниже (редизайн 2026-09-17, отзыв пользователя про "разношёрстность").
     (canSeeDiary ?
-      '<div style="display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;background:var(--surface2);margin-bottom:12px">' +
-        '<span style="flex:1;font-size:13.5px;color:var(--text);cursor:pointer" onclick="openChildDiary(' + c.id + ')">📔 Дневник</span>' +
-        // Скачать все оценки ребёнка (все предметы, файлом) — круглая кнопка
-        // рядом с "Дневник", не отдельный пункт списка (отзыв пользователя,
-        // 2026-10-21: раньше была отдельная "Ведомость" с итогами по
-        // триместрам в другом месте — теперь просто выгрузка того, что видно
-        // в самом дневнике, прямо рядом с ним).
-        '<button onclick="event.stopPropagation();downloadChildGrades(' + c.id + ', \'' + jsAttrEscape(c.name) + '\')" title="Скачать оценки" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0">⬇</button>' +
-        '<span class="child-arrow" style="cursor:pointer" onclick="openChildDiary(' + c.id + ')">›</span>' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">' +
+        '<div style="flex:1;display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;background:var(--surface2);cursor:pointer" onclick="openChildDiary(' + c.id + ')">' +
+          '<span style="flex:1;font-size:13.5px;color:var(--text)">📔 Дневник</span>' +
+          '<span class="child-arrow">›</span>' +
+        '</div>' +
+        // Скачать все оценки ребёнка (все предметы, файлом) — отдельный
+        // круглый кружочек СПРАВА от прямоугольника "Дневник", а не внутри
+        // него (отзыв пользователя со скриншотом, 2026-10-21: кнопка внутри
+        // рамки дневника выглядела слитно, нужен отдельный самостоятельный
+        // элемент рядом).
+        '<button onclick="downloadChildGrades(' + c.id + ', \'' + jsAttrEscape(c.name) + '\')" title="Скачать оценки" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0">⬇</button>' +
       '</div>' : "") +
     (blocks.length
       ? blocks.map((b, i) => parentBlockHtml(c, b, i, blocks.length)).join("")
