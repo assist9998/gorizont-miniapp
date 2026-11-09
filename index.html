@@ -472,6 +472,12 @@
       </div>
       <select id="js_teacher" style="width:100%;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
       </select>
+      <div id="js_swap_wrap" style="display:none;margin-bottom:12px">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Поменять местами с другим уроком</div>
+        <select id="js_swap_with" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-family:inherit;font-size:14px">
+        </select>
+        <div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.4">Предмет и учитель этих двух уроков обменяются с завтрашнего дня, прошлое не меняется. День и время остаются прежними (при обмене остальные поля формы не сохраняются).</div>
+      </div>
       <div style="display:flex;gap:8px">
         <button onclick="submitJournalScheduleForm()" class="btn-primary" style="flex:1" id="journalScheduleSubmitBtn">Добавить урок</button>
         <button onclick="cancelJournalScheduleEdit()" id="journalScheduleCancelBtn" style="display:none;flex-shrink:0;padding:0 16px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:transparent;color:var(--text2);font-family:inherit;font-size:14px;cursor:pointer">Отмена</button>
@@ -4858,6 +4864,18 @@ function toggleJournalScheduleBreak() {
   document.getElementById("js_teacher").style.display = isBreak ? "none" : "";
 }
 
+function renderJournalSwapOptions(e) {
+  const wrap = document.getElementById("js_swap_wrap");
+  const sel = document.getElementById("js_swap_with");
+  const others = e.is_break || !e.subject_id ? [] : journalSchedule
+    .filter(x => x.id !== e.id && !x.is_break && x.subject_id)
+    .sort((a, b) => (a.weekday - b.weekday) || String(a.time_start || "").localeCompare(String(b.time_start || "")));
+  if(!others.length) { wrap.style.display = "none"; sel.innerHTML = ""; return; }
+  sel.innerHTML = '<option value="">Не менять</option>' + others.map(x =>
+    `<option value="${x.id}">${JOURNAL_WEEKDAYS_SHORT[x.weekday] || ""} ${escapeHtml(x.time_start || "")} — ${escapeHtml(x.subject_name || "")}${x.teacher_name ? " (" + escapeHtml(x.teacher_name) + ")" : ""}</option>`).join("");
+  wrap.style.display = "";
+}
+
 function startJournalScheduleEdit(id) {
   const e = journalSchedule.find(x => x.id === id);
   if(!e) return;
@@ -4870,6 +4888,7 @@ function startJournalScheduleEdit(id) {
   document.getElementById("js_time_start").value = e.time_start || "";
   document.getElementById("js_time_end").value = e.time_end || "";
   document.getElementById("js_teacher").value = e.teacher_staff_id || "";
+  renderJournalSwapOptions(e);
   document.getElementById("journalScheduleFormTitle").textContent = "Изменить урок";
   document.getElementById("journalScheduleSubmitBtn").textContent = "Сохранить";
   document.getElementById("journalScheduleCancelBtn").style.display = "";
@@ -4878,6 +4897,8 @@ function startJournalScheduleEdit(id) {
 
 function cancelJournalScheduleEdit() {
   editingJournalScheduleId = null;
+  document.getElementById("js_swap_wrap").style.display = "none";
+  document.getElementById("js_swap_with").innerHTML = "";
   document.getElementById("js_time_start").value = "";
   document.getElementById("js_time_end").value = "";
   document.getElementById("js_teacher").value = "";
@@ -4910,6 +4931,20 @@ async function submitJournalScheduleForm() {
         is_break: false, break_label: null };
   try {
     let resp;
+    const swapWith = editingJournalScheduleId ? document.getElementById("js_swap_with").value : "";
+    if(swapWith) {
+      resp = await fetch(API_URL + "/journal/schedule-swap", {
+        method: "POST",
+        headers: authHeaders({"Content-Type": "application/json"}),
+        body: JSON.stringify({a_id: editingJournalScheduleId, b_id: parseInt(swapWith, 10)}),
+      });
+      const sd = await resp.json();
+      if(!sd.ok) throw new Error(sd.error);
+      cancelJournalScheduleEdit();
+      await loadJournalClassData();
+      showToast("Уроки поменялись местами");
+      return;
+    }
     if(editingJournalScheduleId) {
       resp = await fetch(API_URL + "/journal/schedule/" + editingJournalScheduleId, {
         method: "PUT",
@@ -4930,7 +4965,7 @@ async function submitJournalScheduleForm() {
     await loadJournalClassData();
     showToast(wasEdit ? "Урок сохранён" : "Урок добавлен");
   } catch(e) {
-    showToast("Не удалось сохранить урок", true);
+    showToast("Не удалось сохранить урок" + (e && e.message && e.message !== "internal error" ? ": " + e.message : ""), true);
   } finally {
     journalPending.delete(lockKey);
   }
