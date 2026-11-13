@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Проверка связи</title>
+<!-- Диагностика связи до API журнала (2026-11-13): в Дананге приложение
+     висело на Wi-Fi и работало на мобильном интернете. Страница отличает:
+     блок по IP сервера (тест "сервер по IP" упирается в таймаут),
+     блок/подмену по имени домена sslip.io (IP отвечает быстро, домен — нет),
+     проблему DNS (публичный DNS знает адрес, а домен не открывается).
+     Тест "по IP" нарочно получает ошибку сертификата: быстрая ошибка
+     значит, что до сервера дошли и сертификат (несколько КБ) пришёл. -->
+<style>
+  :root{--bg:#f4f5f9;--surface:#fff;--text:#1a1d27;--text2:#6b7086;--border:#e2e4ee;--ok:#0d966e;--bad:#d93636;--warn:#a26e00}
+  @media (prefers-color-scheme: dark){:root{--bg:#0f1117;--surface:#1a1d27;--text:#e8eaf0;--text2:#8b90a8;--border:#2d3250;--ok:#38d9a9;--bad:#ff6b6b;--warn:#ffd43b}}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,system-ui,sans-serif;padding:20px 16px}
+  h1{font-size:20px;margin:0 0 6px}
+  p{margin:0 0 16px;color:var(--text2)}
+  .row{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+  .name{font-weight:600}
+  .res{font-variant-numeric:tabular-nums;margin-top:4px;color:var(--text2);word-break:break-all}
+  .ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+  button{width:100%;padding:12px;border-radius:12px;border:none;background:#4f8ef7;color:#fff;font:inherit;font-weight:600;margin-top:8px}
+  #net{font-size:13px;color:var(--text2);margin-top:12px;word-break:break-all}
+</style>
+</head>
+<body>
+<h1>Проверка связи с журналом</h1>
+<p>Откройте на том Wi-Fi, где приложение не работает, дождитесь конца (до 30 секунд) и пришлите скриншот.</p>
+<div id="list"></div>
+<button id="again" type="button">Проверить ещё раз</button>
+<div id="net"></div>
+<script>
+const HOST = "y95h81n2pl7zlyb6hfca50s2.95.179.188.141.sslip.io";
+const IP = "95.179.188.141";
+const TIMEOUT = 25000;
+
+async function timed(url, opts) {
+  const ctrl = new AbortController();
+  const t0 = performance.now();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
+  try {
+    const r = await fetch(url, Object.assign({cache: "no-store", signal: ctrl.signal}, opts || {}));
+    const body = opts && opts.mode === "no-cors" ? "" : await r.text();
+    return {ok: true, ms: Math.round(performance.now() - t0), status: r.status, body};
+  } catch (e) {
+    return {ok: false, ms: Math.round(performance.now() - t0), timeout: e.name === "AbortError", err: e.name};
+  } finally { clearTimeout(timer); }
+}
+
+const tests = [
+  {name: "1. Интернет вообще (GitHub)", run: async () => {
+    const r = await timed("https://assist9998.github.io/gorizont-miniapp/diag.html?_=" + Date.now());
+    return r.ok ? ["ok", "работает, " + r.ms + " мс"] : ["bad", "не работает: " + (r.timeout ? "таймаут" : r.err)];
+  }},
+  {name: "2. Сервер журнала по имени", run: async () => {
+    // /health без CORS-заголовков — no-cors: тело не видно, но сам ответ есть.
+    const r = await timed("https://" + HOST + "/health?_=" + Date.now(), {mode: "no-cors"});
+    if (r.ok) return ["ok", "работает, " + r.ms + " мс"];
+    return ["bad", r.timeout ? "зависает (таймаут " + r.ms + " мс)" : "ошибка через " + r.ms + " мс"];
+  }},
+  {name: "3. Сервер журнала по IP (ошибка сертификата здесь — норма)", run: async () => {
+    const r = await timed("https://" + IP + "/?_=" + Date.now(), {mode: "no-cors"});
+    if (r.timeout) return ["bad", "сервер недоступен по IP (таймаут)"];
+    return ["ok", "сервер доступен по IP, ответ за " + r.ms + " мс"];
+  }},
+  {name: "4. Адрес сервера через Google DNS", run: async () => {
+    const r = await timed("https://dns.google/resolve?type=A&name=" + HOST);
+    if (!r.ok) return ["warn", "Google DNS недоступен"];
+    try {
+      const ips = (JSON.parse(r.body).Answer || []).map(a => a.data).join(", ");
+      return [ips.includes(IP) ? "ok" : "bad", ips || "адрес не найден"];
+    } catch (e) { return ["warn", "непонятный ответ"]; }
+  }},
+];
+
+async function runAll() {
+  const list = document.getElementById("list");
+  list.innerHTML = tests.map((t, i) =>
+    '<div class="row"><div class="name">' + t.name + '</div><div class="res" id="r' + i + '">проверяю…</div></div>').join("");
+  const c = navigator.connection;
+  document.getElementById("net").textContent = "Время: " + new Date().toLocaleString("ru-RU") +
+    (c && c.type ? " · сеть: " + c.type : "") + " · " + navigator.userAgent;
+  await Promise.all(tests.map(async (t, i) => {
+    const [cls, text] = await t.run();
+    const el = document.getElementById("r" + i);
+    el.className = "res " + cls;
+    el.textContent = text;
+  }));
+}
+document.getElementById("again").addEventListener("click", runAll);
+runAll();
+</script>
+</body>
+</html>
