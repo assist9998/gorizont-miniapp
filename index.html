@@ -5538,6 +5538,9 @@ const JOURNAL_GRADE_VALUES = ["2", "3", "4", "5"];
 
 let journalLessonTopic = null; // {id, topic} | null — тема текущего урока (дата+предмет)
 let journalHomework = null; // {id, text} | null — домашнее задание к этому уроку (дата+предмет), необязательно
+// Урок не загрузился (нет связи/таймаут/сессия) — экран иначе выглядел бы
+// пустым, и учитель решал, что всё "слетело", и вносил заново (2026-11-13).
+let journalGradesLoadFailed = false;
 let journalGradesEditingId = null; // id оценки, чей комментарий сейчас открыт для правки
 let journalGradeModalChildId = null; // id ребёнка, чья модалка оценки сейчас открыта (null — закрыта)
 let journalGradePendingBase = null; // выбранная цифра (2-5), ещё не сохранённая (до тапа "Сохранить")
@@ -5630,7 +5633,7 @@ async function loadJournalGrades() {
   if(journalGradesDate === null) journalGradesDate = journalGradesToday();
   const options = journalGradesSubjectOptions();
   if(journalGradesSubjectId === null && options.length) journalGradesSubjectId = options[0].id;
-  if(!journalGradesSubjectId) { journalGrades = []; journalLessonTopic = null; journalHomework = null; journalAttendance = {}; renderJournalGrades(); return; }
+  if(!journalGradesSubjectId) { journalGrades = []; journalLessonTopic = null; journalHomework = null; journalAttendance = {}; journalGradesLoadFailed = false; renderJournalGrades(); return; }
   // schedule_id — какой именно урок дня, не только предмет (см.
   // journalGradesScheduleId) — иначе два урока в один день на один и тот же
   // эффективный предмет читали бы/писали одну и ту же тему/посещаемость.
@@ -5669,8 +5672,11 @@ async function loadJournalGrades() {
     if(attendanceData.ok) {
       attendanceData.attendance.forEach(a => { journalAttendance[a.child_id] = a.status; });
     }
+    // "forbidden" — не про связь (чужой урок), там плашка "нет связи" соврала бы.
+    journalGradesLoadFailed = [gradesData, topicData, homeworkData, attendanceData].some(d => !d.ok && d.error !== "forbidden");
   } catch(e) {
     console.error("loadJournalGrades error:", e);
+    journalGradesLoadFailed = true;
     journalGrades = [];
     journalLessonTopic = null;
     journalHomework = null;
@@ -6142,6 +6148,13 @@ function renderJournalGrades() {
   // onJournalHomeworkBlur) — ни кнопки, ни индикатора не нужно (просьба
   // пользователя 2026-09-16: "никаких анимаций, просто сохраняется и всё").
   let html = subjectSelectHtml ? `<div style="margin-bottom:10px">${subjectSelectHtml}</div>` : "";
+  if(journalGradesLoadFailed) {
+    html += `
+    <div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1.5px solid var(--warning);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px">
+      <div style="flex:1;font-size:13px;line-height:1.4;color:var(--text)">Нет связи — урок не загрузился. Уже внесённое не пропало, просто сейчас не видно.</div>
+      <button onclick="loadJournalGrades()" style="flex-shrink:0;padding:8px 12px;border-radius:10px;border:none;background:var(--warning);color:#0f1117;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Обновить</button>
+    </div>`;
+  }
   // "Урока не было" — та же отметка no_lesson, что и в редактировании
   // расписания (см. toggleNoLesson), только доступ отсюда, без похода в
   // "Расписание". Только админ/завуч — бэкенд отдельным учителям её ставить
