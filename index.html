@@ -194,6 +194,7 @@
   /* TOAST */
   .toast{position:fixed;top:70px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--accent2);color:#0f1117;padding:9px 18px;border-radius:20px;font-size:13px;font-weight:600;opacity:0;transition:all .3s;z-index:400;white-space:nowrap;pointer-events:none}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .outbox-banner{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px);z-index:350;max-width:calc(100% - 32px);background:var(--warning);color:#0f1117;border:none;border-radius:20px;padding:9px 16px;font-family:inherit;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
   .empty{text-align:center;padding:40px 20px;color:var(--text2);font-size:14px}
   .loading{text-align:center;padding:50px 20px;color:var(--text2)}
   .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
@@ -889,6 +890,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<button class="outbox-banner" id="outboxBanner" onclick="outboxFlush()" style="display:none"></button>
 
 <!-- Мягкое напоминание: гео подтвердило, что сотрудник на месте — гейт уже
      пропустил, приложением пользоваться можно, просто напоминаем отметиться
@@ -1038,6 +1040,193 @@ async function withRetry(fn, attempts = 3, delayMs = 500) {
   }
   throw lastErr;
 }
+
+// Таймаут на ВСЕ запросы к API (2026-11-13). У fetch своего таймаута нет —
+// на плохой связи (Дананг, жалоба Ольги/Алины 13.11: вечное "Проверяем
+// местоположение…") запрос мог висеть бесконечно: гейт не снимался, а замки
+// journalPending ("topic:save" и т.п.) не освобождались, и все следующие
+// сохранения темы/ДЗ молча игнорировались до перезапуска приложения
+// (жалоба Анны, Нячанг: "слетают темы, оценки и дз"). Обёртка ставит
+// AbortController только запросам к API_URL без своего signal; таймер
+// не снимаем по приходу заголовков — он же страхует чтение тела ответа.
+// Скачивание ведомости/оценок — дольше (файл может весить заметно).
+const _API_TIMEOUT_MS = 20000;
+const _API_SLOW_TIMEOUT_MS = 90000;
+const _nativeFetch = window.fetch.bind(window);
+window.fetch = function(input, init) {
+  const url = typeof input === "string" ? input : (input && input.url) || "";
+  if(!url.startsWith(API_URL) || (init && init.signal) || typeof AbortController === "undefined") {
+    return _nativeFetch(input, init);
+  }
+  const slow = /\/journal\/(report-card|child-grades)/.test(url);
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), slow ? _API_SLOW_TIMEOUT_MS : _API_TIMEOUT_MS);
+  return _nativeFetch(input, Object.assign({}, init, {signal: ctrl.signal}));
+};
+
+// ── ОЧЕРЕДЬ ЗАПИСЕЙ ЖУРНАЛА (страховка от обрывов связи, 2026-11-13) ──────
+// Раньше тема/ДЗ/посещаемость уходили одним fetch: при сбое — тост на 2.5 с,
+// а на экране оставалось "сохранённое" значение; при следующем открытии
+// урока сервер отдавал старое — для учителя "слетело". Теперь каждое
+// изменение сначала пишется в очередь на телефоне (localStorage), потом
+// досылается, пока сервер не подтвердит ok. Ключ записи — вид + урок
+// (город, класс, предмет, дата, schedule_id): повторная правка того же поля
+// заменяет запись (тема/ДЗ — последнее значение, посещаемость — сливается
+// по детям), так что в очереди не копятся устаревшие версии. Все три
+// эндпоинта — upsert (повтор безопасен). Оценки сюда НЕ входят: POST
+// /journal/grades создаёт новую строку, слепой повтор продублировал бы
+// оценку — им достаточно таймаута (форма с оценкой остаётся при ошибке).
+// Записи помечены telegram_id автора: на общем телефоне чужие записи не
+// отправляются от имени другого сотрудника.
+const _OUTBOX_KEY = "gorizont_journal_outbox_v1";
+let journalOutbox = (() => {
+  try {
+    const arr = JSON.parse(localStorage.getItem(_OUTBOX_KEY) || "[]");
+    return Array.isArray(arr) ? arr : [];
+  } catch(e) { return []; }
+})();
+let _outboxFlushing = false;
+
+function _outboxUid() {
+  return tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? String(tg.initDataUnsafe.user.id) : "";
+}
+
+function _outboxMine(e) {
+  const uid = _outboxUid();
+  return !e.uid || !uid || e.uid === uid;
+}
+
+function _outboxSave() {
+  try { localStorage.setItem(_OUTBOX_KEY, JSON.stringify(journalOutbox)); } catch(e) {}
+  renderOutboxBanner();
+}
+
+function journalLessonKey(l) {
+  return [l.city, l.class_name, l.subject_id, l.date, l.schedule_id ?? ""].join("|");
+}
+
+function currentJournalLesson() {
+  return {
+    city: activeJournalCity, class_name: activeJournalClass,
+    subject_id: journalGradesSubjectId, date: journalGradesDate,
+    schedule_id: journalGradesScheduleId,
+  };
+}
+
+// kind: "topic" (value — текст), "homework" (текст), "attendance" (value —
+// {String(child_id): {child_id, status}}, сливается с уже ждущими отметками).
+function outboxPut(kind, lesson, value) {
+  const key = kind + "|" + journalLessonKey(lesson);
+  const uid = _outboxUid();
+  const idx = journalOutbox.findIndex(e => e.key === key && e.uid === uid);
+  let entry;
+  if(idx >= 0) {
+    entry = journalOutbox.splice(idx, 1)[0];
+    entry.value = kind === "attendance" ? Object.assign({}, entry.value, value) : value;
+    entry.v += 1;
+  } else {
+    entry = {key, kind, lesson, value, uid, v: 1, failed: false};
+  }
+  entry.ts = Date.now();
+  journalOutbox.push(entry);
+  _outboxSave();
+  outboxFlush();
+}
+
+function _outboxRequest(e) {
+  const l = e.lesson;
+  if(e.kind === "topic") return ["/journal/lesson-topic", Object.assign({}, l, {topic: e.value})];
+  if(e.kind === "homework") return ["/journal/homework", Object.assign({}, l, {text: e.value})];
+  return ["/journal/attendance", Object.assign({}, l, {records: Object.values(e.value)})];
+}
+
+// По одной записи по порядку. Нет связи / таймаут / 401 (протухла сессия
+// Telegram — пройдёт после переоткрытия приложения) / 5xx — останавливаемся,
+// запись остаётся в очереди и помечается failed (появляется плашка). Сервер
+// ответил отказом по существу (не ваш урок и т.п.) — повтор не поможет:
+// убираем запись и показываем причину. Запись, которую успели изменить,
+// пока она летела (v вырос), не удаляем — уйдёт следующим проходом.
+async function outboxFlush() {
+  if(_outboxFlushing) return;
+  if(!journalOutbox.some(_outboxMine)) { renderOutboxBanner(); return; }
+  _outboxFlushing = true;
+  renderOutboxBanner();
+  let stalled = false;
+  try {
+    for(const e of journalOutbox.slice()) {
+      if(!_outboxMine(e)) continue;
+      const [path, body] = _outboxRequest(e);
+      const sentV = e.v;
+      let resp, d = null;
+      try {
+        resp = await fetch(API_URL + path, {
+          method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
+          body: JSON.stringify(body),
+        });
+        if(resp.status === 401 || resp.status >= 500) { stalled = true; break; }
+        d = await resp.json();
+      } catch(err) {
+        stalled = true;
+        break;
+      }
+      const cur = journalOutbox.find(x => x.key === e.key && x.uid === e.uid);
+      if(!cur) continue;
+      if(d && d.ok) {
+        if(cur.v === sentV) journalOutbox = journalOutbox.filter(x => x !== cur);
+      } else {
+        journalOutbox = journalOutbox.filter(x => x !== cur);
+        showToast("Не сохранено: " + ((d && d.error) || "ошибка сервера"), true);
+      }
+      _outboxSave();
+    }
+    if(stalled) {
+      journalOutbox.forEach(x => { if(_outboxMine(x)) x.failed = true; });
+      _outboxSave();
+    }
+  } finally {
+    _outboxFlushing = false;
+    renderOutboxBanner();
+  }
+  // Правка, сделанная пока летела предыдущая версия, — досылаем сразу, а не
+  // через 15 с интервала.
+  if(!stalled && journalOutbox.some(_outboxMine)) setTimeout(() => outboxFlush(), 300);
+}
+
+// Плашка только для того, что уже раз не ушло (failed) — при нормальной
+// связи запись улетает за доли секунды, и мигать плашкой на каждое
+// сохранение незачем.
+function renderOutboxBanner() {
+  const el = document.getElementById("outboxBanner");
+  if(!el) return;
+  const n = journalOutbox.filter(e => _outboxMine(e) && e.failed).length;
+  if(!n) { el.style.display = "none"; return; }
+  el.style.display = "block";
+  el.textContent = _outboxFlushing ? "Сохраняем… (" + n + ")" : "Не сохранено: " + n + " · Повторить";
+}
+
+// Пока запись ждёт в очереди, экран урока показывает её, а не старое
+// значение с сервера — иначе внесённое "пропадало" бы на глазах.
+function applyJournalOutboxOverlay() {
+  const key = journalLessonKey(currentJournalLesson());
+  journalOutbox.forEach(e => {
+    if(!_outboxMine(e) || journalLessonKey(e.lesson) !== key) return;
+    if(e.kind === "topic") journalLessonTopic = Object.assign({}, journalLessonTopic || {}, {topic: e.value});
+    else if(e.kind === "homework") journalHomework = Object.assign({}, journalHomework || {}, {text: e.value});
+    else Object.values(e.value).forEach(r => { journalAttendance[r.child_id] = r.status; });
+  });
+}
+
+function dropJournalOutboxForLesson(lesson) {
+  const key = journalLessonKey(lesson);
+  journalOutbox = journalOutbox.filter(e => !(_outboxMine(e) && journalLessonKey(e.lesson) === key));
+  _outboxSave();
+}
+
+window.addEventListener("online", () => outboxFlush());
+document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") outboxFlush(); });
+window.addEventListener("focus", () => outboxFlush());
+setInterval(() => { if(journalOutbox.length) outboxFlush(); }, 15000);
+setTimeout(() => outboxFlush(), 1500);
 
 const now = new Date();
 // now фиксируется один раз при загрузке скрипта и дальше используется как
@@ -5486,28 +5675,17 @@ async function loadJournalGrades() {
     journalHomework = null;
     journalAttendance = {};
   }
+  applyJournalOutboxOverlay();
   renderJournalGrades();
 }
 
-async function toggleJournalAttendance(childId) {
+// Через очередь (outboxPut): при обрыве связи отметка не теряется, а
+// досылается сама; пока не дошла — плашка "Не сохранено".
+function toggleJournalAttendance(childId) {
   const status = journalAttendance[childId] === "present" ? "absent" : "present";
   journalAttendance[childId] = status;
   renderJournalGrades();
-  try {
-    const resp = await fetch(API_URL + "/journal/attendance", {
-      method: "POST",
-      headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({
-        city: activeJournalCity, class_name: activeJournalClass,
-        subject_id: journalGradesSubjectId, date: journalGradesDate,
-        records: [{child_id: childId, status}], schedule_id: journalGradesScheduleId,
-      }),
-    });
-    const d = await resp.json();
-    if(!d.ok) throw new Error(d.error);
-  } catch(e) {
-    showToast("Не удалось сохранить посещаемость", true);
-  }
+  outboxPut("attendance", currentJournalLesson(), {[String(childId)]: {child_id: childId, status}});
 }
 
 // Сохранение по потере фокуса поля (не по паузе в наборе — просьба
@@ -5548,65 +5726,32 @@ function onJournalHomeworkBlur() {
   saveJournalHomework();
 }
 
-async function saveJournalLessonTopic() {
+// Через очередь (outboxPut), без замка journalPending: замок при зависшем
+// запросе не снимался, и следующие правки темы молча терялись (2026-11-13).
+// Повторная правка того же урока просто заменяет ждущую запись в очереди.
+function saveJournalLessonTopic() {
   const el = document.getElementById("journalLessonTopicInput");
   const topic = el ? el.value.trim() : "";
-  const lockKey = "topic:save";
-  if(journalPending.has(lockKey)) return;
-  journalPending.add(lockKey);
-  try {
-    const resp = await fetch(API_URL + "/journal/lesson-topic", {
-      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({
-        city: activeJournalCity, class_name: activeJournalClass,
-        subject_id: journalGradesSubjectId, date: journalGradesDate, topic,
-        schedule_id: journalGradesScheduleId,
-      }),
-    });
-    const d = await resp.json();
-    if(!d.ok) throw new Error(d.error);
-    // Не дёргаем loadJournalGrades()/полную переотрисовку списка учеников —
-    // список от темы урока не зависит (только оценки/посещаемость), а
-    // полная переотрисовка DOM асинхронно, пока учитель уже тапает по
-    // следующему полю (оценка/посещаемость), иногда перехватывала этот тап
-    // на переотрисованный элемент (жалоба учителя 2026-09-21: "выкидывает
-    // на поле оценок и посещаемости"). Только фиксируем новое "исходное"
-    // значение поля, чтобы следующий blur-diff (onJournalTopicBlur) работал верно.
-    journalLessonTopic = {...(journalLessonTopic || {}), topic};
-    if(el) el.dataset.original = topic;
-  } catch(e) {
-    showToast("Не удалось сохранить тему урока", true);
-  } finally {
-    journalPending.delete(lockKey);
-  }
+  outboxPut("topic", currentJournalLesson(), topic);
+  // Не дёргаем loadJournalGrades()/полную переотрисовку списка учеников —
+  // список от темы урока не зависит (только оценки/посещаемость), а
+  // полная переотрисовка DOM асинхронно, пока учитель уже тапает по
+  // следующему полю (оценка/посещаемость), иногда перехватывала этот тап
+  // на переотрисованный элемент (жалоба учителя 2026-09-21: "выкидывает
+  // на поле оценок и посещаемости"). Только фиксируем новое "исходное"
+  // значение поля, чтобы следующий blur-diff (onJournalTopicBlur) работал верно.
+  journalLessonTopic = {...(journalLessonTopic || {}), topic};
+  if(el) el.dataset.original = topic;
 }
 
-async function saveJournalHomework() {
+function saveJournalHomework() {
   const el = document.getElementById("journalHomeworkInput");
   const text = el ? el.value.trim() : "";
-  const lockKey = "homework:save";
-  if(journalPending.has(lockKey)) return;
-  journalPending.add(lockKey);
-  try {
-    const resp = await fetch(API_URL + "/journal/homework", {
-      method: "POST", headers: authHeaders({"Content-Type": "application/json"}),
-      body: JSON.stringify({
-        city: activeJournalCity, class_name: activeJournalClass,
-        subject_id: journalGradesSubjectId, date: journalGradesDate, text,
-        schedule_id: journalGradesScheduleId,
-      }),
-    });
-    const d = await resp.json();
-    if(!d.ok) throw new Error(d.error);
-    // См. комментарий в saveJournalLessonTopic — та же переотрисовка
-    // перехватывала следующий тап учителя (по оценке/посещаемости).
-    journalHomework = {...(journalHomework || {}), text};
-    if(el) el.dataset.original = text;
-  } catch(e) {
-    showToast("Не удалось сохранить домашнее задание", true);
-  } finally {
-    journalPending.delete(lockKey);
-  }
+  outboxPut("homework", currentJournalLesson(), text);
+  // См. комментарий в saveJournalLessonTopic — та же переотрисовка
+  // перехватывала следующий тап учителя (по оценке/посещаемости).
+  journalHomework = {...(journalHomework || {}), text};
+  if(el) el.dataset.original = text;
 }
 
 // "Урока не было" из карточки урока — та же отметка no_lesson, что и кнопка
@@ -5658,6 +5803,9 @@ async function clearJournalLesson() {
     });
     const d = await resp.json();
     if(!d.ok) throw new Error(d.error);
+    // Иначе ждущая в очереди тема/посещаемость дошла бы после очистки и
+    // "воскресила" урок.
+    dropJournalOutboxForLesson(currentJournalLesson());
     journalLessonTopic = null;
     journalHomework = null;
     journalAttendance = {};
@@ -6210,19 +6358,7 @@ async function saveJournalGradePending(childId) {
     // уже сохранена, это лишь синхронизация посещаемости.
     if(journalAttendance[childId] !== "present") {
       journalAttendance[childId] = "present";
-      try {
-        await fetch(API_URL + "/journal/attendance", {
-          method: "POST",
-          headers: authHeaders({"Content-Type": "application/json"}),
-          body: JSON.stringify({
-            city: activeJournalCity, class_name: activeJournalClass,
-            subject_id: journalGradesSubjectId, date: journalGradesDate,
-            records: [{child_id: childId, status: "present"}], schedule_id: journalGradesScheduleId,
-          }),
-        });
-      } catch(attErr) {
-        console.error("auto-mark attendance on grade error:", attErr);
-      }
+      outboxPut("attendance", currentJournalLesson(), {[String(childId)]: {child_id: childId, status: "present"}});
     }
     journalGradePendingBase = null;
     journalGradePendingMod = "";
