@@ -1175,7 +1175,8 @@ async function outboxFlush() {
         if(cur.v === sentV) journalOutbox = journalOutbox.filter(x => x !== cur);
       } else {
         journalOutbox = journalOutbox.filter(x => x !== cur);
-        showToast("Не сохранено: " + ((d && d.error) || "ошибка сервера"), true);
+        const reason = resp.status === 403 ? "нет прав на этот урок" : ((d && d.error) || "ошибка сервера");
+        showToast("Не сохранено: " + reason, true);
       }
       _outboxSave();
     }
@@ -5709,6 +5710,10 @@ function onJournalTopicBlur() {
   if(!el) return;
   const value = el.value.trim();
   const original = (el.dataset.original || "").trim();
+  // Только тапнули в поле (onJournalTopicFocus стёр плейсхолдер "Без темы")
+  // и ушли, ничего не набрав, — это не очистка: возвращаем как было, иначе
+  // пустая тема ушла бы на сервер и удалила запись (2026-11-13).
+  if(value === "" && original === "Без темы") { el.value = original; return; }
   if(value === original) return;
   // Пустое значение больше не откатывается назад — это осознанная очистка
   // (удаляет запись на сервере, см. pw_upsert_journal_lesson_topic), не
@@ -5725,6 +5730,19 @@ function onJournalHomeworkBlur() {
   if(value === original) return;
   saveJournalHomework();
 }
+
+// Свернули/закрыли приложение, не уйдя из поля темы или ДЗ, — blur может не
+// прийти вовсе, и набранное пропадало. outboxPut пишет очередь в
+// localStorage синхронно: даже если запрос не успеет уйти, запись дошлётся
+// при следующем открытии. Повторного сохранения потом не будет — blur
+// сверяется с уже обновлённым dataset.original.
+function _saveFocusedJournalField() {
+  const id = document.activeElement && document.activeElement.id;
+  if(id === "journalLessonTopicInput") onJournalTopicBlur();
+  else if(id === "journalHomeworkInput") onJournalHomeworkBlur();
+}
+document.addEventListener("visibilitychange", () => { if(document.visibilityState === "hidden") _saveFocusedJournalField(); });
+window.addEventListener("pagehide", _saveFocusedJournalField);
 
 // Через очередь (outboxPut), без замка journalPending: замок при зависшем
 // запросе не снимался, и следующие правки темы молча терялись (2026-11-13).
