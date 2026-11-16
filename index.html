@@ -1053,15 +1053,63 @@ async function withRetry(fn, attempts = 3, delayMs = 500) {
 const _API_TIMEOUT_MS = 20000;
 const _API_SLOW_TIMEOUT_MS = 90000;
 const _nativeFetch = window.fetch.bind(window);
-window.fetch = function(input, init) {
+
+// Запасной адрес API через Cloudflare (2026-11-16). Дананг 12–16.11 днём со
+// школьного Wi-Fi не доходил до сервера в Европе (записи проходили только
+// вечером), Нячанг в те же дни работал. Worker (cf-worker/worker.js в папке
+// проекта) пересылает запрос на тот же сервер как есть — база, проверка
+// входа и права те же. Порядок: сначала основной адрес; если он не ответил
+// (сеть/таймаут, НЕ ошибка сервера) — тот же запрос через запасной, и
+// следующие 30 мин запросы идут сразу туда (запоминается в localStorage,
+// чтобы при повторном открытии приложения не ждать таймаут заново).
+// Повтор на другом адресе — только для безопасных запросов: GET и записи
+// темы/ДЗ/посещаемости (перезаписывают значение урока). Оценки (POST
+// создаёт строку) и прочие изменения НЕ повторяем — иначе возможен дубль,
+// если первый запрос всё же дошёл; для них только запоминаем, что основной
+// не отвечает, и следующий запрос пойдёт через запасной.
+const API_BACKUP_URL = "https://gorizont-api.gorizont-school.workers.dev";
+const _API_FIRST_TRY_MS = 10000;   // сколько ждать первый адрес перед переключением
+const _API_BACKUP_TTL_MS = 30 * 60 * 1000;
+const _API_BACKUP_KEY = "gorizont_api_backup_until";
+function _apiBackupUntil() {
+  try { return Number(localStorage.getItem(_API_BACKUP_KEY)) || 0; } catch (e) { return 0; }
+}
+function _apiSetBackup(on) {
+  try {
+    if(on) localStorage.setItem(_API_BACKUP_KEY, String(Date.now() + _API_BACKUP_TTL_MS));
+    else localStorage.removeItem(_API_BACKUP_KEY);
+  } catch (e) {}
+}
+function _apiTimed(url, init, ms) {
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), ms);
+  return _nativeFetch(url, Object.assign({}, init, {signal: ctrl.signal}));
+}
+window.fetch = async function(input, init) {
   const url = typeof input === "string" ? input : (input && input.url) || "";
   if(!url.startsWith(API_URL) || (init && init.signal) || typeof AbortController === "undefined") {
     return _nativeFetch(input, init);
   }
   const slow = /\/journal\/(report-card|child-grades)/.test(url);
-  const ctrl = new AbortController();
-  setTimeout(() => ctrl.abort(), slow ? _API_SLOW_TIMEOUT_MS : _API_TIMEOUT_MS);
-  return _nativeFetch(input, Object.assign({}, init, {signal: ctrl.signal}));
+  const fullMs = slow ? _API_SLOW_TIMEOUT_MS : _API_TIMEOUT_MS;
+  if(typeof input !== "string") return _apiTimed(input, init, fullMs);
+
+  const path = url.slice(API_URL.length);
+  const method = ((init && init.method) || "GET").toUpperCase();
+  const safeRepeat = method === "GET" ||
+    (method === "POST" && /^\/journal\/(lesson-topic|homework|attendance)(\?|$)/.test(path));
+  const onBackup = Date.now() < _apiBackupUntil();
+  const first = onBackup ? API_BACKUP_URL : API_URL;
+  const second = onBackup ? API_URL : API_BACKUP_URL;
+  try {
+    return await _apiTimed(first + path, init, safeRepeat && !slow ? _API_FIRST_TRY_MS : fullMs);
+  } catch (err) {
+    if(!onBackup) _apiSetBackup(true);   // основной не ответил — дальше через запасной
+    if(!safeRepeat) throw err;
+    const r = await _apiTimed(second + path, init, fullMs);
+    _apiSetBackup(second === API_BACKUP_URL);  // запомнить тот, что ответил
+    return r;
+  }
 };
 
 // ── ОЧЕРЕДЬ ЗАПИСЕЙ ЖУРНАЛА (страховка от обрывов связи, 2026-11-13) ──────
